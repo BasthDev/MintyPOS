@@ -3,7 +3,7 @@
     "name": "MintyPOS",
     "slug": "MintyPOS",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "dafault",
     "icon": "./assets/images/icon.png",
     "scheme": "mintypos",
     "userInterfaceStyle": "automatic",
@@ -38,7 +38,8 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,

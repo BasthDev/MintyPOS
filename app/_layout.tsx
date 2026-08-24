@@ -1,24 +1,48 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import { DripDrawer } from "@/components/drawer/index";
+import { AuthProvider } from "@/constants/auth";
+import { ThemeProvider } from "@/constants/colorTheme";
+import { DrawerProvider, useDrawer } from "@/constants/drawerContext";
+import { initDatabase } from "@/lib/database";
+import { Stack } from "expo-router";
+import { useEffect } from "react";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+function DatabaseInitializer() {
+  useEffect(() => {
+    const initializeDB = async () => {
+      try {
+        await initDatabase();
+        console.log("Database initialized successfully");
+      } catch (error) {
+        console.error("Failed to initialize database:", error);
+      }
+    };
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+    initializeDB();
+  }, []);
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  return null;
+}
+
+function AppContent() {
+  const { isDrawerOpen } = useDrawer();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <>
+      <Stack screenOptions={{ headerShown: false }} />
+      <DripDrawer />
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <ThemeProvider>
+        <DrawerProvider>
+          <DatabaseInitializer />
+          <AppContent />
+        </DrawerProvider>
+      </ThemeProvider>
+    </AuthProvider>
   );
 }
