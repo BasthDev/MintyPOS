@@ -4,13 +4,15 @@ import { Header } from '@/components/Header';
 import { DripSearchBar } from '@/components/SearchBar';
 import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
+import { calculateRecipeCost } from '@/lib/businessLogic';
 import { getDatabase } from '@/lib/database';
 import { ProductProcess } from '@/processes/productProcess';
-import { AlertTriangle, Edit, Package, Plus, Trash2 } from 'lucide-react-native';
+import { AlertTriangle, Edit, Image as ImageIcon, Package, Plus, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -41,10 +43,34 @@ export default function ProductsScreen() {
       const db = await getDatabase();
       const result = await ProductProcess.getAll(db);
       if (result.success && result.data) {
-        setProducts(result.data);
+        // Calculate dynamic HPP (Recipe cost or Buy price) and Margin for each product
+        const productsWithHpp = await Promise.all(
+          result.data.map(async (product: any) => {
+            let hpp = product.buy_price || 0;
+            if (product.recipe_definition_id) {
+              const recipeCost = await calculateRecipeCost(db, product.recipe_definition_id);
+              if (recipeCost > 0) {
+                hpp = recipeCost;
+              }
+            }
+            const sellingPrice = product.selling_price || 0;
+            const margin = sellingPrice - hpp;
+            const marginPercentage = sellingPrice > 0 ? (margin / sellingPrice) * 100 : 0;
+
+            return {
+              ...product,
+              hpp,
+              margin,
+              marginPercentage,
+            };
+          })
+        );
+
+        setProducts(productsWithHpp);
+
         // If a product was selected, update its reference from fresh data
         if (selectedProduct) {
-          const updated = result.data.find((p: any) => p.id === selectedProduct.id);
+          const updated = productsWithHpp.find((p: any) => p.id === selectedProduct.id);
           setSelectedProduct(updated || null);
         }
       }
@@ -79,6 +105,7 @@ export default function ProductsScreen() {
       stockDeductionMethod: product.stock_deduction_method || 'product',
       currentStock: product.current_stock || 0,
       recipeName: product.recipe_name,
+      imageUri: product.image_uri,
     });
     setFormMode('edit');
     setFormVisible(true);
@@ -124,6 +151,7 @@ export default function ProductsScreen() {
     recipeDefinitionId?: number;
     stockDeductionMethod: 'product' | 'recipe' | 'none';
     currentStock: number;
+    imageUri?: string;
   }) => {
     try {
       const db = await getDatabase();
@@ -156,7 +184,7 @@ export default function ProductsScreen() {
     return nameMatch || skuMatch || categoryMatch;
   });
 
-  // --- LEFT PANEL (Main screen on Mobile: Item list + FAB) ---
+  // --- LEFT PANEL (Item list + Image + Dynamic HPP + FAB) ---
   const leftPanel = (
     <View style={styles.leftPanelContainer}>
       <DripSearchBar
@@ -198,6 +226,15 @@ export default function ProductsScreen() {
                 onPress={() => setSelectedProduct(p)}
               >
                 <View style={styles.cardMain}>
+                  {/* Product Image Thumbnail */}
+                  <View style={[styles.thumbnailContainer, { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : theme.input }]}>
+                    {p.image_uri ? (
+                      <Image source={{ uri: p.image_uri }} style={styles.productThumbnail} />
+                    ) : (
+                      <Package size={22} color={isSelected ? '#FFFFFF' : theme.primary} />
+                    )}
+                  </View>
+
                   <View style={styles.cardHeaderInfo}>
                     <Text
                       style={[
@@ -208,6 +245,7 @@ export default function ProductsScreen() {
                     >
                       {p.name}
                     </Text>
+
                     <Text
                       style={[
                         styles.cardPrice,
@@ -216,10 +254,33 @@ export default function ProductsScreen() {
                     >
                       Rp {p.selling_price?.toLocaleString()}
                     </Text>
+
+                    {/* Dynamic HPP Cost */}
+                    <View style={styles.hppRow}>
+                      <Text
+                        style={[
+                          styles.hppBadgeText,
+                          { color: isSelected ? '#CBD5E1' : theme.textSecondary },
+                        ]}
+                      >
+                        HPP: Rp {p.hpp ? Math.round(p.hpp).toLocaleString() : '0'}
+                      </Text>
+                      {p.margin > 0 && (
+                        <Text
+                          style={[
+                            styles.marginText,
+                            { color: isSelected ? '#86EFAC' : theme.success },
+                          ]}
+                        >
+                          ({Math.round(p.marginPercentage)}% margin)
+                        </Text>
+                      )}
+                    </View>
+
                     <Text
                       style={[
                         styles.cardSubText,
-                        { color: isSelected ? '#CBD5E1' : theme.textSecondary },
+                        { color: isSelected ? '#CBD5E1' : theme.textTertiary },
                       ]}
                     >
                       {p.category_name || 'Uncategorized'} • SKU: {p.sku || 'N/A'}
@@ -292,7 +353,7 @@ export default function ProductsScreen() {
         </ScrollView>
       )}
 
-      {/* Floating Action Button (FAB) for adding new product */}
+      {/* FAB button */}
       <TouchableOpacity
         activeOpacity={0.8}
         style={[styles.fabButton, { backgroundColor: theme.primary }]}
@@ -304,14 +365,18 @@ export default function ProductsScreen() {
     </View>
   );
 
-  // --- RIGHT PANEL (Next screen on Mobile: Item Details) ---
+  // --- RIGHT PANEL (Product Details View + Image + Dynamic HPP) ---
   const rightPanel = selectedProduct ? (
     <View style={styles.detailsContainer}>
       <View style={[styles.detailsHeader, { borderBottomColor: theme.border }]}>
         <View style={styles.detailsTitleRow}>
-          <View style={[styles.detailsIconBadge, { backgroundColor: theme.input }]}>
-            <Package size={28} color={theme.primary} />
-          </View>
+          {selectedProduct.image_uri ? (
+            <Image source={{ uri: selectedProduct.image_uri }} style={styles.detailsHeroImage} />
+          ) : (
+            <View style={[styles.detailsIconBadge, { backgroundColor: theme.input }]}>
+              <Package size={28} color={theme.primary} />
+            </View>
+          )}
           <View style={styles.detailsHeaderMeta}>
             <Text style={[styles.detailsTitle, { color: theme.text }]} numberOfLines={1}>
               {selectedProduct.name}
@@ -340,7 +405,33 @@ export default function ProductsScreen() {
 
       <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Product Details</Text>
+          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Financial & HPP Overview</Text>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Selling Price:</Text>
+            <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
+              Rp {selectedProduct.selling_price ? selectedProduct.selling_price.toLocaleString() : '0'}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Dynamic HPP / COGS:</Text>
+            <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>
+              Rp {selectedProduct.hpp ? Math.round(selectedProduct.hpp).toLocaleString() : '0'}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Profit Margin:</Text>
+            <Text style={[styles.infoValue, { color: theme.success, fontWeight: '700' }]}>
+              Rp {selectedProduct.margin ? Math.round(selectedProduct.margin).toLocaleString() : '0'} (
+              {Math.round(selectedProduct.marginPercentage || 0)}%)
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border, marginTop: 12 }]}>
+          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Product Information</Text>
           
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>SKU:</Text>
@@ -351,20 +442,6 @@ export default function ProductsScreen() {
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Category:</Text>
             <Text style={[styles.infoValue, { color: theme.text }]}>
               {selectedProduct.category_name || 'Uncategorized'}
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Cost / Buy Price:</Text>
-            <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>
-              Rp {selectedProduct.buy_price ? selectedProduct.buy_price.toLocaleString() : '0'}
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Selling Price:</Text>
-            <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
-              Rp {selectedProduct.selling_price ? selectedProduct.selling_price.toLocaleString() : '0'}
             </Text>
           </View>
 
@@ -404,7 +481,7 @@ export default function ProductsScreen() {
       <Package size={64} color={theme.textTertiary || '#888'} />
       <Text style={[styles.emptyDetailsTitle, { color: theme.text }]}>No Product Selected</Text>
       <Text style={[styles.emptyDetailsSubtext, { color: theme.textSecondary }]}>
-        Select a product from the list to view its complete details.
+        Select a product from the list to view its complete details and HPP metrics.
       </Text>
     </View>
   );
@@ -462,30 +539,56 @@ const styles = StyleSheet.create({
   productCard: {
     borderRadius: 12,
     borderWidth: 1,
-    padding: 14,
+    padding: 12,
     marginBottom: 10,
   },
   cardMain: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  thumbnailContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  productThumbnail: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   cardHeaderInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 10,
   },
   cardName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     marginBottom: 2,
   },
   cardPrice: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    marginBottom: 4,
+  },
+  hppRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginVertical: 2,
+  },
+  hppBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  marginText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   cardSubText: {
-    fontSize: 12,
+    fontSize: 11,
   },
   cardRightColumn: {
     alignItems: 'flex-end',
@@ -514,7 +617,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
 
-  // FAB button
+  // FAB
   fabButton: {
     position: 'absolute',
     bottom: 16,
@@ -537,7 +640,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Right Panel Details
+  // Details
   detailsContainer: {
     flex: 1,
   },
@@ -553,6 +656,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     flex: 1,
+  },
+  detailsHeroImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    resizeMode: 'cover',
   },
   detailsIconBadge: {
     width: 48,

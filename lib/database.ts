@@ -508,12 +508,13 @@ export const dbOperations = {
     buyPrice?: number,
     recipeDefinitionId?: number,
     stockDeductionMethod: string = 'product',
-    currentStock?: number
+    currentStock?: number,
+    imageUri?: string
   ): Promise<number> {
     const result = await db.runAsync(
-      `INSERT INTO products (name, selling_price, sku, category_id, buy_price, recipe_definition_id, stock_deduction_method, current_stock) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, sellingPrice, sku || null, categoryId || null, buyPrice || null, recipeDefinitionId || null, stockDeductionMethod, currentStock || 0]
+      `INSERT INTO products (name, selling_price, sku, category_id, buy_price, recipe_definition_id, stock_deduction_method, current_stock, image_uri) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, sellingPrice, sku || null, categoryId || null, buyPrice || null, recipeDefinitionId || null, stockDeductionMethod, currentStock || 0, imageUri || null]
     );
     return result.lastInsertRowId;
   },

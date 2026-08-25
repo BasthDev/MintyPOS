@@ -1,8 +1,9 @@
 import { Header } from '@/components/Header';
+import { DripSearchBar } from '@/components/SearchBar';
 import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
 import { dbOperations, getDatabase } from '@/lib/database';
-import { Activity, ArrowDown, ArrowUp, Package, ShoppingCart } from 'lucide-react-native';
+import { Activity, ArrowDown, ArrowUp, Clock, Package, RefreshCw, ShoppingCart } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -31,8 +32,17 @@ export default function ActivityScreen() {
   const { theme } = useTheme();
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [filter, setFilter] = useState<ActivityType | 'all'>('all');
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedActivity, setSelectedActivity] = useState<ActivityLog | null>(null);
+
+  // Summary statistics
+  const [stats, setStats] = useState({
+    total: 0,
+    additions: 0,
+    deductions: 0,
+    orders: 0,
+  });
 
   useEffect(() => {
     loadActivities();
@@ -42,13 +52,26 @@ export default function ActivityScreen() {
     setLoading(true);
     try {
       const db = await getDatabase();
-      let logs;
+      let logs: ActivityLog[];
       if (filter === 'all') {
-        logs = await dbOperations.getAllActivityLogs(db, 100);
+        logs = await dbOperations.getAllActivityLogs(db, 150);
       } else {
-        logs = await dbOperations.getActivityLogsByType(db, filter, 100);
+        logs = await dbOperations.getActivityLogsByType(db, filter, 150);
       }
       setActivities(logs);
+
+      // Compute statistics
+      const total = logs.length;
+      const additions = logs.filter((l) => l.type === 'stock_add' || l.type === 'restock').length;
+      const deductions = logs.filter((l) => l.type === 'stock_deduct').length;
+      const orders = logs.filter((l) => l.type === 'order').length;
+
+      setStats({ total, additions, deductions, orders });
+
+      if (selectedActivity) {
+        const updated = logs.find((l) => l.id === selectedActivity.id);
+        setSelectedActivity(updated || null);
+      }
     } catch (error) {
       console.error('Failed to load activities:', error);
     } finally {
@@ -87,62 +110,113 @@ export default function ActivityScreen() {
   };
 
   const formatDateTime = (dateString: string) => {
+    if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
+      year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
     });
   };
 
-  // --- LEFT PANEL (Main Screen: Filters & Activity Log List) ---
+  const filteredActivities = activities.filter((a) => {
+    const query = search.toLowerCase();
+    return (
+      a.entity_name?.toLowerCase().includes(query) ||
+      a.description?.toLowerCase().includes(query) ||
+      a.type?.toLowerCase().includes(query)
+    );
+  });
+
+  // --- LEFT PANEL (Main Screen: Stats + Search + Filter Pills + Audit Stream) ---
   const leftPanel = (
     <View style={styles.leftPanelContainer}>
-      <Text style={[styles.title, { color: theme.text }]}>Activity Log</Text>
+      <Text style={[styles.title, { color: theme.text }]}>Activity Audit Stream</Text>
       <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-        Track all stock movements and orders
+        Real-time audit tracking for inventory & orders
       </Text>
 
-      <View style={styles.filterContainer}>
-        {(['all', 'stock_add', 'stock_deduct', 'order', 'restock'] as const).map((type) => {
-          const isActive = filter === type;
+      {/* Stats Summary Bar */}
+      <View style={styles.statsRow}>
+        <View style={[styles.statBox, { borderColor: theme.border, backgroundColor: theme.card }]}>
+          <Text style={[styles.statNum, { color: theme.text }]}>{stats.total}</Text>
+          <Text style={[styles.statLbl, { color: theme.textSecondary }]}>Total Logs</Text>
+        </View>
+        <View style={[styles.statBox, { borderColor: theme.border, backgroundColor: theme.card }]}>
+          <Text style={[styles.statNum, { color: theme.success }]}>{stats.additions}</Text>
+          <Text style={[styles.statLbl, { color: theme.textSecondary }]}>Restocks</Text>
+        </View>
+        <View style={[styles.statBox, { borderColor: theme.border, backgroundColor: theme.card }]}>
+          <Text style={[styles.statNum, { color: theme.error }]}>{stats.deductions}</Text>
+          <Text style={[styles.statLbl, { color: theme.textSecondary }]}>Deductions</Text>
+        </View>
+        <View style={[styles.statBox, { borderColor: theme.border, backgroundColor: theme.card }]}>
+          <Text style={[styles.statNum, { color: theme.primary }]}>{stats.orders}</Text>
+          <Text style={[styles.statLbl, { color: theme.textSecondary }]}>Orders</Text>
+        </View>
+      </View>
+
+      <DripSearchBar
+        placeholder="Filter logs by name or description..."
+        value={search}
+        onChangeText={setSearch}
+        onClear={() => setSearch('')}
+        style={styles.searchBar}
+      />
+
+      {/* Filter Pills */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+        {(
+          [
+            { id: 'all', label: 'All Activity' },
+            { id: 'stock_add', label: 'Stock Added' },
+            { id: 'stock_deduct', label: 'Stock Deducted' },
+            { id: 'order', label: 'Orders' },
+            { id: 'restock', label: 'Restocks' },
+          ] as const
+        ).map((item) => {
+          const isActive = filter === item.id;
           return (
             <TouchableOpacity
-              key={type}
+              key={item.id}
+              activeOpacity={0.7}
               style={[
-                styles.filterButton,
+                styles.filterPill,
                 { borderColor: theme.border, backgroundColor: theme.card },
                 isActive && { backgroundColor: theme.primary, borderColor: theme.primary },
               ]}
-              onPress={() => setFilter(type)}
+              onPress={() => setFilter(item.id)}
             >
               <Text
                 style={[
-                  styles.filterButtonText,
+                  styles.filterPillText,
                   { color: theme.textSecondary },
                   isActive && { color: '#FFFFFF' },
                 ]}
               >
-                {type === 'all' ? 'All' : type.replace('_', ' ')}
+                {item.label}
               </Text>
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
         </View>
-      ) : activities.length === 0 ? (
+      ) : filteredActivities.length === 0 ? (
         <View style={styles.emptyListContainer}>
           <Activity size={48} color={theme.textTertiary || '#888'} />
-          <Text style={[styles.emptyListText, { color: theme.text }]}>No activities logged</Text>
+          <Text style={[styles.emptyListText, { color: theme.text }]}>
+            {search ? 'No audit records match your search' : 'No audit records found'}
+          </Text>
         </View>
       ) : (
         <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
-          {activities.map((item) => {
+          {filteredActivities.map((item) => {
             const isSelected = selectedActivity?.id === item.id;
 
             return (
@@ -163,15 +237,31 @@ export default function ActivityScreen() {
                     {getActivityIcon(item.type)}
                   </View>
                   <View style={styles.cardInfo}>
-                    <Text
-                      style={[
-                        styles.cardName,
-                        { color: isSelected ? '#FFFFFF' : theme.text },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.entity_name}
-                    </Text>
+                    <View style={styles.cardTitleRow}>
+                      <Text
+                        style={[
+                          styles.cardName,
+                          { color: isSelected ? '#FFFFFF' : theme.text },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {item.entity_name}
+                      </Text>
+                      {item.quantity ? (
+                        <Text
+                          style={[
+                            styles.quantityBadge,
+                            {
+                              color: isSelected
+                                ? '#FFFFFF'
+                                : getActivityColor(item.type),
+                            },
+                          ]}
+                        >
+                          {item.type === 'stock_deduct' ? '-' : '+'}{item.quantity} {item.unit || ''}
+                        </Text>
+                      ) : null}
+                    </View>
                     <Text
                       style={[
                         styles.cardDesc,
@@ -181,15 +271,18 @@ export default function ActivityScreen() {
                     >
                       {item.description}
                     </Text>
+                    <View style={styles.cardTimeRow}>
+                      <Clock size={11} color={isSelected ? '#CBD5E1' : theme.textTertiary} style={{ marginRight: 4 }} />
+                      <Text
+                        style={[
+                          styles.cardTime,
+                          { color: isSelected ? '#CBD5E1' : theme.textTertiary },
+                        ]}
+                      >
+                        {formatDateTime(item.created_at)}
+                      </Text>
+                    </View>
                   </View>
-                  <Text
-                    style={[
-                      styles.cardTime,
-                      { color: isSelected ? '#CBD5E1' : theme.textTertiary },
-                    ]}
-                  >
-                    {formatDateTime(item.created_at)}
-                  </Text>
                 </View>
               </TouchableOpacity>
             );
@@ -199,7 +292,7 @@ export default function ActivityScreen() {
     </View>
   );
 
-  // --- RIGHT PANEL (Activity Details View) ---
+  // --- RIGHT PANEL (Detailed Audit Record View) ---
   const rightPanel = selectedActivity ? (
     <View style={styles.detailsContainer}>
       <View style={[styles.detailsHeader, { borderBottomColor: theme.border }]}>
@@ -208,47 +301,60 @@ export default function ActivityScreen() {
             {getActivityIcon(selectedActivity.type)}
           </View>
           <View style={styles.detailsHeaderMeta}>
-            <Text style={[styles.detailsTitle, { color: theme.text }]}>
+            <Text style={[styles.detailsTitle, { color: theme.text }]} numberOfLines={1}>
               {selectedActivity.entity_name}
             </Text>
-            <Text style={[styles.detailsSubtitle, { color: getActivityColor(selectedActivity.type) }]}>
-              {selectedActivity.type.replace('_', ' ').toUpperCase()}
-            </Text>
+            <View style={[styles.badgePill, { backgroundColor: getActivityColor(selectedActivity.type) + '20' }]}>
+              <Text style={[styles.badgePillText, { color: getActivityColor(selectedActivity.type) }]}>
+                {selectedActivity.type.replace('_', ' ').toUpperCase()}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
 
       <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Log Information</Text>
+          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Audit Log Details</Text>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Target Item:</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>{selectedActivity.entity_name}</Text>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Record ID:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>#{selectedActivity.id}</Text>
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Event Type:</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>{selectedActivity.type}</Text>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Entity Name:</Text>
+            <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
+              {selectedActivity.entity_name}
+            </Text>
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Description:</Text>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Entity Category:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>
+              {selectedActivity.entity_type ? selectedActivity.entity_type.toUpperCase() : 'GENERAL'}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Event Description:</Text>
             <Text style={[styles.infoValue, { color: theme.text }]}>{selectedActivity.description}</Text>
           </View>
 
-          {selectedActivity.quantity && (
+          {selectedActivity.quantity ? (
             <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Quantity Change:</Text>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Quantity Impact:</Text>
               <Text style={[styles.infoValue, { color: getActivityColor(selectedActivity.type), fontWeight: '700' }]}>
-                {selectedActivity.type === 'stock_deduct' ? '-' : '+'}{selectedActivity.quantity} {selectedActivity.unit}
+                {selectedActivity.type === 'stock_deduct' ? '-' : '+'}{selectedActivity.quantity} {selectedActivity.unit || ''}
               </Text>
             </View>
-          )}
+          ) : null}
 
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Timestamp:</Text>
-            <Text style={[styles.infoValue, { color: theme.text }]}>{formatDateTime(selectedActivity.created_at)}</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>
+              {formatDateTime(selectedActivity.created_at)}
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -256,22 +362,22 @@ export default function ActivityScreen() {
   ) : (
     <View style={styles.emptyDetailsState}>
       <Activity size={64} color={theme.textTertiary || '#888'} />
-      <Text style={[styles.emptyDetailsTitle, { color: theme.text }]}>No Activity Selected</Text>
+      <Text style={[styles.emptyDetailsTitle, { color: theme.text }]}>No Audit Log Selected</Text>
       <Text style={[styles.emptyDetailsSubtext, { color: theme.textSecondary }]}>
-        Select an activity item from the list to view its complete audit details.
+        Select an activity log from the list to view its complete audit trace.
       </Text>
     </View>
   );
 
   return (
     <>
-      <Header title="Activity" />
+      <Header title="Activity Log" />
       <Section
         leftPanel={leftPanel}
         rightPanel={rightPanel}
         showNextScreen={!!selectedActivity}
         onBack={() => setSelectedActivity(null)}
-        backButtonTitle="Back to Activity Logs"
+        backButtonTitle="Back to Audit Stream"
         childrenPadding={16}
       />
     </>
@@ -283,27 +389,51 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   subtitle: {
-    fontSize: 14,
-    marginBottom: 16,
+    fontSize: 13,
+    marginBottom: 12,
   },
-  filterContainer: {
+  statsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  filterButton: {
+  statBox: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  statNum: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  statLbl: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  searchBar: {
+    marginBottom: 10,
+  },
+  filterScroll: {
+    maxHeight: 38,
+    marginBottom: 12,
+  },
+  filterPill: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 20,
     borderWidth: 1,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  filterButtonText: {
+  filterPillText: {
     fontSize: 12,
     fontWeight: '600',
   },
@@ -335,25 +465,40 @@ const styles = StyleSheet.create({
   cardMain: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   iconBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 10,
   },
   cardInfo: {
     flex: 1,
   },
+  cardTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   cardName: {
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 8,
+  },
+  quantityBadge: {
+    fontSize: 12,
     fontWeight: '700',
   },
   cardDesc: {
     fontSize: 12,
-    marginTop: 2,
+    marginVertical: 2,
+  },
+  cardTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   cardTime: {
     fontSize: 11,
@@ -384,10 +529,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  detailsSubtitle: {
-    fontSize: 13,
+  badgePill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  badgePillText: {
+    fontSize: 11,
     fontWeight: '700',
-    marginTop: 2,
   },
   detailsScroll: {
     flex: 1,

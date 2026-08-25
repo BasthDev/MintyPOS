@@ -4,7 +4,6 @@ import { TextAlignStart } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
   title: string;
@@ -74,8 +73,10 @@ export const Header: React.FC<HeaderProps> = ({
               {rightIcon}
             </TouchableOpacity>
           ) : (
-            <ThemeToggle />
-          )}
+            // <ThemeToggle />
+            null
+          )
+          }
         </View>
       </View>
     </View>

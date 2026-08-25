@@ -5,7 +5,7 @@ import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
 import { getDatabase } from '@/lib/database';
 import { IngredientProcess } from '@/processes/ingredientProcess';
-import { Edit, Leaf, Plus, Scale, Trash2 } from 'lucide-react-native';
+import { Edit, Plus, Scale, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -229,7 +229,7 @@ export default function IngredientsScreen() {
       <View style={[styles.detailsHeader, { borderBottomColor: theme.border }]}>
         <View style={styles.detailsTitleRow}>
           <View style={[styles.detailsIconBadge, { backgroundColor: theme.input }]}>
-            <Leaf size={28} color={theme.primary} />
+            <Scale size={28} color={theme.primary} />
           </View>
           <View style={styles.detailsHeaderMeta}>
             <Text style={[styles.detailsTitle, { color: theme.text }]} numberOfLines={1}>

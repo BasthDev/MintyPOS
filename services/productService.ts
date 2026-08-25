@@ -10,6 +10,7 @@ export interface ProductCreateInput {
   recipeDefinitionId?: number;
   stockDeductionMethod?: 'none' | 'product' | 'recipe';
   currentStock?: number;
+  imageUri?: string;
 }
 
 export interface ProductUpdateInput {
@@ -21,6 +22,7 @@ export interface ProductUpdateInput {
   recipeDefinitionId?: number;
   stockDeductionMethod?: 'none' | 'product' | 'recipe';
   currentStock?: number;
+  imageUri?: string;
 }
 
 export class ProductService {
@@ -55,7 +57,8 @@ export class ProductService {
       input.buyPrice,
       input.recipeDefinitionId,
       input.stockDeductionMethod || 'product',
-      input.currentStock
+      input.currentStock,
+      input.imageUri
     );
     return await this.getById(db, productId);
   }
@@ -74,6 +77,7 @@ export class ProductService {
     if (input.recipeDefinitionId !== undefined) updates.recipe_definition_id = input.recipeDefinitionId;
     if (input.stockDeductionMethod !== undefined) updates.stock_deduction_method = input.stockDeductionMethod;
     if (input.currentStock !== undefined) updates.current_stock = input.currentStock;
+    if (input.imageUri !== undefined) updates.image_uri = input.imageUri;
 
     if (Object.keys(updates).length === 0) return await this.getById(db, id);
 
