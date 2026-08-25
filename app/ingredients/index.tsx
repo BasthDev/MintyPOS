@@ -1,19 +1,30 @@
 import { IngredientFormSheet } from '@/components/forms/IngredientFormSheet';
-import { Edit, Plus, Scale, Trash2 } from 'lucide-react-native';
+import { Header } from '@/components/Header';
+import { DripSearchBar } from '@/components/SearchBar';
+import { Section } from '@/components/Section';
+import { useTheme } from '@/constants/colorTheme';
+import { getDatabase } from '@/lib/database';
+import { IngredientProcess } from '@/processes/ingredientProcess';
+import { Edit, Leaf, Plus, Scale, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { DripButton } from '../../components/Button';
-import { DripContainer } from '../../components/Container';
-import { Header } from '../../components/Header';
-import { useTheme } from '../../constants/colorTheme';
-import { getDatabase } from '../../lib/database';
-import { IngredientProcess } from '../../processes/ingredientProcess';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export default function IngredientsScreen() {
   const { theme } = useTheme();
+
   const [ingredients, setIngredients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ total: 0, lowStock: 0 });
+  const [selectedIngredient, setSelectedIngredient] = useState<any | null>(null);
+  const [search, setSearch] = useState('');
+
   const [formVisible, setFormVisible] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState<any>(null);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
@@ -23,15 +34,16 @@ export default function IngredientsScreen() {
   }, []);
 
   const loadIngredients = async () => {
+    setLoading(true);
     try {
       const db = await getDatabase();
       const result = await IngredientProcess.getAll(db);
       if (result.success && result.data) {
         setIngredients(result.data);
-        setStats({
-          total: result.data.length,
-          lowStock: 0, // Will be calculated when low stock logic is implemented
-        });
+        if (selectedIngredient) {
+          const updated = result.data.find((item: any) => item.id === selectedIngredient.id);
+          setSelectedIngredient(updated || null);
+        }
       }
     } catch (error) {
       console.error('Failed to load ingredients:', error);
@@ -66,6 +78,9 @@ export default function IngredientsScreen() {
               const db = await getDatabase();
               const result = await IngredientProcess.delete(db, ingredientId);
               if (result.success) {
+                if (selectedIngredient?.id === ingredientId) {
+                  setSelectedIngredient(null);
+                }
                 loadIngredients();
               } else {
                 Alert.alert('Error', result.error || 'Failed to delete ingredient');
@@ -103,87 +118,189 @@ export default function IngredientsScreen() {
     }
   };
 
-  const leftPanel = (
-    <View style={styles.content}>
-      <Text style={styles.title}>Ingredients Management</Text>
-      <Text style={styles.subtitle}>Manage raw materials and inventory</Text>
-      
-      <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { borderColor: theme.border }]}>
-          <Text style={styles.statNumber}>{stats.total}</Text>
-          <Text style={styles.statLabel}>Total Ingredients</Text>
-        </View>
-        <View style={[styles.statCard, { borderColor: theme.border }]}>
-          <Text style={styles.statNumber}>{stats.lowStock}</Text>
-          <Text style={styles.statLabel}>Low Stock</Text>
-        </View>
-      </View>
+  const filteredIngredients = ingredients.filter((item) => {
+    const query = search.toLowerCase();
+    return item.name?.toLowerCase().includes(query) || item.unit_symbol?.toLowerCase().includes(query);
+  });
 
-      <DripButton
-        title="Add New Ingredient"
-        icon={<Plus size={20} color="white" />}
-        onPress={handleAddIngredient}
-        style={styles.addButton}
+  // --- LEFT PANEL (Main screen on Mobile: Item List + Search + FAB) ---
+  const leftPanel = (
+    <View style={styles.leftPanelContainer}>
+      <DripSearchBar
+        placeholder="Search ingredients..."
+        value={search}
+        onChangeText={setSearch}
+        onClear={() => setSearch('')}
+        style={styles.searchBar}
       />
+
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      ) : filteredIngredients.length === 0 ? (
+        <View style={styles.emptyListContainer}>
+          <Scale size={48} color={theme.textTertiary || '#888'} />
+          <Text style={[styles.emptyListText, { color: theme.textSecondary }]}>
+            {search ? 'No ingredients match search' : 'No ingredients found'}
+          </Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+          {filteredIngredients.map((item) => {
+            const isSelected = selectedIngredient?.id === item.id;
+
+            return (
+              <TouchableOpacity
+                key={item.id}
+                activeOpacity={0.7}
+                style={[
+                  styles.ingredientCard,
+                  {
+                    backgroundColor: isSelected ? theme.primary : theme.card,
+                    borderColor: isSelected ? theme.primary : theme.border,
+                  },
+                ]}
+                onPress={() => setSelectedIngredient(item)}
+              >
+                <View style={styles.cardMain}>
+                  <View style={styles.cardHeaderInfo}>
+                    <Text
+                      style={[
+                        styles.cardName,
+                        { color: isSelected ? '#FFFFFF' : theme.text },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.cardSubText,
+                        { color: isSelected ? '#CBD5E1' : theme.textSecondary },
+                      ]}
+                    >
+                      Unit: {item.unit_symbol || 'Base'} • Min Stock: {item.minimum_stock || 0}
+                    </Text>
+                  </View>
+
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.actionIconBtn,
+                        { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : theme.input },
+                      ]}
+                      onPress={() => handleEditIngredient(item)}
+                    >
+                      <Edit size={16} color={isSelected ? '#FFFFFF' : theme.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.actionIconBtn,
+                        { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : '#FEE2E2' },
+                      ]}
+                      onPress={() => handleDeleteIngredient(item.id)}
+                    >
+                      <Trash2 size={16} color={isSelected ? '#FFFFFF' : theme.error} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      {/* FAB Button */}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        style={[styles.fabButton, { backgroundColor: theme.primary }]}
+        onPress={handleAddIngredient}
+      >
+        <Plus size={22} color="#FFFFFF" />
+        <Text style={styles.fabText}>New Ingredient</Text>
+      </TouchableOpacity>
     </View>
   );
 
-  const rightPanel = (
-    <View style={styles.ingredientsList}>
-      <Text style={styles.listTitle}>Ingredients List</Text>
-      {loading ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Loading...</Text>
+  // --- RIGHT PANEL (Next screen on Mobile & Right panel on Tablet) ---
+  const rightPanel = selectedIngredient ? (
+    <View style={styles.detailsContainer}>
+      <View style={[styles.detailsHeader, { borderBottomColor: theme.border }]}>
+        <View style={styles.detailsTitleRow}>
+          <View style={[styles.detailsIconBadge, { backgroundColor: theme.input }]}>
+            <Leaf size={28} color={theme.primary} />
+          </View>
+          <View style={styles.detailsHeaderMeta}>
+            <Text style={[styles.detailsTitle, { color: theme.text }]} numberOfLines={1}>
+              {selectedIngredient.name}
+            </Text>
+            <Text style={[styles.detailsSubtitle, { color: theme.textSecondary }]}>
+              Base Unit: {selectedIngredient.unit_name || selectedIngredient.unit_symbol}
+            </Text>
+          </View>
         </View>
-      ) : ingredients.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Scale size={48} color="#888" />
-          <Text style={styles.emptyText}>No ingredients yet</Text>
-          <Text style={styles.emptySubtext}>Add your first ingredient to get started</Text>
+
+        <View style={styles.detailsHeaderActions}>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => handleEditIngredient(selectedIngredient)}
+          >
+            <Edit size={18} color={theme.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => handleDeleteIngredient(selectedIngredient.id)}
+          >
+            <Trash2 size={18} color={theme.error} />
+          </TouchableOpacity>
         </View>
-      ) : (
-        <ScrollView style={styles.scrollContainer}>
-          {ingredients.map((ingredient) => (
-            <View key={ingredient.id} style={[styles.ingredientItem, { borderColor: theme.border }]}>
-              <View style={styles.ingredientInfo}>
-                <Text style={[styles.ingredientName, { color: theme.text }]}>{ingredient.name}</Text>
-                <Text style={[styles.ingredientUnit, { color: theme.textSecondary }]}>
-                  Unit: {ingredient.unit_symbol}
-                </Text>
-              </View>
-              <View style={styles.ingredientActions}>
-                <View style={styles.stockInfo}>
-                  <Text style={[styles.minStock, { color: theme.textSecondary }]}>
-                    Min: {ingredient.minimum_stock}
-                  </Text>
-                </View>
-                <TouchableOpacity 
-                  style={styles.actionButton}
-                  onPress={() => handleEditIngredient(ingredient)}
-                >
-                  <Edit size={16} color={theme.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => handleDeleteIngredient(ingredient.id)}
-                >
-                  <Trash2 size={16} color={theme.error} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      )}
+      </View>
+
+      <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
+        <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Ingredient Details</Text>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Name:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{selectedIngredient.name}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Base Unit:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>
+              {selectedIngredient.unit_name} ({selectedIngredient.unit_symbol})
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Minimum Stock Threshold:</Text>
+            <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>
+              {selectedIngredient.minimum_stock || 0} {selectedIngredient.unit_symbol}
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  ) : (
+    <View style={styles.emptyDetailsState}>
+      <Scale size={64} color={theme.textTertiary || '#888'} />
+      <Text style={[styles.emptyDetailsTitle, { color: theme.text }]}>No Ingredient Selected</Text>
+      <Text style={[styles.emptyDetailsSubtext, { color: theme.textSecondary }]}>
+        Select an ingredient from the list to view its details.
+      </Text>
     </View>
   );
 
   return (
     <>
       <Header title="Ingredients" />
-      <DripContainer
+      <Section
         leftPanel={leftPanel}
         rightPanel={rightPanel}
-        showSecondaryMobile={false}
+        showNextScreen={!!selectedIngredient}
+        onBack={() => setSelectedIngredient(null)}
+        backButtonTitle="Back to Ingredients"
         childrenPadding={16}
       />
       <IngredientFormSheet
@@ -198,99 +315,172 @@ export default function IngredientsScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
+  leftPanelContainer: {
     flex: 1,
+    position: 'relative',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 8,
+  searchBar: {
+    marginBottom: 12,
   },
-  subtitle: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyListContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyListText: {
+    marginTop: 12,
     fontSize: 14,
-    marginBottom: 24,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  statCard: {
+  listScroll: {
     flex: 1,
+  },
+  ingredientCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 10,
+  },
+  cardMain: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cardHeaderInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  cardName: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  cardSubText: {
+    fontSize: 12,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  actionIconBtn: {
+    padding: 8,
+    borderRadius: 6,
+  },
+
+  // FAB
+  fabButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 28,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    gap: 8,
+  },
+  fabText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  // Details Panel
+  detailsContainer: {
+    flex: 1,
+  },
+  detailsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  detailsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  detailsIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailsHeaderMeta: {
+    flex: 1,
+  },
+  detailsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  detailsSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  detailsHeaderActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerActionBtn: {
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  detailsScroll: {
+    flex: 1,
+    marginTop: 16,
+  },
+  infoCard: {
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
   },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-  },
-  addButton: {
-    marginTop: 8,
-  },
-  ingredientsList: {
-    flex: 1,
-  },
-  listTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    marginTop: 12,
+  infoCardTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    marginBottom: 12,
   },
-  emptySubtext: {
-    marginTop: 4,
-    fontSize: 14,
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  ingredientItem: {
+  infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 8,
+    paddingVertical: 8,
   },
-  ingredientInfo: {
-    flex: 1,
+  infoLabel: {
+    fontSize: 14,
   },
-  ingredientName: {
+  infoValue: {
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 4,
   },
-  ingredientUnit: {
-    fontSize: 12,
-  },
-  stockInfo: {
-    alignItems: 'flex-end',
-  },
-  minStock: {
-    fontSize: 12,
-  },
-  ingredientActions: {
-    flexDirection: 'row',
+  emptyDetailsState: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    padding: 32,
   },
-  actionButton: {
-    padding: 8,
-    borderRadius: 6,
+  emptyDetailsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  emptyDetailsSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

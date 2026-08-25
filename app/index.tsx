@@ -1,66 +1,90 @@
-import { DripContainer } from '@/components/Container';
+import { DripButton } from '@/components/Button';
 import { Header } from '@/components/Header';
+import { Section } from '@/components/Section';
+import { useTheme } from '@/constants/colorTheme';
 import { formatCurrency } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
 import { ShoppingCart } from 'lucide-react-native';
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export default function Index() {
+  const { theme } = useTheme();
   const { cart, getCartTotal, clearCart } = useStore();
   const cartTotal = getCartTotal();
 
+  const [showCartMobile, setShowCartMobile] = useState(false);
+
   const leftPanel = (
     <View style={styles.posContent}>
-      <Text style={styles.welcomeText}>Welcome to MintyPOS</Text>
-      <Text style={styles.subtitleText}>Select products to add to cart</Text>
-      
+      <Text style={[styles.welcomeText, { color: theme.text }]}>Welcome to MintyPOS</Text>
+      <Text style={[styles.subtitleText, { color: theme.textSecondary }]}>
+        Select products to add to cart
+      </Text>
+
       <View style={styles.quickActions}>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Today's Sales</Text>
-          <Text style={styles.statValue}>Rp 0</Text>
+        <View style={[styles.statCard, { borderColor: theme.border, backgroundColor: theme.card }]}>
+          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Today's Sales</Text>
+          <Text style={[styles.statValue, { color: theme.primary }]}>Rp 0</Text>
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Orders</Text>
-          <Text style={styles.statValue}>0</Text>
+        <View style={[styles.statCard, { borderColor: theme.border, backgroundColor: theme.card }]}>
+          <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Orders</Text>
+          <Text style={[styles.statValue, { color: theme.text }]}>0</Text>
         </View>
+      </View>
+
+      <View style={styles.cartActionButtonContainer}>
+        <DripButton
+          title={`View Cart (${cart.length} items)`}
+          icon={<ShoppingCart size={20} color="white" />}
+          onPress={() => setShowCartMobile(true)}
+          style={styles.viewCartButton}
+        />
       </View>
     </View>
   );
 
   const rightPanel = (
     <View style={styles.cartPanel}>
-      <View style={styles.cartHeader}>
-        <Text style={styles.cartTitle}>Current Order</Text>
-        <Text style={styles.cartCount}>{cart.length} items</Text>
+      <View style={[styles.cartHeader, { borderBottomColor: theme.border }]}>
+        <Text style={[styles.cartTitle, { color: theme.text }]}>Current Order</Text>
+        <Text style={[styles.cartCount, { color: theme.primary }]}>{cart.length} items</Text>
       </View>
-      
-      <ScrollView style={styles.cartItems}>
+
+      <ScrollView style={styles.cartItems} showsVerticalScrollIndicator={false}>
         {cart.length === 0 ? (
           <View style={styles.emptyCart}>
-            <ShoppingCart size={48} color="#888" />
-            <Text style={styles.emptyText}>Cart is empty</Text>
+            <ShoppingCart size={48} color={theme.textTertiary || '#888'} />
+            <Text style={[styles.emptyText, { color: theme.text }]}>Cart is empty</Text>
           </View>
         ) : (
           cart.map((item) => (
-            <View key={item.productId} style={styles.cartItem}>
+            <View key={item.productId} style={[styles.cartItem, { borderColor: theme.border, backgroundColor: theme.card }]}>
               <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemPrice}>{formatCurrency(item.price)}</Text>
+                <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+                <Text style={[styles.itemPrice, { color: theme.textSecondary }]}>{formatCurrency(item.price)}</Text>
               </View>
               <View style={styles.itemQuantity}>
-                <Text style={styles.quantityText}>x{item.quantity}</Text>
+                <Text style={[styles.quantityText, { color: theme.primary }]}>x{item.quantity}</Text>
               </View>
             </View>
           ))
         )}
       </ScrollView>
 
-      <View style={styles.cartFooter}>
+      <View style={[styles.cartFooter, { borderTopColor: theme.border }]}>
         <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>{formatCurrency(cartTotal)}</Text>
+          <Text style={[styles.totalLabel, { color: theme.textSecondary }]}>Total</Text>
+          <Text style={[styles.totalValue, { color: theme.primary }]}>{formatCurrency(cartTotal)}</Text>
         </View>
+        {cart.length > 0 && (
+          <DripButton
+            title="Clear Cart"
+            variant="danger"
+            onPress={clearCart}
+            style={{ marginTop: 12 }}
+          />
+        )}
       </View>
     </View>
   );
@@ -68,10 +92,12 @@ export default function Index() {
   return (
     <>
       <Header title="POS" />
-      <DripContainer
+      <Section
         leftPanel={leftPanel}
         rightPanel={rightPanel}
-        showSecondaryMobile={false}
+        showNextScreen={showCartMobile}
+        onBack={() => setShowCartMobile(false)}
+        backButtonTitle="Back to Catalog"
         childrenPadding={16}
       />
     </>
@@ -106,8 +132,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
+  },
+  cartActionButtonContainer: {
+    marginTop: 24,
+  },
+  viewCartButton: {
+    width: '100%',
   },
   cartPanel: {
     flex: 1,
@@ -116,7 +148,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
   },
   cartTitle: {
     fontSize: 18,
@@ -124,9 +157,11 @@ const styles = StyleSheet.create({
   },
   cartCount: {
     fontSize: 14,
+    fontWeight: '600',
   },
   cartItems: {
     flex: 1,
+    marginTop: 12,
   },
   emptyCart: {
     flex: 1,
@@ -136,14 +171,17 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     marginTop: 12,
-    fontSize: 14,
+    fontSize: 16,
+    fontWeight: '600',
   },
   cartItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
   },
   itemInfo: {
     flex: 1,
@@ -151,22 +189,20 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 4,
   },
   itemPrice: {
     fontSize: 12,
+    marginTop: 2,
   },
   itemQuantity: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 8,
   },
   quantityText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   cartFooter: {
-    paddingTop: 16,
+    paddingTop: 12,
     borderTopWidth: 1,
   },
   totalRow: {
@@ -176,10 +212,9 @@ const styles = StyleSheet.create({
   },
   totalLabel: {
     fontSize: 16,
-    fontWeight: '600',
   },
   totalValue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
   },
 });

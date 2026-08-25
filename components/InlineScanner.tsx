@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   container: {
     borderWidth: 1,
     borderRadius: 12,
-    marginBottom: 16,
+    marginVertical: 16,
     overflow: 'hidden',
   },
   scannerContainer: {

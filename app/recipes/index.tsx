@@ -1,66 +1,57 @@
 import { RecipeFormSheet } from '@/components/forms/RecipeFormSheet';
-import { ChefHat, Eye, Plus, Trash2 } from 'lucide-react-native';
+import { Header } from '@/components/Header';
+import { DripSearchBar } from '@/components/SearchBar';
+import { Section } from '@/components/Section';
+import { useTheme } from '@/constants/colorTheme';
+import { dbOperations, getDatabase } from '@/lib/database';
+import { RecipeProcess } from '@/processes/recipeProcess';
+import { ChefHat, Edit, Eye, Plus, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { DripButton } from '../../components/Button';
-import { DripContainer } from '../../components/Container';
-import { Header } from '../../components/Header';
-import { useTheme } from '../../constants/colorTheme';
-import { dbOperations, getDatabase } from '../../lib/database';
-import { RecipeProcess } from '../../processes/recipeProcess';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export default function RecipesScreen() {
   const { theme } = useTheme();
+
   const [recipes, setRecipes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ total: 0, totalIngredients: 0 });
+  const [selectedRecipe, setSelectedRecipe] = useState<any | null>(null);
+  const [search, setSearch] = useState('');
+
   const [formVisible, setFormVisible] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState<any>(null);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
-  const [viewingRecipe, setViewingRecipe] = useState<any>(null);
-  const [viewModalVisible, setViewModalVisible] = useState(false);
 
   useEffect(() => {
     loadRecipes();
   }, []);
 
   const loadRecipes = async () => {
+    setLoading(true);
     try {
       const db = await getDatabase();
       const result = await RecipeProcess.getAllDefinitions(db);
       if (result.success && result.data) {
-        // Load ingredient counts, costs, and per-ingredient costs for each recipe
         const recipesWithDetails = await Promise.all(
           result.data.map(async (recipe: any) => {
             const ingredients = await dbOperations.getRecipeIngredients(db, recipe.id);
-            
-            // Calculate cost for each ingredient
             const ingredientsWithCost = await Promise.all(
               ingredients.map(async (ing: any) => {
-                // Get cost per base unit using FEFO logic
                 const batch = await db.getFirstAsync<{ cost_per_base_unit: number }>(
                   `SELECT cost_per_base_unit FROM inventory_batches 
                    WHERE ingredient_id = ? AND remaining_quantity_base > 0 
-                   ORDER BY 
-                     CASE 
-                       WHEN expiration_date IS NOT NULL THEN 
-                         CASE 
-                           WHEN datetime(expiration_date) < datetime('now') THEN 0 
-                           ELSE 1 
-                         END
-                       ELSE 2 
-                     END,
-                     CASE 
-                       WHEN expiration_date IS NOT NULL THEN expiration_date 
-                       ELSE received_date 
-                     END ASC
-                   LIMIT 1`,
+                   ORDER BY received_date ASC LIMIT 1`,
                   [ing.ingredient_id]
                 );
-                
                 const costPerUnit = batch?.cost_per_base_unit || 0;
                 const ingredientCost = costPerUnit * ing.quantity_needed_base;
-                
                 return {
                   ...ing,
                   cost_per_unit: costPerUnit,
@@ -68,9 +59,10 @@ export default function RecipesScreen() {
                 };
               })
             );
-            
-            const totalCost = ingredientsWithCost.reduce((sum: number, ing: any) => sum + ing.ingredient_cost, 0);
-            
+            const totalCost = ingredientsWithCost.reduce(
+              (sum: number, ing: any) => sum + ing.ingredient_cost,
+              0
+            );
             return {
               ...recipe,
               ingredient_count: ingredients.length,
@@ -80,11 +72,10 @@ export default function RecipesScreen() {
           })
         );
         setRecipes(recipesWithDetails);
-        const totalIngredients = recipesWithDetails.reduce((sum: number, r: any) => sum + r.ingredient_count, 0);
-        setStats({
-          total: recipesWithDetails.length,
-          totalIngredients,
-        });
+        if (selectedRecipe) {
+          const updated = recipesWithDetails.find((r: any) => r.id === selectedRecipe.id);
+          setSelectedRecipe(updated || null);
+        }
       }
     } catch (error) {
       console.error('Failed to load recipes:', error);
@@ -97,17 +88,6 @@ export default function RecipesScreen() {
     setEditingRecipe(null);
     setFormMode('create');
     setFormVisible(true);
-  };
-
-  const handleEditRecipe = (recipe: any) => {
-    setEditingRecipe(recipe);
-    setFormMode('edit');
-    setFormVisible(true);
-  };
-
-  const handleViewRecipe = (recipe: any) => {
-    setViewingRecipe(recipe);
-    setViewModalVisible(true);
   };
 
   const handleDeleteRecipe = async (recipeId: number) => {
@@ -124,6 +104,9 @@ export default function RecipesScreen() {
               const db = await getDatabase();
               const result = await RecipeProcess.deleteDefinition(db, recipeId);
               if (result.success) {
+                if (selectedRecipe?.id === recipeId) {
+                  setSelectedRecipe(null);
+                }
                 loadRecipes();
               } else {
                 Alert.alert('Error', result.error || 'Failed to delete recipe');
@@ -150,7 +133,6 @@ export default function RecipesScreen() {
       if (formMode === 'create') {
         result = await RecipeProcess.createCompleteRecipe(db, data, data.ingredients);
       } else {
-        // For edit, we would need to implement update logic
         Alert.alert('Info', 'Edit functionality coming soon');
         return;
       }
@@ -167,90 +149,187 @@ export default function RecipesScreen() {
     }
   };
 
-  const leftPanel = (
-    <View style={styles.content}>
-      <Text style={styles.title}>Recipes Management</Text>
-      <Text style={styles.subtitle}>Define product compositions with multiple ingredients</Text>
-      
-      <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { borderColor: theme.border }]}>
-          <Text style={styles.statNumber}>{stats.total}</Text>
-          <Text style={styles.statLabel}>Total Recipes</Text>
-        </View>
-        <View style={[styles.statCard, { borderColor: theme.border }]}>
-          <Text style={styles.statNumber}>{stats.totalIngredients}</Text>
-          <Text style={styles.statLabel}>Total Ingredients</Text>
-        </View>
-      </View>
+  const filteredRecipes = recipes.filter((r) => {
+    const query = search.toLowerCase();
+    return r.name?.toLowerCase().includes(query) || r.description?.toLowerCase().includes(query);
+  });
 
-      <DripButton
-        title="Create New Recipe"
-        icon={<Plus size={20} color="white" />}
-        onPress={handleAddRecipe}
-        style={styles.addButton}
+  // --- LEFT PANEL (Main Screen: List + Search + FAB) ---
+  const leftPanel = (
+    <View style={styles.leftPanelContainer}>
+      <DripSearchBar
+        placeholder="Search recipes..."
+        value={search}
+        onChangeText={setSearch}
+        onClear={() => setSearch('')}
+        style={styles.searchBar}
       />
+
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      ) : filteredRecipes.length === 0 ? (
+        <View style={styles.emptyListContainer}>
+          <ChefHat size={48} color={theme.textTertiary || '#888'} />
+          <Text style={[styles.emptyListText, { color: theme.textSecondary }]}>
+            {search ? 'No recipes match your search' : 'No recipes found'}
+          </Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+          {filteredRecipes.map((r) => {
+            const isSelected = selectedRecipe?.id === r.id;
+
+            return (
+              <TouchableOpacity
+                key={r.id}
+                activeOpacity={0.7}
+                style={[
+                  styles.recipeCard,
+                  {
+                    backgroundColor: isSelected ? theme.primary : theme.card,
+                    borderColor: isSelected ? theme.primary : theme.border,
+                  },
+                ]}
+                onPress={() => setSelectedRecipe(r)}
+              >
+                <View style={styles.cardMain}>
+                  <View style={styles.cardHeaderInfo}>
+                    <Text
+                      style={[
+                        styles.cardName,
+                        { color: isSelected ? '#FFFFFF' : theme.text },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {r.name}
+                    </Text>
+                    {r.description && (
+                      <Text
+                        style={[
+                          styles.cardDesc,
+                          { color: isSelected ? '#E0F2FE' : theme.textSecondary },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {r.description}
+                      </Text>
+                    )}
+                    <Text
+                      style={[
+                        styles.cardMeta,
+                        { color: isSelected ? '#CBD5E1' : theme.textTertiary },
+                      ]}
+                    >
+                      {r.ingredient_count} ingredient{r.ingredient_count !== 1 ? 's' : ''} • Cost: Rp{' '}
+                      {r.total_cost ? r.total_cost.toFixed(2) : '0.00'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.actionIconBtn,
+                        { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : '#FEE2E2' },
+                      ]}
+                      onPress={() => handleDeleteRecipe(r.id)}
+                    >
+                      <Trash2 size={16} color={isSelected ? '#FFFFFF' : theme.error} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      {/* FAB */}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        style={[styles.fabButton, { backgroundColor: theme.primary }]}
+        onPress={handleAddRecipe}
+      >
+        <Plus size={22} color="#FFFFFF" />
+        <Text style={styles.fabText}>New Recipe</Text>
+      </TouchableOpacity>
     </View>
   );
 
-  const rightPanel = (
-    <View style={styles.recipesList}>
-      <Text style={styles.listTitle}>Recipes List</Text>
-      {loading ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Loading...</Text>
+  // --- RIGHT PANEL (Item Details View) ---
+  const rightPanel = selectedRecipe ? (
+    <View style={styles.detailsContainer}>
+      <View style={[styles.detailsHeader, { borderBottomColor: theme.border }]}>
+        <View style={styles.detailsTitleRow}>
+          <View style={[styles.detailsIconBadge, { backgroundColor: theme.input }]}>
+            <ChefHat size={28} color={theme.primary} />
+          </View>
+          <View style={styles.detailsHeaderMeta}>
+            <Text style={[styles.detailsTitle, { color: theme.text }]} numberOfLines={1}>
+              {selectedRecipe.name}
+            </Text>
+            <Text style={[styles.detailsCost, { color: theme.primary }]}>
+              Estimated Cost: Rp {selectedRecipe.total_cost ? selectedRecipe.total_cost.toFixed(2) : '0.00'}
+            </Text>
+          </View>
         </View>
-      ) : recipes.length === 0 ? (
-        <View style={styles.emptyState}>
-          <ChefHat size={48} color="#888" />
-          <Text style={styles.emptyText}>No recipes yet</Text>
-          <Text style={styles.emptySubtext}>Create your first recipe to get started</Text>
-        </View>
-      ) : (
-        <ScrollView style={styles.scrollContainer}>
-          {recipes.map((recipe) => (
-            <View key={recipe.id} style={[styles.recipeItem, { borderColor: theme.border }]}>
-              <View style={styles.recipeInfo}>
-                <Text style={[styles.recipeName, { color: theme.text }]}>{recipe.name}</Text>
-                {recipe.description && (
-                  <Text style={[styles.recipeDescription, { color: theme.textSecondary }]}>
-                    {recipe.description}
-                  </Text>
-                )}
-                <Text style={[styles.recipeMeta, { color: theme.textTertiary }]}>
-                  {recipe.ingredient_count} ingredient{recipe.ingredient_count !== 1 ? 's' : ''}
-                </Text>
-                <Text style={[styles.recipeCost, { color: theme.primary }]}>
-                  Cost: Rp {recipe.total_cost?.toFixed(2) || '0.00'}
+
+        <TouchableOpacity
+          style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+          onPress={() => handleDeleteRecipe(selectedRecipe.id)}
+        >
+          <Trash2 size={18} color={theme.error} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
+        {selectedRecipe.description && (
+          <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border, marginBottom: 12 }]}>
+            <Text style={[styles.infoCardTitle, { color: theme.text }]}>Description</Text>
+            <Text style={[styles.infoText, { color: theme.textSecondary }]}>{selectedRecipe.description}</Text>
+          </View>
+        )}
+
+        <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Text style={[styles.infoCardTitle, { color: theme.text }]}>
+            Ingredients ({selectedRecipe.ingredients?.length || 0})
+          </Text>
+          {selectedRecipe.ingredients?.map((ing: any, index: number) => (
+            <View key={index} style={[styles.ingredientRow, { borderBottomColor: theme.border }]}>
+              <View style={styles.ingredientInfoLeft}>
+                <Text style={[styles.ingredientName, { color: theme.text }]}>{ing.ingredient_name}</Text>
+                <Text style={[styles.ingredientQty, { color: theme.textSecondary }]}>
+                  {ing.quantity_needed_base} {ing.unit_symbol}
                 </Text>
               </View>
-              <View style={styles.recipeActions}>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => handleViewRecipe(recipe)}
-                >
-                  <Eye size={16} color={theme.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => handleDeleteRecipe(recipe.id)}
-                >
-                  <Trash2 size={16} color={theme.error} />
-                </TouchableOpacity>
-              </View>
+              <Text style={[styles.ingredientCost, { color: theme.primary }]}>
+                Rp {ing.ingredient_cost ? ing.ingredient_cost.toFixed(2) : '0.00'}
+              </Text>
             </View>
           ))}
-        </ScrollView>
-      )}
+        </View>
+      </ScrollView>
+    </View>
+  ) : (
+    <View style={styles.emptyDetailsState}>
+      <ChefHat size={64} color={theme.textTertiary || '#888'} />
+      <Text style={[styles.emptyDetailsTitle, { color: theme.text }]}>No Recipe Selected</Text>
+      <Text style={[styles.emptyDetailsSubtext, { color: theme.textSecondary }]}>
+        Select a recipe from the list to view its ingredient breakdown and costs.
+      </Text>
     </View>
   );
 
   return (
     <>
       <Header title="Recipes" />
-      <DripContainer
+      <Section
         leftPanel={leftPanel}
         rightPanel={rightPanel}
-        showSecondaryMobile={false}
+        showNextScreen={!!selectedRecipe}
+        onBack={() => setSelectedRecipe(null)}
+        backButtonTitle="Back to Recipes"
         childrenPadding={16}
       />
       <RecipeFormSheet
@@ -260,257 +339,190 @@ export default function RecipesScreen() {
         initialData={editingRecipe}
         mode={formMode}
       />
-      
-      {/* Recipe View Modal */}
-      <Modal
-        visible={viewModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setViewModalVisible(false)}
-      >
-        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>
-                {viewingRecipe?.name}
-              </Text>
-              <TouchableOpacity onPress={() => setViewModalVisible(false)} style={styles.closeButton}>
-                <Text style={[styles.closeText, { color: theme.textSecondary }]}>Close</Text>
-              </TouchableOpacity>
-            </View>
-            
-            {viewingRecipe?.description && (
-              <View style={styles.modalSection}>
-                <Text style={[styles.modalSectionTitle, { color: theme.text }]}>Description</Text>
-                <Text style={[styles.modalText, { color: theme.textSecondary }]}>
-                  {viewingRecipe.description}
-                </Text>
-              </View>
-            )}
-            
-            <View style={styles.modalSection}>
-              <Text style={[styles.modalSectionTitle, { color: theme.text }]}>Recipe Cost</Text>
-              <Text style={[styles.modalCost, { color: theme.primary }]}>
-                Rp {viewingRecipe?.total_cost?.toFixed(2) || '0.00'}
-              </Text>
-              <Text style={[styles.modalCostNote, { color: theme.textTertiary }]}>
-                Calculated based on current inventory stock prices (FEFO)
-              </Text>
-            </View>
-            
-            <View style={styles.modalSection}>
-              <Text style={[styles.modalSectionTitle, { color: theme.text }]}>Ingredients (Base Units)</Text>
-              {viewingRecipe?.ingredients?.map((ing: any) => (
-                <View key={ing.id} style={[styles.ingredientRow, { borderColor: theme.border }]}>
-                  <View style={styles.ingredientInfo}>
-                    <Text style={[styles.ingredientName, { color: theme.text }]}>
-                      {ing.ingredient_name}
-                    </Text>
-                    <Text style={[styles.ingredientCost, { color: theme.primary }]}>
-                      Rp {ing.ingredient_cost?.toFixed(2) || '0.00'}
-                    </Text>
-                  </View>
-                  <View style={styles.ingredientDetails}>
-                    <Text style={[styles.ingredientQuantity, { color: theme.textSecondary }]}>
-                      {ing.quantity_needed_base} {ing.unit_symbol}
-                    </Text>
-                    <Text style={[styles.ingredientUnitCost, { color: theme.textTertiary }]}>
-                      @ Rp {ing.cost_per_unit?.toFixed(2) || '0.00'}/{ing.unit_symbol}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-              <Text style={[styles.baseUnitNote, { color: theme.textTertiary }]}>
-                All quantities are in the smallest base unit (g, ml, pcs)
-              </Text>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
+  leftPanelContainer: {
     flex: 1,
+    position: 'relative',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 8,
+  searchBar: {
+    marginBottom: 12,
   },
-  subtitle: {
-    fontSize: 14,
-    marginBottom: 24,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  statCard: {
+  loadingContainer: {
     flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-  },
-  addButton: {
-    marginTop: 8,
-  },
-  recipesList: {
-    flex: 1,
-  },
-  listTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     paddingVertical: 40,
   },
-  emptyText: {
+  emptyListContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyListText: {
     marginTop: 12,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptySubtext: {
-    marginTop: 4,
     fontSize: 14,
   },
-  scrollContainer: {
+  listScroll: {
     flex: 1,
   },
-  recipeItem: {
-    padding: 12,
-    borderRadius: 8,
+  recipeCard: {
+    borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 8,
+    padding: 14,
+    marginBottom: 10,
   },
-  recipeInfo: {
-    flex: 1,
-  },
-  recipeName: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  recipeDescription: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  recipeMeta: {
-    fontSize: 11,
-  },
-  recipeCost: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  recipeActions: {
+  cardMain: {
     flexDirection: 'row',
-    gap: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  actionButton: {
+  cardHeaderInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  cardName: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  cardDesc: {
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  cardMeta: {
+    fontSize: 12,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  actionIconBtn: {
     padding: 8,
     borderRadius: 6,
   },
-  modalOverlay: {
+
+  // FAB
+  fabButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 28,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    gap: 8,
+  },
+  fabText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  // Details Panel
+  detailsContainer: {
     flex: 1,
-    justifyContent: 'flex-end',
   },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    padding: 20,
-  },
-  modalHeader: {
+  detailsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingBottom: 16,
     borderBottomWidth: 1,
-    marginBottom: 16,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+  detailsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     flex: 1,
   },
-  closeButton: {
-    padding: 8,
+  detailsIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  closeText: {
-    fontSize: 14,
-    fontWeight: '600',
+  detailsHeaderMeta: {
+    flex: 1,
   },
-  modalSection: {
-    marginBottom: 20,
-  },
-  modalSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  modalText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  modalCost: {
-    fontSize: 24,
+  detailsTitle: {
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: 4,
   },
-  modalCostNote: {
-    fontSize: 12,
-    fontStyle: 'italic',
+  detailsCost: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  headerActionBtn: {
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  detailsScroll: {
+    flex: 1,
+    marginTop: 16,
+  },
+  infoCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  infoCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  infoText: {
+    fontSize: 14,
   },
   ingredientRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 8,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
   },
-  ingredientInfo: {
+  ingredientInfoLeft: {
     flex: 1,
   },
   ingredientName: {
     fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  ingredientCost: {
-    fontSize: 13,
     fontWeight: '600',
   },
-  ingredientDetails: {
-    alignItems: 'flex-end',
+  ingredientQty: {
+    fontSize: 12,
+    marginTop: 2,
   },
-  ingredientQuantity: {
+  ingredientCost: {
     fontSize: 14,
-    marginBottom: 2,
+    fontWeight: '700',
   },
-  ingredientUnitCost: {
-    fontSize: 11,
+  emptyDetailsState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
   },
-  baseUnitNote: {
-    fontSize: 11,
-    marginTop: 8,
-    fontStyle: 'italic',
+  emptyDetailsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  emptyDetailsSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

@@ -97,7 +97,7 @@ export async function createProductWithRecipe(db: any) {
     db,
     'Cappuccino',
     25000, // selling price in Rp
-    1 // has_recipe = true
+    'CAP-001' // sku
   );
 
   // Add recipe components

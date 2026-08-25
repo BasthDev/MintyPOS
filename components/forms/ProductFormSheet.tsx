@@ -39,6 +39,7 @@ interface ProductFormSheetProps {
     imageUri?: string;
   };
   mode: 'create' | 'edit';
+  onScannerOpen?: () => void;
 }
 
 export const ProductFormSheet: React.FC<ProductFormSheetProps> = ({
@@ -47,6 +48,7 @@ export const ProductFormSheet: React.FC<ProductFormSheetProps> = ({
   onSubmit,
   initialData,
   mode,
+  onScannerOpen,
 }) => {
   const { theme } = useTheme();
   const [formData, setFormData] = useState({

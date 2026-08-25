@@ -1,34 +1,45 @@
 import { SupplierFormSheet } from '@/components/forms/SupplierFormSheet';
+import { Header } from '@/components/Header';
+import { DripSearchBar } from '@/components/SearchBar';
+import { Section } from '@/components/Section';
+import { useTheme } from '@/constants/colorTheme';
+import { getDatabase } from '@/lib/database';
+import { formatCurrency } from '@/lib/utils';
+import { SupplierProcess } from '@/processes/supplierProcess';
 import { Edit, Plus, Trash2, Truck } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { DripButton } from '../../components/Button';
-import { DripContainer } from '../../components/Container';
-import { Header } from '../../components/Header';
-import { useTheme } from '../../constants/colorTheme';
-import { getDatabase } from '../../lib/database';
-import { formatCurrency } from '../../lib/utils';
-import { SupplierProcess } from '../../processes/supplierProcess';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export default function SuppliersScreen() {
   const { theme } = useTheme();
+
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedSupplier, setSelectedSupplier] = useState<any | null>(null);
+  const [search, setSearch] = useState('');
+
   const [formVisible, setFormVisible] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<any>(null);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
-  const [selectedSupplierStats, setSelectedSupplierStats] = useState<any>(null);
 
   useEffect(() => {
     loadSuppliers();
   }, []);
 
   const loadSuppliers = async () => {
+    setLoading(true);
     try {
       const db = await getDatabase();
       const result = await SupplierProcess.getAll(db);
       if (result.success && result.data) {
-        // Load stats for each supplier
         const suppliersWithStats = await Promise.all(
           result.data.map(async (supplier: any) => {
             const statsResult = await SupplierProcess.getStats(db, supplier.id);
@@ -39,6 +50,10 @@ export default function SuppliersScreen() {
           })
         );
         setSuppliers(suppliersWithStats);
+        if (selectedSupplier) {
+          const updated = suppliersWithStats.find((s: any) => s.id === selectedSupplier.id);
+          setSelectedSupplier(updated || null);
+        }
       }
     } catch (error) {
       console.error('Failed to load suppliers:', error);
@@ -73,6 +88,9 @@ export default function SuppliersScreen() {
               const db = await getDatabase();
               const result = await SupplierProcess.delete(db, supplierId);
               if (result.success) {
+                if (selectedSupplier?.id === supplierId) {
+                  setSelectedSupplier(null);
+                }
                 loadSuppliers();
               } else {
                 Alert.alert('Error', result.error || 'Failed to delete supplier');
@@ -110,90 +128,208 @@ export default function SuppliersScreen() {
     }
   };
 
+  const filteredSuppliers = suppliers.filter((s) => {
+    const query = search.toLowerCase();
+    return s.name?.toLowerCase().includes(query) || s.contact?.toLowerCase().includes(query);
+  });
+
+  // --- LEFT PANEL (Main Screen: Search + Supplier List + FAB) ---
   const leftPanel = (
-    <View style={styles.content}>
-      <Text style={styles.title}>Suppliers Management</Text>
-      <Text style={styles.subtitle}>Manage your suppliers and track orders</Text>
-      
-      <DripButton
-        title="Add New Supplier"
-        icon={<Plus size={20} color="white" />}
-        onPress={handleAddSupplier}
-        style={styles.addButton}
+    <View style={styles.leftPanelContainer}>
+      <DripSearchBar
+        placeholder="Search suppliers..."
+        value={search}
+        onChangeText={setSearch}
+        onClear={() => setSearch('')}
+        style={styles.searchBar}
       />
+
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      ) : filteredSuppliers.length === 0 ? (
+        <View style={styles.emptyListContainer}>
+          <Truck size={48} color={theme.textTertiary || '#888'} />
+          <Text style={[styles.emptyListText, { color: theme.textSecondary }]}>
+            {search ? 'No suppliers match search' : 'No suppliers found'}
+          </Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+          {filteredSuppliers.map((s) => {
+            const isSelected = selectedSupplier?.id === s.id;
+
+            return (
+              <TouchableOpacity
+                key={s.id}
+                activeOpacity={0.7}
+                style={[
+                  styles.supplierCard,
+                  {
+                    backgroundColor: isSelected ? theme.primary : theme.card,
+                    borderColor: isSelected ? theme.primary : theme.border,
+                  },
+                ]}
+                onPress={() => setSelectedSupplier(s)}
+              >
+                <View style={styles.cardMain}>
+                  <View style={styles.cardHeaderInfo}>
+                    <Text
+                      style={[
+                        styles.cardName,
+                        { color: isSelected ? '#FFFFFF' : theme.text },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {s.name}
+                    </Text>
+                    {s.contact && (
+                      <Text
+                        style={[
+                          styles.cardSubText,
+                          { color: isSelected ? '#E0F2FE' : theme.textSecondary },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        Contact: {s.contact}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.actionIconBtn,
+                        { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : theme.input },
+                      ]}
+                      onPress={() => handleEditSupplier(s)}
+                    >
+                      <Edit size={16} color={isSelected ? '#FFFFFF' : theme.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.actionIconBtn,
+                        { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : '#FEE2E2' },
+                      ]}
+                      onPress={() => handleDeleteSupplier(s.id)}
+                    >
+                      <Trash2 size={16} color={isSelected ? '#FFFFFF' : theme.error} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      {/* FAB */}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        style={[styles.fabButton, { backgroundColor: theme.primary }]}
+        onPress={handleAddSupplier}
+      >
+        <Plus size={22} color="#FFFFFF" />
+        <Text style={styles.fabText}>New Supplier</Text>
+      </TouchableOpacity>
     </View>
   );
 
-  const rightPanel = (
-    <View style={styles.suppliersList}>
-      <Text style={styles.listTitle}>Suppliers List</Text>
-      {loading ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Loading...</Text>
+  // --- RIGHT PANEL (Supplier Details View) ---
+  const rightPanel = selectedSupplier ? (
+    <View style={styles.detailsContainer}>
+      <View style={[styles.detailsHeader, { borderBottomColor: theme.border }]}>
+        <View style={styles.detailsTitleRow}>
+          <View style={[styles.detailsIconBadge, { backgroundColor: theme.input }]}>
+            <Truck size={28} color={theme.primary} />
+          </View>
+          <View style={styles.detailsHeaderMeta}>
+            <Text style={[styles.detailsTitle, { color: theme.text }]} numberOfLines={1}>
+              {selectedSupplier.name}
+            </Text>
+            {selectedSupplier.contact && (
+              <Text style={[styles.detailsSubtitle, { color: theme.textSecondary }]}>
+                {selectedSupplier.contact}
+              </Text>
+            )}
+          </View>
         </View>
-      ) : suppliers.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Truck size={48} color="#888" />
-          <Text style={styles.emptyText}>No suppliers yet</Text>
-          <Text style={styles.emptySubtext}>Add your first supplier to get started</Text>
+
+        <View style={styles.detailsHeaderActions}>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => handleEditSupplier(selectedSupplier)}
+          >
+            <Edit size={18} color={theme.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => handleDeleteSupplier(selectedSupplier.id)}
+          >
+            <Trash2 size={18} color={theme.error} />
+          </TouchableOpacity>
         </View>
-      ) : (
-        <ScrollView style={styles.scrollContainer}>
-          {suppliers.map((supplier) => (
-            <View key={supplier.id} style={[styles.supplierItem, { borderColor: theme.border }]}>
-              <View style={styles.supplierInfo}>
-                <Text style={[styles.supplierName, { color: theme.text }]}>{supplier.name}</Text>
-                {supplier.contact && (
-                  <Text style={[styles.supplierContact, { color: theme.textSecondary }]}>
-                    {supplier.contact}
-                  </Text>
-                )}
-                {supplier.stats && (
-                  <View style={styles.statsRow}>
-                    <Text style={[styles.statText, { color: theme.textTertiary }]}>
-                      {supplier.stats.totalBatches} orders
-                    </Text>
-                    <Text style={[styles.statText, { color: theme.textTertiary }]}>
-                      {supplier.stats.ingredientCount} ingredients
-                    </Text>
-                  </View>
-                )}
+      </View>
+
+      <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
+        <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Supplier Information</Text>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Name:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{selectedSupplier.name}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Contact / Phone:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{selectedSupplier.contact || 'N/A'}</Text>
+          </View>
+
+          {selectedSupplier.stats && (
+            <>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Total Restock Orders:</Text>
+                <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
+                  {selectedSupplier.stats.totalBatches} orders
+                </Text>
               </View>
-              <View style={styles.supplierActions}>
-                {supplier.stats && (
-                  <View style={styles.valueInfo}>
-                    <Text style={[styles.valueText, { color: theme.success }]}>
-                      {formatCurrency(supplier.stats.totalValue)}
-                    </Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => handleEditSupplier(supplier)}
-                >
-                  <Edit size={16} color={theme.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => handleDeleteSupplier(supplier.id)}
-                >
-                  <Trash2 size={16} color={theme.error} />
-                </TouchableOpacity>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Ingredients Supplied:</Text>
+                <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
+                  {selectedSupplier.stats.ingredientCount} items
+                </Text>
               </View>
-            </View>
-          ))}
-        </ScrollView>
-      )}
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Total Order Value:</Text>
+                <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>
+                  {formatCurrency(selectedSupplier.stats.totalValue)}
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
+      </ScrollView>
+    </View>
+  ) : (
+    <View style={styles.emptyDetailsState}>
+      <Truck size={64} color={theme.textTertiary || '#888'} />
+      <Text style={[styles.emptyDetailsTitle, { color: theme.text }]}>No Supplier Selected</Text>
+      <Text style={[styles.emptyDetailsSubtext, { color: theme.textSecondary }]}>
+        Select a supplier from the list to view its stats and order details.
+      </Text>
     </View>
   );
 
   return (
     <>
       <Header title="Suppliers" />
-      <DripContainer
+      <Section
         leftPanel={leftPanel}
         rightPanel={rightPanel}
-        showSecondaryMobile={false}
+        showNextScreen={!!selectedSupplier}
+        onBack={() => setSelectedSupplier(null)}
+        backButtonTitle="Back to Suppliers"
         childrenPadding={16}
       />
       <SupplierFormSheet
@@ -208,89 +344,172 @@ export default function SuppliersScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
+  leftPanelContainer: {
     flex: 1,
+    position: 'relative',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 8,
+  searchBar: {
+    marginBottom: 12,
   },
-  subtitle: {
-    fontSize: 14,
-    marginBottom: 24,
-  },
-  addButton: {
-    marginTop: 8,
-  },
-  suppliersList: {
+  loadingContainer: {
     flex: 1,
-  },
-  listTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     paddingVertical: 40,
   },
-  emptyText: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: '600',
+  emptyListContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
   },
-  emptySubtext: {
-    marginTop: 4,
+  emptyListText: {
+    marginTop: 12,
     fontSize: 14,
   },
-  scrollContainer: {
+  listScroll: {
     flex: 1,
   },
-  supplierItem: {
+  supplierCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 10,
+  },
+  cardMain: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 8,
   },
-  supplierInfo: {
+  cardHeaderInfo: {
     flex: 1,
+    marginRight: 12,
   },
-  supplierName: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
+  cardName: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
   },
-  supplierContact: {
+  cardSubText: {
     fontSize: 12,
-    marginBottom: 4,
   },
-  statsRow: {
+  cardActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 6,
   },
-  statText: {
-    fontSize: 11,
-  },
-  supplierActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  valueInfo: {
-    alignItems: 'flex-end',
-  },
-  valueText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  actionButton: {
+  actionIconBtn: {
     padding: 8,
     borderRadius: 6,
+  },
+
+  // FAB
+  fabButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 28,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    gap: 8,
+  },
+  fabText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  // Details
+  detailsContainer: {
+    flex: 1,
+  },
+  detailsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  detailsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  detailsIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailsHeaderMeta: {
+    flex: 1,
+  },
+  detailsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  detailsSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  detailsHeaderActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerActionBtn: {
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  detailsScroll: {
+    flex: 1,
+    marginTop: 16,
+  },
+  infoCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  infoCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  infoLabel: {
+    fontSize: 14,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyDetailsState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyDetailsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  emptyDetailsSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

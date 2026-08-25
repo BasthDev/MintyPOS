@@ -1,19 +1,32 @@
-import { Edit, Package, Plus, Trash2 } from 'lucide-react-native';
+import { DripButton } from '@/components/Button';
+import { ProductFormSheet } from '@/components/forms/ProductFormSheet';
+import { Header } from '@/components/Header';
+import { DripSearchBar } from '@/components/SearchBar';
+import { Section } from '@/components/Section';
+import { useTheme } from '@/constants/colorTheme';
+import { getDatabase } from '@/lib/database';
+import { ProductProcess } from '@/processes/productProcess';
+import { AlertTriangle, Edit, Package, Plus, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { DripButton } from '../../components/Button';
-import { DripContainer } from '../../components/Container';
-import { Header } from '../../components/Header';
-import { useTheme } from '../../constants/colorTheme';
-import { getDatabase } from '../../lib/database';
-import { ProductProcess } from '../../processes/productProcess';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
-import { ProductFormSheet } from '../../components/forms/ProductFormSheet';
 export default function ProductsScreen() {
   const { theme } = useTheme();
+
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ total: 0, withRecipes: 0, simpleProducts: 0 });
+  const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
+  const [search, setSearch] = useState('');
+
+  // Form sheet state
   const [formVisible, setFormVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
@@ -23,16 +36,17 @@ export default function ProductsScreen() {
   }, []);
 
   const loadProducts = async () => {
+    setLoading(true);
     try {
       const db = await getDatabase();
       const result = await ProductProcess.getAll(db);
       if (result.success && result.data) {
         setProducts(result.data);
-        setStats({
-          total: result.data.length,
-          withRecipes: result.data.filter((p: any) => p.recipe_definition_id).length,
-          simpleProducts: result.data.filter((p: any) => !p.recipe_definition_id).length,
-        });
+        // If a product was selected, update its reference from fresh data
+        if (selectedProduct) {
+          const updated = result.data.find((p: any) => p.id === selectedProduct.id);
+          setSelectedProduct(updated || null);
+        }
       }
     } catch (error) {
       console.error('Failed to load products:', error);
@@ -55,6 +69,7 @@ export default function ProductsScreen() {
 
   const handleEditProduct = (product: any) => {
     setEditingProduct({
+      id: product.id,
       name: product.name,
       sku: product.sku || '',
       categoryId: product.category_id,
@@ -83,6 +98,9 @@ export default function ProductsScreen() {
               const db = await getDatabase();
               const result = await ProductProcess.delete(db, productId);
               if (result.success) {
+                if (selectedProduct?.id === productId) {
+                  setSelectedProduct(null);
+                }
                 loadProducts();
               } else {
                 Alert.alert('Error', result.error || 'Failed to delete product');
@@ -104,7 +122,7 @@ export default function ProductsScreen() {
     buyPrice?: number;
     sellingPrice: number;
     recipeDefinitionId?: number;
-    stockDeductionMethod: 'product' | 'recipe';
+    stockDeductionMethod: 'product' | 'recipe' | 'none';
     currentStock: number;
   }) => {
     try {
@@ -129,111 +147,277 @@ export default function ProductsScreen() {
     }
   };
 
-  const leftPanel = (
-    <View style={styles.content}>
-      <Text style={styles.title}>Products Management</Text>
-      <Text style={styles.subtitle}>Manage your product catalog</Text>
-      
-      <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { borderColor: theme.border }]}>
-          <Text style={styles.statNumber}>{stats.total}</Text>
-          <Text style={styles.statLabel}>Total Products</Text>
-        </View>
-        <View style={[styles.statCard, { borderColor: theme.border }]}>
-          <Text style={styles.statNumber}>{stats.withRecipes}</Text>
-          <Text style={styles.statLabel}>With Recipes</Text>
-        </View>
-        <View style={[styles.statCard, { borderColor: theme.border }]}>
-          <Text style={styles.statNumber}>{stats.simpleProducts}</Text>
-          <Text style={styles.statLabel}>Simple Products</Text>
-        </View>
-      </View>
+  // Filter products by search query
+  const filteredProducts = products.filter((p) => {
+    const query = search.toLowerCase();
+    const nameMatch = p.name?.toLowerCase().includes(query);
+    const skuMatch = p.sku?.toLowerCase().includes(query);
+    const categoryMatch = p.category_name?.toLowerCase().includes(query);
+    return nameMatch || skuMatch || categoryMatch;
+  });
 
-      <DripButton
-        title="Add New Product"
-        icon={<Plus size={20} color="white" />}
-        onPress={handleAddProduct}
-        style={styles.addButton}
+  // --- LEFT PANEL (Main screen on Mobile: Item list + FAB) ---
+  const leftPanel = (
+    <View style={styles.leftPanelContainer}>
+      <DripSearchBar
+        placeholder="Search products..."
+        value={search}
+        onChangeText={setSearch}
+        onClear={() => setSearch('')}
+        style={styles.searchBar}
       />
+
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      ) : filteredProducts.length === 0 ? (
+        <View style={styles.emptyListContainer}>
+          <Package size={48} color={theme.textTertiary || '#888'} />
+          <Text style={[styles.emptyListText, { color: theme.textSecondary }]}>
+            {search ? 'No products match your search' : 'No products found'}
+          </Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+          {filteredProducts.map((p) => {
+            const isSelected = selectedProduct?.id === p.id;
+            const isLowStock = p.stock_deduction_method === 'product' && (p.current_stock || 0) <= 5;
+
+            return (
+              <TouchableOpacity
+                key={p.id}
+                activeOpacity={0.7}
+                style={[
+                  styles.productCard,
+                  {
+                    backgroundColor: isSelected ? theme.primary : theme.card,
+                    borderColor: isSelected ? theme.primary : theme.border,
+                  },
+                ]}
+                onPress={() => setSelectedProduct(p)}
+              >
+                <View style={styles.cardMain}>
+                  <View style={styles.cardHeaderInfo}>
+                    <Text
+                      style={[
+                        styles.cardName,
+                        { color: isSelected ? '#FFFFFF' : theme.text },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {p.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.cardPrice,
+                        { color: isSelected ? '#E0F2FE' : theme.primary },
+                      ]}
+                    >
+                      Rp {p.selling_price?.toLocaleString()}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.cardSubText,
+                        { color: isSelected ? '#CBD5E1' : theme.textSecondary },
+                      ]}
+                    >
+                      {p.category_name || 'Uncategorized'} • SKU: {p.sku || 'N/A'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.cardRightColumn}>
+                    {p.stock_deduction_method === 'product' && (
+                      <View
+                        style={[
+                          styles.stockBadge,
+                          {
+                            backgroundColor: isSelected
+                              ? 'rgba(255,255,255,0.2)'
+                              : isLowStock
+                              ? '#FEF2F2'
+                              : theme.input,
+                          },
+                        ]}
+                      >
+                        {isLowStock && (
+                          <AlertTriangle
+                            size={12}
+                            color={isSelected ? '#FFFFFF' : theme.error}
+                            style={styles.stockAlertIcon}
+                          />
+                        )}
+                        <Text
+                          style={[
+                            styles.stockText,
+                            {
+                              color: isSelected
+                                ? '#FFFFFF'
+                                : isLowStock
+                                ? theme.error
+                                : theme.text,
+                            },
+                          ]}
+                        >
+                          {p.current_stock || 0} pcs
+                        </Text>
+                      </View>
+                    )}
+
+                    <View style={styles.cardActions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.actionIconBtn,
+                          { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : theme.input },
+                        ]}
+                        onPress={() => handleEditProduct(p)}
+                      >
+                        <Edit size={16} color={isSelected ? '#FFFFFF' : theme.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.actionIconBtn,
+                          { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : '#FEE2E2' },
+                        ]}
+                        onPress={() => handleDeleteProduct(p.id)}
+                      >
+                        <Trash2 size={16} color={isSelected ? '#FFFFFF' : theme.error} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      {/* Floating Action Button (FAB) for adding new product */}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        style={[styles.fabButton, { backgroundColor: theme.primary }]}
+        onPress={handleAddProduct}
+      >
+        <Plus size={22} color="#FFFFFF" />
+        <Text style={styles.fabText}>New Product</Text>
+      </TouchableOpacity>
     </View>
   );
 
-  const rightPanel = (
-    <View style={styles.productsList}>
-      <Text style={styles.listTitle}>Products List</Text>
-      {loading ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Loading...</Text>
+  // --- RIGHT PANEL (Next screen on Mobile: Item Details) ---
+  const rightPanel = selectedProduct ? (
+    <View style={styles.detailsContainer}>
+      <View style={[styles.detailsHeader, { borderBottomColor: theme.border }]}>
+        <View style={styles.detailsTitleRow}>
+          <View style={[styles.detailsIconBadge, { backgroundColor: theme.input }]}>
+            <Package size={28} color={theme.primary} />
+          </View>
+          <View style={styles.detailsHeaderMeta}>
+            <Text style={[styles.detailsTitle, { color: theme.text }]} numberOfLines={1}>
+              {selectedProduct.name}
+            </Text>
+            <Text style={[styles.detailsPrice, { color: theme.primary }]}>
+              Rp {selectedProduct.selling_price?.toLocaleString()}
+            </Text>
+          </View>
         </View>
-      ) : products.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Package size={48} color="#888" />
-          <Text style={styles.emptyText}>No products yet</Text>
-          <Text style={styles.emptySubtext}>Add your first product to get started</Text>
+
+        <View style={styles.detailsHeaderActions}>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => handleEditProduct(selectedProduct)}
+          >
+            <Edit size={18} color={theme.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => handleDeleteProduct(selectedProduct.id)}
+          >
+            <Trash2 size={18} color={theme.error} />
+          </TouchableOpacity>
         </View>
-      ) : (
-        <ScrollView style={styles.scrollContainer}>
-          {products.map((product) => (
-            <View key={product.id} style={[styles.productItem, { borderColor: theme.border }]}>
-              <View style={styles.productInfo}>
-                <Text style={[styles.productName, { color: theme.text }]}>{product.name}</Text>
-                {product.sku && (
-                  <Text style={[styles.productSku, { color: theme.textTertiary }]}>
-                    SKU: {product.sku}
-                  </Text>
-                )}
-                {product.category_name && (
-                  <Text style={[styles.productCategory, { color: theme.textSecondary }]}>
-                    {product.category_name}
-                  </Text>
-                )}
-                <Text style={[styles.productPrice, { color: theme.textSecondary }]}>
-                  Rp {product.selling_price.toLocaleString()}
-                </Text>
-                {product.buy_price && (
-                  <Text style={[styles.productBuyPrice, { color: theme.textTertiary }]}>
-                    Cost: Rp {product.buy_price.toLocaleString()}
-                  </Text>
-                )}
-                {product.recipe_name && (
-                  <Text style={[styles.productRecipe, { color: theme.primary }]}>
-                    Recipe: {product.recipe_name}
-                  </Text>
-                )}
-                {product.stock_deduction_method === 'product' && (
-                  <Text style={[styles.productStock, { color: theme.textSecondary }]}>
-                    Stock: {product.current_stock || 0}
-                  </Text>
-                )}
-              </View>
-              <View style={styles.productActions}>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => handleEditProduct(product)}
-                >
-                  <Edit size={16} color={theme.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => handleDeleteProduct(product.id)}
-                >
-                  <Trash2 size={16} color={theme.error} />
-                </TouchableOpacity>
-              </View>
+      </View>
+
+      <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
+        <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Product Details</Text>
+          
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>SKU:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{selectedProduct.sku || 'N/A'}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Category:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>
+              {selectedProduct.category_name || 'Uncategorized'}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Cost / Buy Price:</Text>
+            <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>
+              Rp {selectedProduct.buy_price ? selectedProduct.buy_price.toLocaleString() : '0'}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Selling Price:</Text>
+            <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
+              Rp {selectedProduct.selling_price ? selectedProduct.selling_price.toLocaleString() : '0'}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Deduction Method:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>
+              {selectedProduct.stock_deduction_method === 'recipe'
+                ? 'Recipe Ingredients'
+                : selectedProduct.stock_deduction_method === 'product'
+                ? 'Direct Product Stock'
+                : 'None'}
+            </Text>
+          </View>
+
+          {selectedProduct.stock_deduction_method === 'product' && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Current Stock:</Text>
+              <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
+                {selectedProduct.current_stock || 0} pcs
+              </Text>
             </View>
-          ))}
-        </ScrollView>
-      )}
+          )}
+
+          {selectedProduct.recipe_name && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Linked Recipe:</Text>
+              <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '600' }]}>
+                {selectedProduct.recipe_name}
+              </Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </View>
+  ) : (
+    <View style={styles.emptyDetailsState}>
+      <Package size={64} color={theme.textTertiary || '#888'} />
+      <Text style={[styles.emptyDetailsTitle, { color: theme.text }]}>No Product Selected</Text>
+      <Text style={[styles.emptyDetailsSubtext, { color: theme.textSecondary }]}>
+        Select a product from the list to view its complete details.
+      </Text>
     </View>
   );
 
   return (
     <>
       <Header title="Products" />
-      <DripContainer
+      <Section
         leftPanel={leftPanel}
         rightPanel={rightPanel}
-        showSecondaryMobile={false}
+        showNextScreen={!!selectedProduct}
+        onBack={() => setSelectedProduct(null)}
+        backButtonTitle="Back to Products"
         childrenPadding={16}
       />
       <ProductFormSheet
@@ -249,114 +433,196 @@ export default function ProductsScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
+  leftPanelContainer: {
     flex: 1,
+    position: 'relative',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 8,
+  searchBar: {
+    marginBottom: 12,
   },
-  subtitle: {
-    fontSize: 14,
-    marginBottom: 24,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 24,
-  },
-  statCard: {
+  loadingContainer: {
     flex: 1,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    minWidth: 80,
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 10,
-  },
-  addButton: {
-    marginTop: 8,
-  },
-  productsList: {
-    flex: 1,
-  },
-  listTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     paddingVertical: 40,
   },
-  emptyText: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: '600',
+  emptyListContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
   },
-  emptySubtext: {
-    marginTop: 4,
+  emptyListText: {
+    marginTop: 12,
     fontSize: 14,
   },
-  scrollContainer: {
+  listScroll: {
     flex: 1,
   },
-  productItem: {
+  productCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 10,
+  },
+  cardMain: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 8,
   },
-  productInfo: {
+  cardHeaderInfo: {
     flex: 1,
+    marginRight: 12,
   },
-  productName: {
+  cardName: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  cardPrice: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     marginBottom: 4,
   },
-  productSku: {
-    fontSize: 11,
-    marginBottom: 2,
-  },
-  productCategory: {
-    fontSize: 11,
-    marginBottom: 2,
-  },
-  productPrice: {
+  cardSubText: {
     fontSize: 12,
-    marginBottom: 2,
   },
-  productBuyPrice: {
-    fontSize: 11,
-    marginBottom: 2,
-  },
-  productStock: {
-    fontSize: 11,
-  },
-  productRecipe: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  productActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  cardRightColumn: {
+    alignItems: 'flex-end',
     gap: 8,
   },
-  actionButton: {
+  stockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  stockAlertIcon: {
+    marginRight: 4,
+  },
+  stockText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  actionIconBtn: {
     padding: 8,
     borderRadius: 6,
+  },
+
+  // FAB button
+  fabButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 28,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    gap: 8,
+  },
+  fabText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  // Right Panel Details
+  detailsContainer: {
+    flex: 1,
+  },
+  detailsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  detailsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  detailsIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailsHeaderMeta: {
+    flex: 1,
+  },
+  detailsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  detailsPrice: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  detailsHeaderActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerActionBtn: {
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  detailsScroll: {
+    flex: 1,
+    marginTop: 16,
+  },
+  infoCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  infoCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  infoLabel: {
+    fontSize: 14,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyDetailsState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyDetailsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  emptyDetailsSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

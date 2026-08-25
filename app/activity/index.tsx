@@ -1,10 +1,17 @@
+import { Header } from '@/components/Header';
+import { Section } from '@/components/Section';
+import { useTheme } from '@/constants/colorTheme';
+import { dbOperations, getDatabase } from '@/lib/database';
 import { Activity, ArrowDown, ArrowUp, Package, ShoppingCart } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { DripContainer } from '../../components/Container';
-import { Header } from '../../components/Header';
-import { useTheme } from '../../constants/colorTheme';
-import { dbOperations, getDatabase } from '../../lib/database';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 type ActivityType = 'stock_add' | 'stock_deduct' | 'order' | 'restock';
 
@@ -25,12 +32,14 @@ export default function ActivityScreen() {
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [filter, setFilter] = useState<ActivityType | 'all'>('all');
   const [loading, setLoading] = useState(true);
+  const [selectedActivity, setSelectedActivity] = useState<ActivityLog | null>(null);
 
   useEffect(() => {
     loadActivities();
   }, [filter]);
 
   const loadActivities = async () => {
+    setLoading(true);
     try {
       const db = await getDatabase();
       let logs;
@@ -50,15 +59,15 @@ export default function ActivityScreen() {
   const getActivityIcon = (type: ActivityType) => {
     switch (type) {
       case 'stock_add':
-        return <ArrowDown size={16} color={theme.success} />;
+        return <ArrowDown size={18} color={theme.success} />;
       case 'stock_deduct':
-        return <ArrowUp size={16} color={theme.error} />;
+        return <ArrowUp size={18} color={theme.error} />;
       case 'order':
-        return <ShoppingCart size={16} color={theme.primary} />;
+        return <ShoppingCart size={18} color={theme.primary} />;
       case 'restock':
-        return <Package size={16} color={theme.warning} />;
+        return <Package size={18} color={theme.warning} />;
       default:
-        return <Activity size={16} color={theme.textSecondary} />;
+        return <Activity size={18} color={theme.textSecondary} />;
     }
   };
 
@@ -87,105 +96,182 @@ export default function ActivityScreen() {
     });
   };
 
+  // --- LEFT PANEL (Main Screen: Filters & Activity Log List) ---
   const leftPanel = (
-    <View style={styles.content}>
-      <Text style={styles.title}>Activity Log</Text>
-      <Text style={styles.subtitle}>Track all stock movements and orders</Text>
-      
+    <View style={styles.leftPanelContainer}>
+      <Text style={[styles.title, { color: theme.text }]}>Activity Log</Text>
+      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+        Track all stock movements and orders
+      </Text>
+
       <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'all' && { backgroundColor: theme.primary }]}
-          onPress={() => setFilter('all')}
-        >
-          <Text style={[styles.filterButtonText, filter === 'all' && { color: theme.background }]}>
-            All
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'restock' && { backgroundColor: theme.warning }]}
-          onPress={() => setFilter('restock')}
-        >
-          <Text style={[styles.filterButtonText, filter === 'restock' && { color: theme.background }]}>
-            Restock
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'stock_deduct' && { backgroundColor: theme.error }]}
-          onPress={() => setFilter('stock_deduct')}
-        >
-          <Text style={[styles.filterButtonText, filter === 'stock_deduct' && { color: theme.background }]}>
-            Deduct
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'order' && { backgroundColor: theme.primary }]}
-          onPress={() => setFilter('order')}
-        >
-          <Text style={[styles.filterButtonText, filter === 'order' && { color: theme.background }]}>
-            Orders
-          </Text>
-        </TouchableOpacity>
+        {(['all', 'stock_add', 'stock_deduct', 'order', 'restock'] as const).map((type) => {
+          const isActive = filter === type;
+          return (
+            <TouchableOpacity
+              key={type}
+              style={[
+                styles.filterButton,
+                { borderColor: theme.border, backgroundColor: theme.card },
+                isActive && { backgroundColor: theme.primary, borderColor: theme.primary },
+              ]}
+              onPress={() => setFilter(type)}
+            >
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  { color: theme.textSecondary },
+                  isActive && { color: '#FFFFFF' },
+                ]}
+              >
+                {type === 'all' ? 'All' : type.replace('_', ' ')}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
+
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      ) : activities.length === 0 ? (
+        <View style={styles.emptyListContainer}>
+          <Activity size={48} color={theme.textTertiary || '#888'} />
+          <Text style={[styles.emptyListText, { color: theme.text }]}>No activities logged</Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+          {activities.map((item) => {
+            const isSelected = selectedActivity?.id === item.id;
+
+            return (
+              <TouchableOpacity
+                key={item.id}
+                activeOpacity={0.7}
+                style={[
+                  styles.activityCard,
+                  {
+                    backgroundColor: isSelected ? theme.primary : theme.card,
+                    borderColor: isSelected ? theme.primary : theme.border,
+                  },
+                ]}
+                onPress={() => setSelectedActivity(item)}
+              >
+                <View style={styles.cardMain}>
+                  <View style={[styles.iconBadge, { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : theme.input }]}>
+                    {getActivityIcon(item.type)}
+                  </View>
+                  <View style={styles.cardInfo}>
+                    <Text
+                      style={[
+                        styles.cardName,
+                        { color: isSelected ? '#FFFFFF' : theme.text },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.entity_name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.cardDesc,
+                        { color: isSelected ? '#E0F2FE' : theme.textSecondary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.description}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.cardTime,
+                      { color: isSelected ? '#CBD5E1' : theme.textTertiary },
+                    ]}
+                  >
+                    {formatDateTime(item.created_at)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
     </View>
   );
 
-  const rightPanel = (
-    <View style={styles.activitiesList}>
-      <Text style={styles.listTitle}>Recent Activities</Text>
-      {loading ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Loading...</Text>
+  // --- RIGHT PANEL (Activity Details View) ---
+  const rightPanel = selectedActivity ? (
+    <View style={styles.detailsContainer}>
+      <View style={[styles.detailsHeader, { borderBottomColor: theme.border }]}>
+        <View style={styles.detailsTitleRow}>
+          <View style={[styles.detailsIconBadge, { backgroundColor: theme.input }]}>
+            {getActivityIcon(selectedActivity.type)}
+          </View>
+          <View style={styles.detailsHeaderMeta}>
+            <Text style={[styles.detailsTitle, { color: theme.text }]}>
+              {selectedActivity.entity_name}
+            </Text>
+            <Text style={[styles.detailsSubtitle, { color: getActivityColor(selectedActivity.type) }]}>
+              {selectedActivity.type.replace('_', ' ').toUpperCase()}
+            </Text>
+          </View>
         </View>
-      ) : activities.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Activity size={48} color="#888" />
-          <Text style={styles.emptyText}>No activities yet</Text>
-          <Text style={styles.emptySubtext}>Activities will appear here as you use the system</Text>
-        </View>
-      ) : (
-        <ScrollView style={styles.scrollContainer}>
-          {activities.map((activity) => (
-            <View key={activity.id} style={[styles.activityItem, { borderColor: theme.border }]}>
-              <View style={styles.activityIconContainer}>
-                {getActivityIcon(activity.type)}
-              </View>
-              <View style={styles.activityInfo}>
-                <Text style={[styles.activityEntity, { color: theme.text }]}>
-                  {activity.entity_name}
-                </Text>
-                <Text style={[styles.activityDescription, { color: theme.textSecondary }]}>
-                  {activity.description}
-                </Text>
-                {activity.quantity && (
-                  <Text style={[styles.activityQuantity, { color: getActivityColor(activity.type) }]}>
-                    {activity.type === 'stock_deduct' ? '-' : '+'}{activity.quantity} {activity.unit}
-                  </Text>
-                )}
-              </View>
-              <View style={styles.activityMeta}>
-                <Text style={[styles.activityTime, { color: theme.textTertiary }]}>
-                  {formatDateTime(activity.created_at)}
-                </Text>
-                <View style={[styles.activityTypeBadge, { backgroundColor: getActivityColor(activity.type) + '20' }]}>
-                  <Text style={[styles.activityTypeText, { color: getActivityColor(activity.type) }]}>
-                    {activity.type.replace('_', ' ')}
-                  </Text>
-                </View>
-              </View>
+      </View>
+
+      <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
+        <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Log Information</Text>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Target Item:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{selectedActivity.entity_name}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Event Type:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{selectedActivity.type}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Description:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{selectedActivity.description}</Text>
+          </View>
+
+          {selectedActivity.quantity && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Quantity Change:</Text>
+              <Text style={[styles.infoValue, { color: getActivityColor(selectedActivity.type), fontWeight: '700' }]}>
+                {selectedActivity.type === 'stock_deduct' ? '-' : '+'}{selectedActivity.quantity} {selectedActivity.unit}
+              </Text>
             </View>
-          ))}
-        </ScrollView>
-      )}
+          )}
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Timestamp:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{formatDateTime(selectedActivity.created_at)}</Text>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  ) : (
+    <View style={styles.emptyDetailsState}>
+      <Activity size={64} color={theme.textTertiary || '#888'} />
+      <Text style={[styles.emptyDetailsTitle, { color: theme.text }]}>No Activity Selected</Text>
+      <Text style={[styles.emptyDetailsSubtext, { color: theme.textSecondary }]}>
+        Select an activity item from the list to view its complete audit details.
+      </Text>
     </View>
   );
 
   return (
     <>
       <Header title="Activity" />
-      <DripContainer
+      <Section
         leftPanel={leftPanel}
         rightPanel={rightPanel}
-        showSecondaryMobile={false}
+        showNextScreen={!!selectedActivity}
+        onBack={() => setSelectedActivity(null)}
+        backButtonTitle="Back to Activity Logs"
         childrenPadding={16}
       />
     </>
@@ -193,108 +279,157 @@ export default function ActivityScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
+  leftPanelContainer: {
     flex: 1,
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   filterContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  filterButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  activitiesList: {
-    flex: 1,
-  },
-  listTitle: {
-    fontSize: 18,
-    fontWeight: '700',
     marginBottom: 16,
   },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptySubtext: {
-    marginTop: 4,
-    fontSize: 14,
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    padding: 12,
+  filterButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 8,
-    alignItems: 'center',
   },
-  activityIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f5f5f5',
+  filterButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    paddingVertical: 40,
   },
-  activityInfo: {
+  emptyListContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyListText: {
+    marginTop: 12,
+    fontSize: 14,
+  },
+  listScroll: {
     flex: 1,
   },
-  activityEntity: {
+  activityCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 8,
+  },
+  cardMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardInfo: {
+    flex: 1,
+  },
+  cardName: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  cardDesc: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  cardTime: {
+    fontSize: 11,
+  },
+  detailsContainer: {
+    flex: 1,
+  },
+  detailsHeader: {
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  detailsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  detailsIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailsHeaderMeta: {
+    flex: 1,
+  },
+  detailsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  detailsSubtitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  detailsScroll: {
+    flex: 1,
+    marginTop: 16,
+  },
+  infoCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  infoCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  infoLabel: {
+    fontSize: 14,
+  },
+  infoValue: {
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 2,
   },
-  activityDescription: {
-    fontSize: 12,
-    marginBottom: 2,
+  emptyDetailsState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
   },
-  activityQuantity: {
-    fontSize: 13,
-    fontWeight: '600',
+  emptyDetailsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 6,
   },
-  activityMeta: {
-    alignItems: 'flex-end',
-  },
-  activityTime: {
-    fontSize: 11,
-    marginBottom: 4,
-  },
-  activityTypeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  activityTypeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'capitalize',
+  emptyDetailsSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
