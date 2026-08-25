@@ -13,7 +13,13 @@ interface IngredientFormSheetProps {
   visible: boolean;
   onClose: () => void;
   onSubmit: (data: { name: string; baseUnitId: number; minimumStock: number }) => void;
-  initialData?: { name: string; baseUnitId: number; minimumStock: number };
+  initialData?: {
+    name?: string;
+    baseUnitId?: number;
+    minimumStock?: number;
+    base_unit_id?: number;
+    minimum_stock?: number;
+  } | null;
   mode: 'create' | 'edit';
 }
 
@@ -37,25 +43,22 @@ export const IngredientFormSheet: React.FC<IngredientFormSheetProps> = ({
   useEffect(() => {
     if (visible) {
       loadUnits();
+      if (initialData) {
+        setFormData({
+          name: initialData.name || '',
+          baseUnitId: (initialData.baseUnitId ?? initialData.base_unit_id ?? '').toString(),
+          minimumStock: (initialData.minimumStock ?? initialData.minimum_stock ?? '').toString(),
+        });
+      } else {
+        setFormData({
+          name: '',
+          baseUnitId: '',
+          minimumStock: '',
+        });
+      }
+      setErrors({});
     }
   }, [visible]);
-
-  useEffect(() => {
-    if (initialData) {
-      setFormData({
-        name: initialData.name,
-        baseUnitId: initialData.baseUnitId.toString(),
-        minimumStock: initialData.minimumStock.toString(),
-      });
-    } else {
-      setFormData({
-        name: '',
-        baseUnitId: '',
-        minimumStock: '',
-      });
-    }
-    setErrors({});
-  }, [visible, initialData]);
 
   const loadUnits = async () => {
     setLoadingUnits(true);
@@ -88,7 +91,7 @@ export const IngredientFormSheet: React.FC<IngredientFormSheetProps> = ({
       newErrors.baseUnitId = 'Base unit is required';
     }
 
-    if (!formData.minimumStock) {
+    if (formData.minimumStock === '' || formData.minimumStock === undefined) {
       newErrors.minimumStock = 'Minimum stock is required';
     } else {
       const stock = parseFloat(formData.minimumStock);
@@ -105,8 +108,8 @@ export const IngredientFormSheet: React.FC<IngredientFormSheetProps> = ({
     if (validateForm()) {
       onSubmit({
         name: formData.name.trim(),
-        baseUnitId: parseInt(formData.baseUnitId),
-        minimumStock: parseFloat(formData.minimumStock),
+        baseUnitId: parseInt(formData.baseUnitId, 10),
+        minimumStock: parseFloat(formData.minimumStock) || 0,
       });
     }
   };
@@ -132,7 +135,7 @@ export const IngredientFormSheet: React.FC<IngredientFormSheetProps> = ({
         <DripInput
           label="Ingredient Name"
           value={formData.name}
-          onChangeText={(text) => setFormData({ ...formData, name: text })}
+          onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
           error={errors.name}
           placeholder="Enter ingredient name"
         />
@@ -141,7 +144,7 @@ export const IngredientFormSheet: React.FC<IngredientFormSheetProps> = ({
           label="Base Unit"
           options={unitOptions}
           value={formData.baseUnitId}
-          onSelect={(value) => setFormData({ ...formData, baseUnitId: value })}
+          onSelect={(value) => setFormData(prev => ({ ...prev, baseUnitId: value }))}
           error={errors.baseUnitId}
           disabled={loadingUnits}
         />
@@ -149,10 +152,13 @@ export const IngredientFormSheet: React.FC<IngredientFormSheetProps> = ({
         <DripInput
           label="Minimum Stock"
           value={formData.minimumStock}
-          onChangeText={(text) => setFormData({ ...formData, minimumStock: text })}
+          onChangeText={(text) => {
+            const cleaned = text.replace(/[^0-9.]/g, '');
+            setFormData(prev => ({ ...prev, minimumStock: cleaned }));
+          }}
           error={errors.minimumStock}
           placeholder="0"
-          keyboardType="numeric"
+          keyboardType="decimal-pad"
         />
       </View>
     </DripSheet>

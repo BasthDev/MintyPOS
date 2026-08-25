@@ -2,18 +2,19 @@ import { useTheme } from '@/constants/colorTheme';
 import { Circle, X } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Keyboard,
-    KeyboardEvent,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Animated,
+  Dimensions,
+  Keyboard,
+  KeyboardAvoidingView,
+  KeyboardEvent,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from 'react-native';
 
 interface DripSheetProps {
@@ -133,7 +134,10 @@ export const DripSheet: React.FC<DripSheetProps> = ({
         if (!isBlocked) onClose();
       }}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.overlay}
+      >
         {/* Backdrop */}
         <TouchableWithoutFeedback onPress={handleBackdropPress}>
           <Animated.View
@@ -145,92 +149,76 @@ export const DripSheet: React.FC<DripSheetProps> = ({
         </TouchableWithoutFeedback>
 
         {/* Sheet Content Box */}
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <Animated.View
-            pointerEvents={isBlocked ? 'none' : 'auto'}
-            style={[
-              styles.sheetContainer,
-              isWideScreen
-                ? [
-                    styles.wideSheet,
-                    {
-                      maxWidth: maxWidth,
-                      transform: [{ translateX: slideAnim }],
-                      backgroundColor: sheetBackgroundColor,
-                      borderColor: theme.border,
-                    },
-                  ]
-                : [
-                    styles.mobileSheet,
-                    {
-                      transform: [{ translateY: slideAnim }],
-                      backgroundColor: sheetBackgroundColor,
-                      borderColor: theme.border,
-                      // Dynamically pad the bottom container when keyboard opens
-                      paddingBottom: Math.max(36, keyboardHeight + 10),
-                    },
-                  ],
-            ]}
-          >
-            {/* Header */}
-            {title && (
-              <View style={[styles.header, { borderBottomColor: theme.border }]}>
-                <View style={styles.headerTitleContainer}>
-                  <View style={styles.iconContainer}>{iconToRender}</View>
-                  <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-                </View>
-
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={handleClosePress}
-                  disabled={isBlocked}
-                  style={[styles.closeButton, { backgroundColor: theme.input, opacity: isBlocked ? 0.5 : 1 }]}
-                >
-                  <X size={18} color={theme.iconSecondary || theme.textTertiary} />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Scrollable Form Body */}
-            <ScrollView
-              contentContainerStyle={styles.scrollBody}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {children}
-            </ScrollView>
-
-            {/* Footer Actions (Save button aligned bottom right) */}
-            {footer && (
-              <View
-                style={[
-                  styles.footer,
+        <Animated.View
+          pointerEvents={isBlocked ? 'none' : 'auto'}
+          style={[
+            styles.sheetContainer,
+            isWideScreen
+              ? [
+                  styles.wideSheet,
                   {
-                    borderTopColor: theme.border,
+                    maxWidth: maxWidth,
+                    transform: [{ translateX: slideAnim }],
                     backgroundColor: sheetBackgroundColor,
+                    borderColor: theme.border,
                   },
-                ]}
-              >
-                <View style={styles.footerActionWrapper}>{footer}</View>
+                ]
+              : [
+                  styles.mobileSheet,
+                  {
+                    transform: [{ translateY: slideAnim }],
+                    backgroundColor: sheetBackgroundColor,
+                    borderColor: theme.border,
+                  },
+                ],
+          ]}
+        >
+          {/* Header */}
+          {title && (
+            <View style={[styles.header, { borderBottomColor: theme.border }]}>
+              <View style={styles.headerTitleContainer}>
+                <View style={styles.iconContainer}>{iconToRender}</View>
+                <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
               </View>
-            )}
 
-            {/* Plain View Spacer matching sheet background behind the keyboard area on wide/tablet layouts */}
-            {isWideScreen && keyboardHeight > 0 && (
-              <View
-                style={{
-                  height: keyboardHeight,
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={handleClosePress}
+                disabled={isBlocked}
+                style={[styles.closeButton, { backgroundColor: theme.input, opacity: isBlocked ? 0.5 : 1 }]}
+              >
+                <X size={18} color={theme.iconSecondary || theme.textTertiary} />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Scrollable Form Body */}
+          <ScrollView
+            style={styles.scrollContainer}
+            contentContainerStyle={styles.scrollBody}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
+            {children}
+          </ScrollView>
+
+          {/* Footer Actions (Save button aligned bottom right) */}
+          {footer && (
+            <View
+              style={[
+                styles.footer,
+                {
+                  borderTopColor: theme.border,
                   backgroundColor: sheetBackgroundColor,
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  bottom: -keyboardHeight,
-                }}
-              />
-            )}
-          </Animated.View>
-        </TouchableWithoutFeedback>
-      </View>
+                },
+              ]}
+            >
+              <View style={styles.footerActionWrapper}>{footer}</View>
+            </View>
+          )}
+        </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -248,12 +236,14 @@ const styles = StyleSheet.create({
   sheetContainer: {},
   mobileSheet: {
     width: '100%',
+    maxHeight: '85%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
     paddingHorizontal: 20,
     paddingTop: 16,
-    maxHeight: '90%',
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    flexShrink: 1,
   },
   wideSheet: {
     position: 'absolute',
@@ -297,6 +287,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  scrollContainer: {
+    flexShrink: 1,
   },
   scrollBody: {
     paddingBottom: 20,

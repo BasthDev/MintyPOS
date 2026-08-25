@@ -60,27 +60,33 @@ export const RecipeFormSheet: React.FC<RecipeFormSheetProps> = ({
   }, [visible]);
 
   useEffect(() => {
-    if (initialData) {
-      setFormData({
-        name: initialData.name,
-        description: initialData.description || '',
-      });
-      setIngredients(
-        initialData.ingredients.map((ing, index) => ({
-          id: index.toString(),
-          ingredientId: ing.ingredientId.toString(),
-          quantityNeededBase: ing.quantityNeededBase.toString(),
-        }))
-      );
-    } else {
-      setFormData({
-        name: '',
-        description: '',
-      });
-      setIngredients([{ id: '1', ingredientId: '', quantityNeededBase: '' }]);
+    if (visible) {
+      if (initialData) {
+        setFormData({
+          name: initialData.name || '',
+          description: initialData.description || '',
+        });
+        if (initialData.ingredients && Array.isArray(initialData.ingredients)) {
+          setIngredients(
+            initialData.ingredients.map((ing: any, index: number) => ({
+              id: index.toString(),
+              ingredientId: (ing.ingredientId ?? ing.ingredient_id ?? '').toString(),
+              quantityNeededBase: (ing.quantityNeededBase ?? ing.quantity_needed_base ?? '').toString(),
+            }))
+          );
+        } else {
+          setIngredients([{ id: '1', ingredientId: '', quantityNeededBase: '' }]);
+        }
+      } else {
+        setFormData({
+          name: '',
+          description: '',
+        });
+        setIngredients([{ id: '1', ingredientId: '', quantityNeededBase: '' }]);
+      }
+      setErrors({});
     }
-    setErrors({});
-  }, [visible, initialData]);
+  }, [visible]);
 
   const loadIngredients = async () => {
     setLoadingData(true);

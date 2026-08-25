@@ -2,7 +2,7 @@ import { DripSheet } from '../Sheet';
 import { DripInput } from '../Input';
 import { DripButton } from '../Button';
 import { Folder } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useTheme } from '../../constants/colorTheme';
 
@@ -10,7 +10,7 @@ interface CategoryFormSheetProps {
   visible: boolean;
   onClose: () => void;
   onSubmit: (data: { name: string }) => void;
-  initialData?: { name: string };
+  initialData?: { name: string } | null;
   mode: 'create' | 'edit';
 }
 
@@ -27,9 +27,24 @@ export const CategoryFormSheet: React.FC<CategoryFormSheetProps> = ({
   });
   const [errors, setErrors] = useState<{ name?: string }>({});
 
+  useEffect(() => {
+    if (visible) {
+      if (initialData) {
+        setFormData({
+          name: initialData.name || '',
+        });
+      } else {
+        setFormData({
+          name: '',
+        });
+      }
+      setErrors({});
+    }
+  }, [visible]);
+
   const handleChange = (field: string, value: string) => {
-    setFormData({ ...formData, [field]: value });
-    setErrors({ ...errors, [field]: undefined });
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setErrors(prev => ({ ...prev, [field]: undefined }));
   };
 
   const validateForm = () => {

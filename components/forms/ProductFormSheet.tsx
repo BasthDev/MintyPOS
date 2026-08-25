@@ -110,37 +110,39 @@ export const ProductFormSheet: React.FC<ProductFormSheetProps> = ({
   }, [formData.recipeDefinitionId, recipes]);
 
   useEffect(() => {
-    if (initialData) {
-      setFormData({
-        name: initialData.name,
-        sku: initialData.sku || '',
-        categoryId: initialData.categoryId?.toString() || '',
-        buyPrice: initialData.buyPrice?.toString() || '',
-        sellingPrice: initialData.sellingPrice.toString(),
-        recipeDefinitionId: initialData.recipeDefinitionId?.toString() || '',
-        stockDeductionMethod: initialData.stockDeductionMethod || 'none',
-        currentStock: initialData.currentStock?.toString() || '',
-        selectedRecipeName: initialData.recipeName || '',
-        useHPP: !!initialData.recipeDefinitionId,
-        imageUri: initialData.imageUri || null,
-      });
-    } else {
-      setFormData({
-        name: '',
-        sku: '',
-        categoryId: '',
-        buyPrice: '',
-        sellingPrice: '',
-        recipeDefinitionId: '',
-        stockDeductionMethod: 'none',
-        currentStock: '',
-        selectedRecipeName: '',
-        useHPP: false,
-        imageUri: null,
-      });
+    if (visible) {
+      if (initialData) {
+        setFormData({
+          name: initialData.name || '',
+          sku: initialData.sku || (initialData as any).sku || '',
+          categoryId: (initialData.categoryId ?? (initialData as any).category_id ?? '').toString(),
+          buyPrice: (initialData.buyPrice ?? (initialData as any).buy_price ?? '').toString(),
+          sellingPrice: (initialData.sellingPrice ?? (initialData as any).selling_price ?? '').toString(),
+          recipeDefinitionId: (initialData.recipeDefinitionId ?? (initialData as any).recipe_definition_id ?? '').toString(),
+          stockDeductionMethod: initialData.stockDeductionMethod ?? (initialData as any).stock_deduction_method ?? 'none',
+          currentStock: (initialData.currentStock ?? (initialData as any).current_stock ?? '').toString(),
+          selectedRecipeName: initialData.recipeName ?? (initialData as any).recipe_name ?? '',
+          useHPP: !!(initialData.recipeDefinitionId ?? (initialData as any).recipe_definition_id),
+          imageUri: initialData.imageUri ?? (initialData as any).image_uri ?? null,
+        });
+      } else {
+        setFormData({
+          name: '',
+          sku: '',
+          categoryId: '',
+          buyPrice: '',
+          sellingPrice: '',
+          recipeDefinitionId: '',
+          stockDeductionMethod: 'none',
+          currentStock: '',
+          selectedRecipeName: '',
+          useHPP: false,
+          imageUri: null,
+        });
+      }
+      setErrors({});
     }
-    setErrors({});
-  }, [visible, initialData]);
+  }, [visible]);
 
   const loadCategories = async () => {
     setLoadingCategories(true);

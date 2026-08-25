@@ -2,7 +2,7 @@ import { DripSheet } from '../Sheet';
 import { DripInput } from '../Input';
 import { DripButton } from '../Button';
 import { Truck } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useTheme } from '../../constants/colorTheme';
 
@@ -10,7 +10,7 @@ interface SupplierFormSheetProps {
   visible: boolean;
   onClose: () => void;
   onSubmit: (data: { name: string; contact: string }) => void;
-  initialData?: { name: string; contact: string };
+  initialData?: { name: string; contact?: string } | null;
   mode: 'create' | 'edit';
 }
 
@@ -28,9 +28,26 @@ export const SupplierFormSheet: React.FC<SupplierFormSheetProps> = ({
   });
   const [errors, setErrors] = useState<{ name?: string; contact?: string }>({});
 
+  useEffect(() => {
+    if (visible) {
+      if (initialData) {
+        setFormData({
+          name: initialData.name || '',
+          contact: initialData.contact || '',
+        });
+      } else {
+        setFormData({
+          name: '',
+          contact: '',
+        });
+      }
+      setErrors({});
+    }
+  }, [visible]);
+
   const handleChange = (field: string, value: string) => {
-    setFormData({ ...formData, [field]: value });
-    setErrors({ ...errors, [field]: undefined });
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setErrors(prev => ({ ...prev, [field]: undefined }));
   };
 
   const validateForm = () => {

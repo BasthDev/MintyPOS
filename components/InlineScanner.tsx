@@ -1,9 +1,7 @@
 import { useTheme } from '@/constants/colorTheme';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { QrCode, ScanLine } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Dimensions,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -22,39 +20,48 @@ export const InlineScanner: React.FC<InlineScannerProps> = ({
   const [scanMode, setScanMode] = useState<'barcode' | 'qr'>('barcode');
   const [scanned, setScanned] = useState(false);
 
-  const screenWidth = Dimensions.get('window').width;
-  const isSquare = scanMode === 'qr';
-  const frameHeight = isSquare ? 200 : 140;
+  useEffect(() => {
+    if (permission && !permission.granted && permission.canAskAgain) {
+      requestPermission();
+    }
+  }, [permission]);
 
-  if (!permission?.granted) {
+  if (!permission || !permission.granted) {
     return (
       <View style={[styles.container, { borderColor: theme.border }]}>
-        <TouchableOpacity onPress={requestPermission} style={styles.permissionRequest}>
+        <TouchableOpacity onPress={() => requestPermission()} style={styles.permissionRequest}>
           <Text style={[styles.permissionText, { color: theme.text }]}>
-            Grant Camera Permission to Scan
+            Izin kamera diperlukan untuk memindai. Ketuk untuk memberi izin.
           </Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const handleBarCodeScanned = (scanningResult: { type: string; data: string }) => {
+  const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
+    console.log('Scanned:', type, data);
     if (scanned) return;
+    
     setScanned(true);
-    onScanSuccess(scanningResult.data);
+    onScanSuccess(data);
+
     setTimeout(() => {
       setScanned(false);
-    }, 500);
+    }, 2500);
   };
 
   return (
     <View style={[styles.container, { borderColor: theme.border }]}>
       <View style={styles.scannerContainer}>
         <CameraView
-          style={[styles.camera, { height: frameHeight }]}
+          style={[styles.camera, { height: scanMode === 'qr' ? 220 : 160 }]}
+          facing="back"
           onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
           barcodeScannerSettings={{
-            barcodeTypes: scanMode === 'qr' ? ['qr'] : ['code128', 'code39', 'ean13', 'upc_a', 'upc_e'],
+            barcodeTypes:
+              scanMode === 'qr'
+                ? ['qr']
+                : ['code128', 'code39', 'ean13', 'upc_a', 'upc_e'],
           }}
         >
           <View style={styles.overlay}>
@@ -73,13 +80,16 @@ export const InlineScanner: React.FC<InlineScannerProps> = ({
           </View>
         </CameraView>
 
-        <View style={styles.modeSwitcher}>
+        {/* <View style={styles.modeSwitcher}>
           <TouchableOpacity
             style={[
               styles.modeButton,
               scanMode === 'barcode' && { backgroundColor: theme.primary },
             ]}
-            onPress={() => setScanMode('barcode')}
+            onPress={() => {
+              setScanned(false);
+              setScanMode('barcode');
+            }}
           >
             <ScanLine size={16} color={scanMode === 'barcode' ? theme.background : theme.textSecondary} />
             <Text style={[styles.modeText, { color: scanMode === 'barcode' ? theme.background : theme.textSecondary }]}>
@@ -92,14 +102,17 @@ export const InlineScanner: React.FC<InlineScannerProps> = ({
               styles.modeButton,
               scanMode === 'qr' && { backgroundColor: theme.primary },
             ]}
-            onPress={() => setScanMode('qr')}
+            onPress={() => {
+              setScanned(false);
+              setScanMode('qr');
+            }}
           >
             <QrCode size={16} color={scanMode === 'qr' ? theme.background : theme.textSecondary} />
             <Text style={[styles.modeText, { color: scanMode === 'qr' ? theme.background : theme.textSecondary }]}>
               QR Code
             </Text>
           </TouchableOpacity>
-        </View>
+        </View> */}
       </View>
     </View>
   );
@@ -124,18 +137,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   targetFrame: {
-    borderWidth: 2,
+    // borderWidth: 2,
     borderRadius: 12,
     backgroundColor: 'transparent',
     position: 'relative',
   },
   rectFrame: {
     width: '80%',
-    height: 100,
+    height: 90,
   },
   squareFrame: {
-    width: 180,
-    height: 180,
+    width: 170,
+    height: 170,
   },
   modeSwitcher: {
     flexDirection: 'row',

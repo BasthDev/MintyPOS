@@ -150,17 +150,31 @@ export interface CompletedOrderItem {
   subtotal: number;
 }
 
+// Database singleton instance and initialization promise
+let dbInstance: SQLite.SQLiteDatabase | null = null;
+let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+
 // Database initialization
 export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
-  const db = await SQLite.openDatabaseAsync(DB_NAME);
+  if (dbInstance) {
+    return dbInstance;
+  }
 
-  // Enable foreign keys
-  await db.execAsync('PRAGMA foreign_keys = ON;');
+  if (initPromise) {
+    return initPromise;
+  }
 
-  // Get current database version
-  const versionResult = await db.getFirstAsync<{ version: number }>('PRAGMA user_version');
-  const currentVersion = versionResult?.version || 0;
-  const TARGET_VERSION = 5;
+  initPromise = (async () => {
+    try {
+      const db = await SQLite.openDatabaseAsync(DB_NAME);
+
+      // Enable foreign keys and WAL (Write-Ahead Logging) mode for robust multi-threaded read/write
+      await db.execAsync('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
+
+      // Get current database version
+      const versionResult = await db.getFirstAsync<{ version: number }>('PRAGMA user_version');
+      const currentVersion = versionResult?.version || 0;
+      const TARGET_VERSION = 5;
 
   // Migration: Incremental migrations to preserve data
   if (currentVersion < TARGET_VERSION) {
@@ -492,12 +506,23 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
     // Example conversions
   }
 
-  return db;
+      dbInstance = db;
+      return db;
+    } catch (error) {
+      initPromise = null;
+      throw error;
+    }
+  })();
+
+  return initPromise;
 };
 
-// Get database instance
+// Get database instance (always awaits singleton initialization)
 export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
-  return await SQLite.openDatabaseAsync(DB_NAME);
+  if (dbInstance) {
+    return dbInstance;
+  }
+  return await initDatabase();
 };
 
 // Database operations
