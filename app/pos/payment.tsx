@@ -4,6 +4,7 @@ import { ArrowLeft, Tag } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
@@ -26,12 +27,12 @@ import {
   dbOperations,
   DiscountItem,
   getDatabase,
-  handleCheckoutOrder,
   PaymentMethodItem,
   TaxConfigItem,
 } from '@/lib/database';
 import { formatCurrency as fmt } from '@/lib/utils';
 import { CartProcess } from '@/processes/cartProcess';
+import { CheckoutProcess } from '@/processes/checkoutProcess';
 import { useStore } from '@/store/useStore';
 
 type PaymentMethodType = 'cash' | 'qris' | 'transfer' | 'split';
@@ -476,82 +477,53 @@ export default function POSPaymentScreen() {
   const handleQuickAmount = (amt: number) => setNumpadStr(String(amt));
 
   const handleConfirm = async () => {
-    if (!canConfirm) return;
+    if (!canConfirm) {
+      Alert.alert('Cannot Confirm', shortfall > 0 ? `Insufficient payment. Need ${fmt(shortfall)} more.` : 'Please check your payment details.');
+      return;
+    }
 
     setConfirming(true);
     try {
-      const db = await getDatabase();
-      const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
-      const displayMethodName =
-        (method === 'qris' || method === 'transfer') && selectedBank
-          ? `${method.toUpperCase()} | ${selectedBank}`
-          : method.toUpperCase();
-
-      // 1. Deduct Stock FIFO/FEFO
-      await handleCheckoutOrder(
-        db,
-        cart.map((c) => ({
-          productId: c.productId,
-          quantitySold: c.quantity,
-        }))
-      );
-
-      // 2. Save Order to SQLite DB
-      const orderId = await dbOperations.createCompletedOrder(db, {
-        orderNumber,
+      const result = await CheckoutProcess.processCheckout({
+        cart,
         subtotal,
+        total,
+        paymentMethod: method,
+        paymentAmount: method === 'cash' ? paymentAmount : total,
+        selectedBank,
+        selectedDiscount,
         discountAmount,
-        discountName: selectedDiscount?.name || null,
         taxAmount,
         serviceAmount,
-        total,
-        paymentType: method,
-        paymentMethod: displayMethodName,
-        amountPaid: method === 'cash' ? paymentAmount : total,
-        changeAmount: change,
-        items: cart.map((c) => ({
-          productId: c.productId,
-          productName: c.name,
-          price: c.price,
-          quantity: c.quantity,
-          subtotal: c.price * c.quantity,
-        })),
+        change,
       });
 
-      const receiptOrder: CompletedOrder = {
-        id: orderId,
-        order_number: orderNumber,
-        subtotal,
-        discount_amount: discountAmount,
-        discount_name: selectedDiscount?.name || null,
-        tax_amount: taxAmount,
-        service_amount: serviceAmount,
-        total,
-        payment_type: method,
-        payment_method: displayMethodName,
-        amount_paid: method === 'cash' ? paymentAmount : total,
-        change_amount: change,
-        items_count: cart.length,
-        created_at: new Date().toISOString(),
-        items: cart.map((c, idx) => ({
-          id: idx,
-          order_id: orderId,
-          product_id: c.productId,
-          product_name: c.name,
-          price: c.price,
-          quantity: c.quantity,
-          subtotal: c.price * c.quantity,
-        })),
-      };
+      if (!result.success || !result.order) {
+        Alert.alert('Payment Error', (result.errors || ['Validation failed']).join('\n'));
+        return;
+      }
 
-      // 3. Clear Zustand temporary cart
+      // Clear Zustand temporary cart
       CartProcess.clearCart();
-      setCompletedReceipt(receiptOrder);
+      setCompletedReceipt(result.order);
     } catch (error: any) {
       console.error('Payment failed:', error);
+      Alert.alert('Payment Failed', error?.message || 'An unexpected error occurred during payment processing.');
     } finally {
       setConfirming(false);
     }
+  };
+
+  const handleSelectDiscount = (d: DiscountItem | null) => {
+    if (d) {
+      const validation = CheckoutProcess.validateDiscountSelection(d, subtotal);
+      if (!validation.isValid) {
+        Alert.alert('Discount Ineligible', validation.errors.join('\n'));
+        return;
+      }
+    }
+    setSelectedDiscount(d);
+    setDiscountPickerVisible(false);
   };
 
   const discountRightIcon = selectedDiscount ? (
@@ -892,10 +864,7 @@ export default function POSPaymentScreen() {
         loading={false}
         selectedDiscount={selectedDiscount}
         subtotal={subtotal}
-        onDiscountSelect={(d) => {
-          setSelectedDiscount(d);
-          setDiscountPickerVisible(false);
-        }}
+        onDiscountSelect={handleSelectDiscount}
         onClose={() => setDiscountPickerVisible(false)}
       />
 
