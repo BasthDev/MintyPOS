@@ -1,7 +1,6 @@
 import { DripButton } from '@/components/Button';
 import { DripChip } from '@/components/Chip';
 import { Header } from '@/components/Header';
-import { PaymentModal } from '@/components/pos/PaymentModal';
 import { DripScannerModal } from '@/components/ScannerModal';
 import { DripSearchBar } from '@/components/SearchBar';
 import { Section } from '@/components/Section';
@@ -9,13 +8,13 @@ import { DripToast } from '@/components/Toast';
 import { useTheme } from '@/constants/colorTheme';
 import {
   Category,
-  CompletedOrder,
   dbOperations,
   getDatabase,
 } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import { CartProcess } from '@/processes/cartProcess';
 import { useStore } from '@/store/useStore';
+import { router, useFocusEffect } from 'expo-router';
 import {
   CreditCard,
   Minus,
@@ -25,7 +24,7 @@ import {
   ShoppingCart,
   Trash2,
 } from 'lucide-react-native';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -49,8 +48,7 @@ export default function POSScreen() {
   // Stats
   const [todayStats, setTodayStats] = useState({ totalSales: 0, orderCount: 0 });
 
-  // Payment modal state
-  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  // UI state
   const [showCartMobile, setShowCartMobile] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
 
@@ -58,10 +56,6 @@ export default function POSScreen() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastTitle, setToastTitle] = useState('');
   const [toastMessage, setToastMessage] = useState('');
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -81,6 +75,12 @@ export default function POSScreen() {
       setLoading(false);
     }
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const showToastNotification = (title: string, message: string) => {
     setToastTitle(title);
@@ -164,20 +164,6 @@ export default function POSScreen() {
     } else {
       setSearch(scannedCode);
       showToastNotification('Barcode Scanned', `Scanned code: ${scannedCode}`);
-    }
-  };
-
-  const handlePaymentSuccess = async (order: CompletedOrder) => {
-    CartProcess.clearCart();
-    setShowCartMobile(false);
-    showToastNotification('Order Completed', `Order #${order.order_number} processed successfully!`);
-    // Refresh stats
-    try {
-      const db = await getDatabase();
-      const stats = await dbOperations.getTodaysSalesStats(db);
-      setTodayStats(stats);
-    } catch (error) {
-      console.error('Failed to refresh stats:', error);
     }
   };
 
@@ -429,7 +415,7 @@ export default function POSScreen() {
             <TouchableOpacity
               activeOpacity={0.8}
               style={[styles.payButton, { backgroundColor: theme.primary }]}
-              onPress={() => setPaymentModalVisible(true)}
+              onPress={() => router.push('/pos/payment')}
             >
               <CreditCard size={20} color="#FFFFFF" />
               <Text style={styles.payButtonText}>Charge {formatCurrency(cartTotal)}</Text>
@@ -450,14 +436,6 @@ export default function POSScreen() {
         onBack={() => setShowCartMobile(false)}
         backButtonTitle="Back to Catalog"
         childrenPadding={16}
-      />
-
-      {/* POS Payment Screen Modal */}
-      <PaymentModal
-        visible={paymentModalVisible}
-        onClose={() => setPaymentModalVisible(false)}
-        cart={cart}
-        onPaymentSuccess={handlePaymentSuccess}
       />
 
       {/* DripToast Notification */}
