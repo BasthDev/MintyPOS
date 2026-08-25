@@ -2,14 +2,13 @@ import { useTheme } from '@/constants/colorTheme';
 import { TextCursorInput } from 'lucide-react-native';
 import React, { useRef, useState } from 'react';
 import {
-    Keyboard,
-    StyleSheet,
-    Text,
-    TextInput,
-    TextInputProps,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Keyboard,
+  StyleSheet,
+  Text,
+  TextInput,
+  TextInputProps,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 interface DripInputProps extends TextInputProps {
@@ -72,59 +71,56 @@ export const DripInput: React.FC<DripInputProps> = ({
       </Text>
 
       {/* Input Container */}
-      <TouchableWithoutFeedback onPress={handleContainerPress}>
-        <View
+      <View
+        style={[
+          styles.inputContainer,
+          { 
+            backgroundColor: theme.input,
+            borderColor: error 
+              ? theme.error 
+              : isFocused 
+                ? theme.primary 
+                : theme.inputBorder 
+          },
+          isFocused && { borderWidth: 1.5 },
+        ]}
+      >
+        {/* Left Icon */}
+        <View style={styles.iconContainerLeft}>{iconToRender}</View>
+
+        <TextInput
+          ref={textInputRef}
           style={[
-            styles.inputContainer,
+            styles.input,
             { 
-              backgroundColor: theme.input,
-              borderColor: error 
-                ? theme.error 
-                : isFocused 
-                  ? theme.primary 
-                  : theme.inputBorder 
+              color: theme.text,
+              paddingLeft: 8, 
+              paddingRight: rightIcon ? 8 : 0 
             },
-            isFocused && { borderWidth: 1.5 },
           ]}
-        >
-          {/* Left Icon */}
-          <View style={styles.iconContainerLeft}>{iconToRender}</View>
+          value={value}
+          onChangeText={onChangeText}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          placeholderTextColor={theme.textTertiary}
+          {...props}
+        />
 
-          <TextInput
-            ref={textInputRef}
-            style={[
-              styles.input,
-              { 
-                color: theme.text,
-                paddingLeft: 8, 
-                paddingRight: rightIcon ? 8 : 0 
-              },
-            ]}
-            value={value}
-            onChangeText={onChangeText}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            placeholderTextColor="transparent"
-            placeholder=""
-            {...props}
-          />
-
-          {/* Right Icon */}
-          {rightIcon && (
-            <TouchableOpacity 
-              activeOpacity={0.7}
-              onPress={() => {
-                textInputRef.current?.blur();
-                Keyboard.dismiss();
-                onRightIconPress?.();
-              }} 
-              style={styles.iconContainerRight}
-            >
-              {rightIcon}
-            </TouchableOpacity>
-          )}
-        </View>
-      </TouchableWithoutFeedback>
+        {/* Right Icon */}
+        {rightIcon && (
+          <TouchableOpacity 
+            activeOpacity={0.7}
+            onPress={() => {
+              textInputRef.current?.blur();
+              Keyboard.dismiss();
+              onRightIconPress?.();
+            }} 
+            style={styles.iconContainerRight}
+          >
+            {rightIcon}
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Error */}
       {error && (

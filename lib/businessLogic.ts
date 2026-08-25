@@ -257,3 +257,108 @@ export const validateRecipeStock = async (
     missingIngredients,
   };
 };
+
+export interface StockValidationError {
+  productId: number;
+  productName: string;
+  ingredientName?: string;
+  unit?: string;
+  required: number;
+  available: number;
+}
+
+/**
+ * Validate sale stock for an entire cart before checkout.
+ * Strictly respects stock ON vs OFF (stock_deduction_method: 'product' | 'recipe' | 'none').
+ */
+export const validateSaleStock = async (
+  db: SQLite.SQLiteDatabase,
+  cartItems: Array<{ productId: number; quantitySold: number; productName?: string }>
+): Promise<StockValidationError[]> => {
+  const errors: StockValidationError[] = [];
+  const ingredientDemands = new Map<
+    number,
+    { required: Decimal; ingredientName: string; unit: string; productName: string }
+  >();
+
+  for (const item of cartItems) {
+    const product = await db.getFirstAsync<{
+      name: string;
+      stock_deduction_method: string;
+      current_stock: number;
+      recipe_definition_id: number | null;
+    }>(
+      'SELECT name, stock_deduction_method, current_stock, recipe_definition_id FROM products WHERE id = ?',
+      [item.productId]
+    );
+
+    if (!product) continue;
+
+    // If stock deduction is 'none', stock tracking is turned OFF for this product
+    if (product.stock_deduction_method === 'none') {
+      continue;
+    }
+
+    // If stock deduction is 'product', check direct product stock
+    if (product.stock_deduction_method === 'product') {
+      const currentStock = product.current_stock || 0;
+      if (currentStock < item.quantitySold) {
+        errors.push({
+          productId: item.productId,
+          productName: product.name,
+          required: item.quantitySold,
+          available: currentStock,
+        });
+      }
+    }
+
+    // If stock deduction is 'recipe', check recipe ingredients
+    if (product.stock_deduction_method === 'recipe' && product.recipe_definition_id) {
+      const recipeIngredients = await db.getAllAsync<{
+        ingredient_id: number;
+        quantity_needed_base: number;
+        ingredient_name: string;
+        unit_symbol: string;
+      }>(
+        `SELECT ri.ingredient_id, ri.quantity_needed_base, i.name as ingredient_name, u.symbol as unit_symbol
+         FROM recipe_ingredients ri
+         JOIN ingredients i ON ri.ingredient_id = i.id
+         JOIN units u ON i.base_unit_id = u.id
+         WHERE ri.recipe_id = ?`,
+        [product.recipe_definition_id]
+      );
+
+      for (const ring of recipeIngredients) {
+        const itemDemand = new Decimal(ring.quantity_needed_base).mul(new Decimal(item.quantitySold));
+        const existing = ingredientDemands.get(ring.ingredient_id);
+        if (existing) {
+          existing.required = existing.required.add(itemDemand);
+        } else {
+          ingredientDemands.set(ring.ingredient_id, {
+            required: itemDemand,
+            ingredientName: ring.ingredient_name,
+            unit: ring.unit_symbol,
+            productName: product.name,
+          });
+        }
+      }
+    }
+  }
+
+  // Verify all aggregated ingredient demands against available batch stocks
+  for (const [ingredientId, demand] of ingredientDemands.entries()) {
+    const currentStock = await getCurrentStock(db, ingredientId);
+    if (new Decimal(currentStock).lt(demand.required)) {
+      errors.push({
+        productId: 0,
+        productName: demand.productName,
+        ingredientName: demand.ingredientName,
+        unit: demand.unit,
+        required: demand.required.toNumber(),
+        available: currentStock,
+      });
+    }
+  }
+
+  return errors;
+};

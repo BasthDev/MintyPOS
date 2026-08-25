@@ -1,3 +1,4 @@
+import { validateSaleStock } from '../lib/businessLogic';
 import {
   CompletedOrder,
   dbOperations,
@@ -75,13 +76,33 @@ export class CheckoutProcess {
     // 2. Process
     try {
       const db = await getDatabase();
+
+      // 2a. Pre-sale Stock Validation (Respects stock ON/OFF per product)
+      const stockErrors = await validateSaleStock(
+        db,
+        input.cart.map((c) => ({
+          productId: c.productId,
+          quantitySold: c.quantity,
+          productName: c.name,
+        }))
+      );
+
+      if (stockErrors.length > 0) {
+        const messages = stockErrors.map((e) =>
+          e.ingredientName
+            ? `${e.productName}: ${e.ingredientName} needs ${e.required} ${e.unit || ''}, only ${e.available} left in stock`
+            : `${e.productName}: needs ${e.required}, only ${e.available} in stock`
+        );
+        return { success: false, errors: messages };
+      }
+
       const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
       const displayMethodName =
         (input.paymentMethod === 'qris' || input.paymentMethod === 'transfer') && input.selectedBank
           ? `${input.paymentMethod.toUpperCase()} | ${input.selectedBank}`
           : input.paymentMethod.toUpperCase();
 
-      // 2a. Deduct Stock FIFO/FEFO
+      // 2b. Deduct Stock FIFO/FEFO
       await handleCheckoutOrder(
         db,
         input.cart.map((c) => ({
