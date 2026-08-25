@@ -3,22 +3,35 @@ import {
   BarChart3,
   ChefHat,
   ClipboardList,
+  Coins,
+  CreditCard,
+  Folder,
   Layers,
   Package,
+  Receipt,
   Scale,
   Settings,
   ShoppingCart,
+  Tag,
   Truck,
-  Users
+  Users,
 } from 'lucide-react-native';
 
 export type UserRole = 'Admin' | 'Manager' | 'Staff';
+
+export interface SubMenuItem {
+  title: string;
+  path: string;
+  icon: any;
+  roles: UserRole[];
+}
 
 export interface MenuItem {
   title: string;
   path: string;
   icon: any;
   roles: UserRole[];
+  children?: SubMenuItem[];
 }
 
 export const DRAWER_MENU_ITEMS: MenuItem[] = [
@@ -67,7 +80,7 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
   {
     title: 'Categories',
     path: '/categories',
-    icon: Package,
+    icon: Folder,
     roles: ['Admin', 'Manager'],
   },
   {
@@ -87,6 +100,32 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
     path: '/staff',
     icon: Users,
     roles: ['Admin'],
+  },
+  {
+    title: 'Payment & Taxes',
+    path: '/payment-methods',
+    icon: Coins,
+    roles: ['Admin', 'Manager'],
+    children: [
+      {
+        title: 'Payment Methods',
+        path: '/payment-methods',
+        icon: CreditCard,
+        roles: ['Admin', 'Manager'],
+      },
+      {
+        title: 'Tax & Service',
+        path: '/tax-service',
+        icon: Receipt,
+        roles: ['Admin', 'Manager'],
+      },
+      {
+        title: 'Discounts',
+        path: '/discounts',
+        icon: Tag,
+        roles: ['Admin', 'Manager'],
+      },
+    ],
   },
   {
     title: 'Settings',

@@ -92,6 +92,64 @@ export interface ActivityLog {
   created_at: string;
 }
 
+export interface PaymentMethodItem {
+  id: number;
+  type_key: string;
+  type_label: string;
+  method_name: string;
+  is_active: number;
+  is_system: number;
+  created_at?: string;
+}
+
+export interface TaxConfigItem {
+  id: number;
+  name: string;
+  rate: number;
+  type: 'percentage' | 'flat';
+  is_active: number;
+  created_at?: string;
+}
+
+export interface DiscountItem {
+  id: number;
+  name: string;
+  type: 'percentage' | 'flat';
+  value: number;
+  min_order_amount: number;
+  max_discount_amount?: number | null;
+  is_active: number;
+  created_at?: string;
+}
+
+export interface CompletedOrder {
+  id: number;
+  order_number: string;
+  subtotal: number;
+  discount_amount: number;
+  discount_name?: string | null;
+  tax_amount: number;
+  service_amount: number;
+  total: number;
+  payment_type: string;
+  payment_method: string;
+  amount_paid: number;
+  change_amount: number;
+  items_count: number;
+  created_at: string;
+  items?: CompletedOrderItem[];
+}
+
+export interface CompletedOrderItem {
+  id: number;
+  order_id: number;
+  product_id: number;
+  product_name: string;
+  price: number;
+  quantity: number;
+  subtotal: number;
+}
+
 // Database initialization
 export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   const db = await SQLite.openDatabaseAsync(DB_NAME);
@@ -294,6 +352,79 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   // Update database version
   await db.execAsync(`PRAGMA user_version = ${TARGET_VERSION};`);
 
+  // Create payment_methods table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS payment_methods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type_key TEXT NOT NULL,
+      type_label TEXT NOT NULL,
+      method_name TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      is_system INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Create tax_configs table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS tax_configs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      rate REAL NOT NULL,
+      type TEXT NOT NULL DEFAULT 'percentage',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Create discounts table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS discounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'percentage',
+      value REAL NOT NULL,
+      min_order_amount REAL NOT NULL DEFAULT 0,
+      max_discount_amount REAL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Create orders table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_number TEXT NOT NULL,
+      subtotal REAL NOT NULL,
+      discount_amount REAL NOT NULL DEFAULT 0,
+      discount_name TEXT,
+      tax_amount REAL NOT NULL DEFAULT 0,
+      service_amount REAL NOT NULL DEFAULT 0,
+      total REAL NOT NULL,
+      payment_type TEXT NOT NULL,
+      payment_method TEXT NOT NULL,
+      amount_paid REAL NOT NULL,
+      change_amount REAL NOT NULL DEFAULT 0,
+      items_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Create order_items table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS order_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      product_id INTEGER NOT NULL,
+      product_name TEXT NOT NULL,
+      price REAL NOT NULL,
+      quantity REAL NOT NULL,
+      subtotal REAL NOT NULL,
+      FOREIGN KEY (order_id) REFERENCES orders(id)
+    );
+  `);
+
   // Insert default units if they don't exist
   const existingUnits = await db.getAllAsync<Unit>('SELECT * FROM units LIMIT 1');
   if (existingUnits.length === 0) {
@@ -317,12 +448,48 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
     `);
   }
 
+  // Insert default payment methods if they don't exist
+  const existingPayments = await db.getAllAsync('SELECT * FROM payment_methods LIMIT 1');
+  if (existingPayments.length === 0) {
+    await db.execAsync(`
+      INSERT INTO payment_methods (type_key, type_label, method_name, is_active, is_system) VALUES 
+      ('cash', 'Cash', 'Cash', 1, 1),
+      ('qris', 'QRIS', 'BYOND', 1, 0),
+      ('qris', 'QRIS', 'DANA', 1, 0),
+      ('qris', 'QRIS', 'GoPay', 1, 0),
+      ('qris', 'QRIS', 'OVO', 1, 0),
+      ('qris', 'QRIS', 'ShopeePay', 1, 0),
+      ('transfer', 'Bank Transfer', 'BCA', 1, 0),
+      ('transfer', 'Bank Transfer', 'Mandiri', 1, 0),
+      ('transfer', 'Bank Transfer', 'BRI', 1, 0),
+      ('transfer', 'Bank Transfer', 'BNI', 1, 0);
+    `);
+  }
+
+  // Insert default tax configs if they don't exist
+  const existingTaxes = await db.getAllAsync('SELECT * FROM tax_configs LIMIT 1');
+  if (existingTaxes.length === 0) {
+    await db.execAsync(`
+      INSERT INTO tax_configs (name, rate, type, is_active) VALUES 
+      ('PB1 / PPN', 10, 'percentage', 1),
+      ('Service Charge', 5, 'percentage', 0);
+    `);
+  }
+
+  // Insert default discounts if they don't exist
+  const existingDiscounts = await db.getAllAsync('SELECT * FROM discounts LIMIT 1');
+  if (existingDiscounts.length === 0) {
+    await db.execAsync(`
+      INSERT INTO discounts (name, type, value, min_order_amount, max_discount_amount, is_active) VALUES 
+      ('Member Discount', 'percentage', 10, 50000, 25000, 1),
+      ('Opening Promo', 'flat', 10000, 30000, NULL, 1);
+    `);
+  }
+
   // Insert default conversion units if they don't exist
   const existingConversionUnits = await db.getAllAsync('SELECT * FROM ingredient_units LIMIT 1');
   if (existingConversionUnits.length === 0) {
-    // These are example conversions - ingredient_id would need to be set properly in actual use
-    // Example: 1 kg = 1000 gram, 1 L = 1000 ml
-    // These will be used as templates when creating ingredients
+    // Example conversions
   }
 
   return db;
@@ -773,6 +940,294 @@ export const dbOperations = {
       [type, limit]
     );
   },
+
+  // Payment Methods operations
+  async getAllPaymentMethods(db: SQLite.SQLiteDatabase): Promise<PaymentMethodItem[]> {
+    return await db.getAllAsync<PaymentMethodItem>(
+      'SELECT * FROM payment_methods ORDER BY id ASC'
+    );
+  },
+
+  async getActivePaymentMethods(db: SQLite.SQLiteDatabase): Promise<PaymentMethodItem[]> {
+    return await db.getAllAsync<PaymentMethodItem>(
+      'SELECT * FROM payment_methods WHERE is_active = 1 ORDER BY id ASC'
+    );
+  },
+
+  async addPaymentMethod(
+    db: SQLite.SQLiteDatabase,
+    typeKey: string,
+    typeLabel: string,
+    methodName: string
+  ): Promise<number> {
+    const result = await db.runAsync(
+      'INSERT INTO payment_methods (type_key, type_label, method_name, is_active, is_system) VALUES (?, ?, ?, 1, 0)',
+      [typeKey, typeLabel, methodName]
+    );
+    return result.lastInsertRowId;
+  },
+
+  async updatePaymentMethod(
+    db: SQLite.SQLiteDatabase,
+    id: number,
+    methodName: string
+  ): Promise<void> {
+    await db.runAsync(
+      'UPDATE payment_methods SET method_name = ? WHERE id = ?',
+      [methodName, id]
+    );
+  },
+
+  async togglePaymentMethod(
+    db: SQLite.SQLiteDatabase,
+    id: number,
+    isActive: boolean
+  ): Promise<void> {
+    const item = await db.getFirstAsync<PaymentMethodItem>(
+      'SELECT * FROM payment_methods WHERE id = ?',
+      [id]
+    );
+    if (item && item.is_system === 1 && !isActive) {
+      throw new Error('Cash payment method cannot be disabled');
+    }
+    await db.runAsync(
+      'UPDATE payment_methods SET is_active = ? WHERE id = ?',
+      [isActive ? 1 : 0, id]
+    );
+  },
+
+  async deletePaymentMethod(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
+    const item = await db.getFirstAsync<PaymentMethodItem>(
+      'SELECT * FROM payment_methods WHERE id = ?',
+      [id]
+    );
+    if (item && item.is_system === 1) {
+      throw new Error('System payment method cannot be deleted');
+    }
+    await db.runAsync('DELETE FROM payment_methods WHERE id = ?', [id]);
+  },
+
+  // Tax Configs operations
+  async getAllTaxConfigs(db: SQLite.SQLiteDatabase): Promise<TaxConfigItem[]> {
+    return await db.getAllAsync<TaxConfigItem>(
+      'SELECT * FROM tax_configs ORDER BY id ASC'
+    );
+  },
+
+  async getActiveTaxConfigs(db: SQLite.SQLiteDatabase): Promise<TaxConfigItem[]> {
+    return await db.getAllAsync<TaxConfigItem>(
+      'SELECT * FROM tax_configs WHERE is_active = 1 ORDER BY id ASC'
+    );
+  },
+
+  async createTaxConfig(
+    db: SQLite.SQLiteDatabase,
+    name: string,
+    rate: number,
+    type: 'percentage' | 'flat' = 'percentage'
+  ): Promise<number> {
+    const result = await db.runAsync(
+      'INSERT INTO tax_configs (name, rate, type, is_active) VALUES (?, ?, ?, 1)',
+      [name, rate, type]
+    );
+    return result.lastInsertRowId;
+  },
+
+  async updateTaxConfig(
+    db: SQLite.SQLiteDatabase,
+    id: number,
+    name: string,
+    rate: number,
+    type: 'percentage' | 'flat' = 'percentage'
+  ): Promise<void> {
+    await db.runAsync(
+      'UPDATE tax_configs SET name = ?, rate = ?, type = ? WHERE id = ?',
+      [name, rate, type, id]
+    );
+  },
+
+  async toggleTaxConfig(
+    db: SQLite.SQLiteDatabase,
+    id: number,
+    isActive: boolean
+  ): Promise<void> {
+    await db.runAsync(
+      'UPDATE tax_configs SET is_active = ? WHERE id = ?',
+      [isActive ? 1 : 0, id]
+    );
+  },
+
+  async deleteTaxConfig(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
+    await db.runAsync('DELETE FROM tax_configs WHERE id = ?', [id]);
+  },
+
+  // Discounts operations
+  async getAllDiscounts(db: SQLite.SQLiteDatabase): Promise<DiscountItem[]> {
+    return await db.getAllAsync<DiscountItem>(
+      'SELECT * FROM discounts ORDER BY id ASC'
+    );
+  },
+
+  async getActiveDiscounts(db: SQLite.SQLiteDatabase): Promise<DiscountItem[]> {
+    return await db.getAllAsync<DiscountItem>(
+      'SELECT * FROM discounts WHERE is_active = 1 ORDER BY id ASC'
+    );
+  },
+
+  async createDiscount(
+    db: SQLite.SQLiteDatabase,
+    name: string,
+    type: 'percentage' | 'flat',
+    value: number,
+    minOrderAmount: number = 0,
+    maxDiscountAmount?: number | null
+  ): Promise<number> {
+    const result = await db.runAsync(
+      'INSERT INTO discounts (name, type, value, min_order_amount, max_discount_amount, is_active) VALUES (?, ?, ?, ?, ?, 1)',
+      [name, type, value, minOrderAmount, maxDiscountAmount || null]
+    );
+    return result.lastInsertRowId;
+  },
+
+  async updateDiscount(
+    db: SQLite.SQLiteDatabase,
+    id: number,
+    name: string,
+    type: 'percentage' | 'flat',
+    value: number,
+    minOrderAmount: number = 0,
+    maxDiscountAmount?: number | null
+  ): Promise<void> {
+    await db.runAsync(
+      'UPDATE discounts SET name = ?, type = ?, value = ?, min_order_amount = ?, max_discount_amount = ? WHERE id = ?',
+      [name, type, value, minOrderAmount, maxDiscountAmount || null, id]
+    );
+  },
+
+  async toggleDiscount(
+    db: SQLite.SQLiteDatabase,
+    id: number,
+    isActive: boolean
+  ): Promise<void> {
+    await db.runAsync(
+      'UPDATE discounts SET is_active = ? WHERE id = ?',
+      [isActive ? 1 : 0, id]
+    );
+  },
+
+  async deleteDiscount(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
+    await db.runAsync('DELETE FROM discounts WHERE id = ?', [id]);
+  },
+
+  // Orders operations
+  async getAllOrders(db: SQLite.SQLiteDatabase, limit: number = 100): Promise<CompletedOrder[]> {
+    const orders = await db.getAllAsync<CompletedOrder>(
+      'SELECT * FROM orders ORDER BY created_at DESC LIMIT ?',
+      [limit]
+    );
+
+    const ordersWithItems = await Promise.all(
+      orders.map(async (order) => {
+        const items = await db.getAllAsync<CompletedOrderItem>(
+          'SELECT * FROM order_items WHERE order_id = ?',
+          [order.id]
+        );
+        return {
+          ...order,
+          items,
+        };
+      })
+    );
+
+    return ordersWithItems;
+  },
+
+  async getOrderById(db: SQLite.SQLiteDatabase, id: number): Promise<CompletedOrder | null> {
+    const order = await db.getFirstAsync<CompletedOrder>(
+      'SELECT * FROM orders WHERE id = ?',
+      [id]
+    );
+    if (!order) return null;
+
+    const items = await db.getAllAsync<CompletedOrderItem>(
+      'SELECT * FROM order_items WHERE order_id = ?',
+      [id]
+    );
+    return {
+      ...order,
+      items,
+    };
+  },
+
+  async createCompletedOrder(
+    db: SQLite.SQLiteDatabase,
+    orderData: {
+      orderNumber: string;
+      subtotal: number;
+      discountAmount: number;
+      discountName?: string | null;
+      taxAmount: number;
+      serviceAmount: number;
+      total: number;
+      paymentType: string;
+      paymentMethod: string;
+      amountPaid: number;
+      changeAmount: number;
+      items: Array<{
+        productId: number;
+        productName: string;
+        price: number;
+        quantity: number;
+        subtotal: number;
+      }>;
+    }
+  ): Promise<number> {
+    const result = await db.runAsync(
+      `INSERT INTO orders (
+        order_number, subtotal, discount_amount, discount_name, 
+        tax_amount, service_amount, total, payment_type, 
+        payment_method, amount_paid, change_amount, items_count
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        orderData.orderNumber,
+        orderData.subtotal,
+        orderData.discountAmount,
+        orderData.discountName || null,
+        orderData.taxAmount,
+        orderData.serviceAmount,
+        orderData.total,
+        orderData.paymentType,
+        orderData.paymentMethod,
+        orderData.amountPaid,
+        orderData.changeAmount,
+        orderData.items.length,
+      ]
+    );
+
+    const orderId = result.lastInsertRowId;
+
+    for (const item of orderData.items) {
+      await db.runAsync(
+        'INSERT INTO order_items (order_id, product_id, product_name, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?)',
+        [orderId, item.productId, item.productName, item.price, item.quantity, item.subtotal]
+      );
+    }
+
+    return orderId;
+  },
+
+  async getTodaysSalesStats(db: SQLite.SQLiteDatabase): Promise<{ totalSales: number; orderCount: number }> {
+    const today = new Date().toISOString().split('T')[0];
+    const result = await db.getFirstAsync<{ total: number; count: number }>(
+      `SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as count 
+       FROM orders 
+       WHERE date(created_at) = date('now')`
+    );
+    return {
+      totalSales: result?.total || 0,
+      orderCount: result?.count || 0,
+    };
+  },
 };
 
 // Get current stock for an ingredient (sum of all batch remaining quantities)
@@ -907,6 +1362,13 @@ export const handleCheckoutOrder = async (
         'SELECT recipe_definition_id, stock_deduction_method FROM products WHERE id = ?',
         [item.productId]
       );
+
+      if (product && product.stock_deduction_method === 'product') {
+        await db.runAsync(
+          'UPDATE products SET current_stock = MAX(0, current_stock - ?) WHERE id = ?',
+          [item.quantitySold, item.productId]
+        );
+      }
 
       if (product && product.recipe_definition_id && product.stock_deduction_method === 'recipe') {
         // Get recipe components from new structure

@@ -4,6 +4,8 @@ import { useDrawer } from '@/constants/drawerContext';
 import { DRAWER_MENU_ITEMS, MenuItem } from '@/constants/menu';
 import { router, usePathname } from 'expo-router';
 import {
+  ChevronDown,
+  ChevronUp,
   LogOut,
   Moon,
   Store,
@@ -121,6 +123,25 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
 
   // Dynamic Org Name
   const [displayOrg, setDisplayOrg] = useState<string>('MintyPOS');
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    'Payment & Taxes': true,
+  });
+
+  // Auto-expand group if on a child route
+  useEffect(() => {
+    DRAWER_MENU_ITEMS.forEach((item) => {
+      if (item.children) {
+        const hasActiveChild = item.children.some((child) => child.path === pathname);
+        if (hasActiveChild) {
+          setOpenGroups((prev) => ({ ...prev, [item.title]: true }));
+        }
+      }
+    });
+  }, [pathname]);
+
+  const toggleGroup = (title: string) => {
+    setOpenGroups((prev) => ({ ...prev, [title]: !prev[title] }));
+  };
 
   // Set business name from user data
   useEffect(() => {
@@ -231,47 +252,81 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.menuContainer}>
-              {allowedMenuItems.map((item: MenuItem, index: number) => (
-                <DrawerItem
-                  key={index}
-                  label={item.title}
-                  icon={item.icon}
-                  route={item.path}
-                  pathname={pathname}
-                  onNavigate={handleNavigation}
-                  theme={theme}
-                  primaryColor={PRIMARY}
-                />
-              ))}
+              {allowedMenuItems.map((item: MenuItem, index: number) => {
+                if (item.children && item.children.length > 0) {
+                  const isGroupOpen = !!openGroups[item.title];
+                  const hasActiveChild = item.children.some((child) => child.path === pathname);
+                  const IconComp = item.icon;
 
-              {/* 
-              // Management Dropdown Section (Commented out as requested, kept for reference):
-              <TouchableOpacity
-                style={styles.groupHeader}
-                activeOpacity={0.8}
-                onPress={() => setMasterOpen(!masterOpen)}
-              >
-                <View style={styles.groupLeft}>
-                  <Layers size={20} color={isMasterActive ? PRIMARY : theme.textSecondary} />
-                  <Text style={[styles.groupTitle, { color: theme.textSecondary }, isMasterActive && { color: PRIMARY }]}>
-                    Management
-                  </Text>
-                </View>
-                {masterOpen ? (
-                  <ChevronUp size={18} color={theme.textSecondary} />
-                ) : (
-                  <ChevronDown size={18} color={theme.textSecondary} />
-                )}
-                {isMasterActive && <View style={[styles.activeIndicator, { backgroundColor: PRIMARY }]} />}
-              </TouchableOpacity>
+                  return (
+                    <View key={index} style={{ marginBottom: 4 }}>
+                      <TouchableOpacity
+                        style={[
+                          styles.groupHeader,
+                          hasActiveChild && { backgroundColor: theme.input + '30' },
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => toggleGroup(item.title)}
+                      >
+                        <View style={styles.groupLeft}>
+                          <IconComp
+                            size={20}
+                            color={hasActiveChild ? PRIMARY : theme.textSecondary}
+                          />
+                          <Text
+                            style={[
+                              styles.groupTitle,
+                              { color: hasActiveChild ? PRIMARY : theme.text },
+                            ]}
+                          >
+                            {item.title}
+                          </Text>
+                        </View>
+                        {isGroupOpen ? (
+                          <ChevronUp size={18} color={theme.textSecondary} />
+                        ) : (
+                          <ChevronDown size={18} color={theme.textSecondary} />
+                        )}
+                        {hasActiveChild && (
+                          <View style={[styles.activeIndicator, { backgroundColor: PRIMARY }]} />
+                        )}
+                      </TouchableOpacity>
 
-              {masterOpen && (
-                <View style={styles.subMenuContainer}>
-                  <DrawerItem label="Products" icon={Package} route="/products" pathname={pathname} onNavigate={handleNavigation} nested theme={theme} primaryColor={PRIMARY} />
-                  <DrawerItem label="Ingredients" icon={Package} route="/ingredients" pathname={pathname} onNavigate={handleNavigation} nested isLast theme={theme} primaryColor={PRIMARY} />
-                </View>
-              )}
-              */}
+                      {isGroupOpen && (
+                        <View style={styles.subMenuContainer}>
+                          {item.children.map((child, cIdx) => (
+                            <DrawerItem
+                              key={cIdx}
+                              label={child.title}
+                              icon={child.icon}
+                              route={child.path}
+                              pathname={pathname}
+                              onNavigate={handleNavigation}
+                              nested
+                              isLast={cIdx === item.children!.length - 1}
+                              theme={theme}
+                              primaryColor={PRIMARY}
+                            />
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  );
+                }
+
+                return (
+                  <DrawerItem
+                    key={index}
+                    label={item.title}
+                    icon={item.icon}
+                    route={item.path}
+                    pathname={pathname}
+                    onNavigate={handleNavigation}
+                    theme={theme}
+                    primaryColor={PRIMARY}
+                  />
+                );
+              })}
             </View>
           </ScrollView>
 

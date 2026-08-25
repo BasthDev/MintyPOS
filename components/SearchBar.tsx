@@ -14,6 +14,8 @@ interface DripSearchBarProps {
   onChangeText: (text: string) => void;
   placeholder?: string;
   onClear?: () => void;
+  onSubmitEditing?: () => void;
+  returnKeyType?: 'done' | 'go' | 'next' | 'search' | 'send';
   rightIcon?: React.ReactNode;
   onRightIconPress?: () => void;
   style?: ViewStyle;
@@ -24,6 +26,8 @@ export const DripSearchBar: React.FC<DripSearchBarProps> = ({
   onChangeText,
   placeholder = 'Search...',
   onClear,
+  onSubmitEditing,
+  returnKeyType = 'search',
   rightIcon,
   onRightIconPress,
   style,
@@ -49,6 +53,10 @@ export const DripSearchBar: React.FC<DripSearchBarProps> = ({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={theme.textTertiary}
+        onSubmitEditing={onSubmitEditing}
+        returnKeyType={returnKeyType}
+        autoCapitalize="none"
+        autoCorrect={false}
       />
 
       {value.length > 0 && (
