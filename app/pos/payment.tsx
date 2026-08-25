@@ -1,3 +1,24 @@
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { ArrowLeft, Tag } from 'lucide-react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+
 import { Header } from '@/components/Header';
 import { useTheme } from '@/constants/colorTheme';
 import {
@@ -9,84 +30,381 @@ import {
   PaymentMethodItem,
   TaxConfigItem,
 } from '@/lib/database';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency as fmt } from '@/lib/utils';
 import { CartProcess } from '@/processes/cartProcess';
 import { useStore } from '@/store/useStore';
-import { router } from 'expo-router';
-import {
-  ArrowLeft,
-  Banknote,
-  CheckCircle2,
-  ChevronDown,
-  CreditCard,
-  QrCode,
-  Receipt,
-  ShoppingCart,
-  Tag,
-  Wallet,
-  X,
-} from 'lucide-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+
+type PaymentMethodType = 'cash' | 'qris' | 'transfer' | 'split';
+
+// ─── Helper: compute discount amount from a Discount preset ─────────────────
+
+function calcDiscountAmount(discount: DiscountItem | null, subtotal: number): number {
+  if (!discount) return 0;
+  if (discount.min_order_amount && subtotal < discount.min_order_amount) return 0;
+  if (discount.type === 'percentage') {
+    const raw = (subtotal * discount.value) / 100;
+    if (discount.max_discount_amount && raw > discount.max_discount_amount)
+      return discount.max_discount_amount;
+    return raw;
+  }
+  return Math.min(discount.value, subtotal);
+}
+
+function getOrdinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+// ─── Helper sub-components ────────────────────────────────────────────────────
+
+function SummaryCell({
+  label,
+  value,
+  accent,
+  green,
+  red,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  green?: boolean;
+  red?: boolean;
+}) {
+  return (
+    <View style={p.summaryCell}>
+      <Text style={p.summaryCellLabel}>{label}</Text>
+      <Text
+        style={[
+          p.summaryCellValue,
+          accent && { color: '#065F46' },
+          green && { color: '#065F46' },
+          red && { color: '#EF4444' },
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function CashInput({
+  numpadStr,
+  onKey,
+  onQuick,
+}: {
+  numpadStr: string;
+  onKey: (k: string) => void;
+  onQuick: (a: number) => void;
+}) {
+  const display = numpadStr || '0';
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', '⌫'];
+  return (
+    <ScrollView showsVerticalScrollIndicator={false}>
+      <Text style={p.numpadDisplay}>
+        {fmt(parseInt(display || '0', 10))}
+      </Text>
+      <View style={p.numpadGrid}>
+        {keys.map((k) => (
+          <TouchableOpacity
+            key={k}
+            style={p.numpadKey}
+            onPress={() => onKey(k)}
+            activeOpacity={0.7}
+          >
+            <Text style={p.numpadKeyText}>{k}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={p.quickAmounts}>
+        {[10000, 20000, 50000, 100000, 150000, 200000, 500000].map((amt) => (
+          <TouchableOpacity
+            key={amt}
+            style={p.quickChip}
+            onPress={() => onQuick(amt)}
+            activeOpacity={0.75}
+          >
+            <Text style={p.quickChipText}>{fmt(amt)}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
+function BankGrid({
+  banks,
+  selected,
+  onSelect,
+}: {
+  banks: string[];
+  selected: string | null;
+  onSelect: (b: string) => void;
+}) {
+  if (banks.length === 0) {
+    return (
+      <View style={{ padding: 20, alignItems: 'center' }}>
+        <Text style={{ fontSize: 14, color: '#6B7280', textAlign: 'center' }}>
+          No payment methods configured
+        </Text>
+        <Text style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4, textAlign: 'center' }}>
+          Add payment methods in Settings → Payment
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={p.bankGrid}>
+      {banks.map((b) => (
+        <TouchableOpacity
+          key={b}
+          style={[p.bankTile, selected === b && p.bankTileActive]}
+          onPress={() => onSelect(b)}
+          activeOpacity={0.75}
+        >
+          <Text
+            style={[p.bankTileText, selected === b && p.bankTileTextActive]}
+          >
+            {b}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+// ─── Discount Picker Modal ────────────────────────────────────────────────────
+
+function DiscountPickerModal({
+  visible,
+  discounts,
+  loading,
+  selectedDiscount,
+  subtotal,
+  onDiscountSelect,
+  onClose,
+}: {
+  visible: boolean;
+  discounts: DiscountItem[];
+  loading: boolean;
+  selectedDiscount: DiscountItem | null;
+  subtotal: number;
+  onDiscountSelect: (discount: DiscountItem | null) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={() => {
+        Keyboard.dismiss();
+        onClose();
+      }}
+    >
+      <View style={{ flex: 1 }}>
+        <TouchableWithoutFeedback
+          onPress={() => {
+            Keyboard.dismiss();
+            onClose();
+          }}
+        >
+          <View style={[StyleSheet.absoluteFill, dm.overlay]} />
+        </TouchableWithoutFeedback>
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1, justifyContent: 'flex-end' }}
+          pointerEvents="box-none"
+        >
+          <View style={dm.sheet}>
+            <Pressable style={dm.sheetHeader} onPress={Keyboard.dismiss}>
+              <View style={dm.sheetTitleRow}>
+                <Ionicons name="pricetag-outline" size={18} color="#065F46" />
+                <Text style={dm.sheetTitle}>Select Discount</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  Keyboard.dismiss();
+                  onClose();
+                }}
+                style={dm.closeBtn}
+              >
+                <Ionicons name="close" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </Pressable>
+
+            {/* No discount option */}
+            <TouchableOpacity
+              style={[dm.discountRow, !selectedDiscount && dm.discountRowActive]}
+              onPress={() => {
+                Keyboard.dismiss();
+                onDiscountSelect(null);
+              }}
+              activeOpacity={0.75}
+            >
+              <View style={[dm.discountIcon, { backgroundColor: '#F3F4F6' }]}>
+                <Ionicons name="close-circle-outline" size={18} color="#6B7280" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={dm.discountName}>No Discount</Text>
+                <Text style={dm.discountSub}>Full price, no deduction</Text>
+              </View>
+              {!selectedDiscount && (
+                <Ionicons name="checkmark-circle" size={20} color="#065F46" />
+              )}
+            </TouchableOpacity>
+
+            <View style={dm.divider} />
+
+            {loading ? (
+              <View style={dm.centered}>
+                <ActivityIndicator color="#065F46" />
+              </View>
+            ) : discounts.length === 0 ? (
+              <View style={dm.centered}>
+                <Text style={dm.emptyText}>No active discounts available.</Text>
+              </View>
+            ) : (
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+              >
+                {discounts.map((d) => {
+                  const isActive = selectedDiscount?.id === d.id;
+                  const discAmt = calcDiscountAmount(d, subtotal);
+                  const eligible =
+                    !d.min_order_amount || subtotal >= d.min_order_amount;
+                  const isPercent = d.type === 'percentage';
+                  return (
+                    <TouchableOpacity
+                      key={d.id}
+                      style={[
+                        dm.discountRow,
+                        isActive && dm.discountRowActive,
+                        !eligible && dm.discountRowDisabled,
+                      ]}
+                      onPress={() => {
+                        if (eligible) {
+                          Keyboard.dismiss();
+                          onDiscountSelect(d);
+                        }
+                      }}
+                      activeOpacity={eligible ? 0.75 : 1}
+                    >
+                      <View
+                        style={[
+                          dm.discountIcon,
+                          isPercent
+                            ? { backgroundColor: '#ECFDF5' }
+                            : { backgroundColor: '#EEF2FF' },
+                        ]}
+                      >
+                        <Ionicons
+                          name={isPercent ? 'pricetag-outline' : 'cash-outline'}
+                          size={18}
+                          color={isPercent ? '#065F46' : '#6366F1'}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[dm.discountName, !eligible && { color: '#9CA3AF' }]}
+                        >
+                          {d.name}
+                        </Text>
+                        <Text style={dm.discountSub}>
+                          {isPercent ? `${d.value}% OFF` : `${fmt(d.value)} OFF`}
+                          {d.min_order_amount && d.min_order_amount > 0
+                            ? ` • Min ${fmt(d.min_order_amount)}`
+                            : ''}
+                          {!eligible ? ' (not eligible)' : ''}
+                        </Text>
+                      </View>
+                      {eligible && discAmt > 0 && (
+                        <Text style={dm.discountSaving}>-{fmt(discAmt)}</Text>
+                      )}
+                      {isActive && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color="#065F46"
+                          style={{ marginLeft: 8 }}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            <View style={dm.sheetFooter}>
+              <TouchableOpacity
+                style={dm.doneBtn}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  onClose();
+                }}
+              >
+                <Text style={dm.doneBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Main Payment Screen ──────────────────────────────────────────────────────
 
 export default function POSPaymentScreen() {
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
-  const isTablet = width >= 768;
+  const isWide = width > 768;
 
   const { cart } = useStore();
 
-  // Loaded database configs
+  // Settings & DB configs
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodItem[]>([]);
   const [taxConfigs, setTaxConfigs] = useState<TaxConfigItem[]>([]);
   const [discounts, setDiscounts] = useState<DiscountItem[]>([]);
   const [loadingConfigs, setLoadingConfigs] = useState(true);
 
-  // Selected payment options
-  const [activeTab, setActiveTab] = useState<string>('cash');
-  const [selectedMethodName, setSelectedMethodName] = useState<string>('Cash');
+  // Payment state
+  const [method, setMethod] = useState<PaymentMethodType>('cash');
+  const [numpadStr, setNumpadStr] = useState('');
+  const [selectedBank, setSelectedBank] = useState<string | null>(null);
 
-  // Discount selection
+  // Discount state
+  const [discountPickerVisible, setDiscountPickerVisible] = useState(false);
   const [selectedDiscount, setSelectedDiscount] = useState<DiscountItem | null>(null);
-  const [showDiscountPicker, setShowDiscountPicker] = useState(false);
 
-  // Cash numpad
-  const [numpadStr, setNumpadStr] = useState<string>('');
+  // Cart modal state (mobile)
+  const [cartModalVisible, setCartModalVisible] = useState(false);
 
-  // Processing state
-  const [processing, setProcessing] = useState(false);
-
-  // Success modal
-  const [successOrder, setSuccessOrder] = useState<CompletedOrder | null>(null);
+  // Processing & Receipt state
+  const [confirming, setConfirming] = useState(false);
+  const [completedReceipt, setCompletedReceipt] = useState<CompletedOrder | null>(null);
 
   useEffect(() => {
-    loadConfigs();
+    loadSettings();
   }, []);
 
-  const loadConfigs = async () => {
+  const loadSettings = async () => {
     setLoadingConfigs(true);
     try {
       const db = await getDatabase();
-      const [methods, taxes, disc] = await Promise.all([
+      const [methods, taxes, discList] = await Promise.all([
         dbOperations.getActivePaymentMethods(db),
         dbOperations.getActiveTaxConfigs(db),
         dbOperations.getActiveDiscounts(db),
       ]);
       setPaymentMethods(methods);
       setTaxConfigs(taxes);
-      setDiscounts(disc);
+      setDiscounts(discList);
     } catch (error) {
-      console.error('Failed to load payment configs:', error);
+      console.error('Failed to load payment settings:', error);
     } finally {
       setLoadingConfigs(false);
     }
@@ -97,129 +415,79 @@ export default function POSPaymentScreen() {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cart]);
 
-  // 2. Calculate Discount Amount
-  const discountAmount = useMemo(() => {
-    if (!selectedDiscount) return 0;
-    if (selectedDiscount.min_order_amount && subtotal < selectedDiscount.min_order_amount) {
-      return 0;
-    }
-    if (selectedDiscount.type === 'percentage') {
-      const raw = (subtotal * selectedDiscount.value) / 100;
-      if (selectedDiscount.max_discount_amount && raw > selectedDiscount.max_discount_amount) {
-        return selectedDiscount.max_discount_amount;
-      }
-      return raw;
-    }
-    return Math.min(selectedDiscount.value, subtotal);
-  }, [selectedDiscount, subtotal]);
+  // 2. Discount Amount
+  const discountAmount = calcDiscountAmount(selectedDiscount, subtotal);
+  const afterDiscount = Math.max(0, subtotal - discountAmount);
 
-  const discountedSubtotal = Math.max(0, subtotal - discountAmount);
-
-  // 3. Calculate Taxes and Service Charges
-  const { totalTax, totalService, taxBreakdown } = useMemo(() => {
-    let tTax = 0;
-    let tService = 0;
-    const breakdown: Array<{ name: string; amount: number; rate: number; type: string }> = [];
+  // 3. Tax & Service Charge
+  const { taxAmount, serviceAmount, taxRate, serviceRate } = useMemo(() => {
+    let tAmt = 0;
+    let sAmt = 0;
+    let tRate = 0;
+    let sRate = 0;
 
     taxConfigs.forEach((t) => {
-      let amount = 0;
+      let amt = 0;
       if (t.type === 'percentage') {
-        amount = (discountedSubtotal * t.rate) / 100;
+        amt = Math.round((afterDiscount * t.rate) / 100);
       } else {
-        amount = t.rate;
+        amt = Math.round(t.rate);
       }
 
       if (t.name.toLowerCase().includes('service')) {
-        tService += amount;
+        sAmt += amt;
+        sRate = t.rate;
       } else {
-        tTax += amount;
+        tAmt += amt;
+        tRate = t.rate;
       }
-
-      breakdown.push({
-        name: t.name,
-        amount,
-        rate: t.rate,
-        type: t.type,
-      });
     });
 
-    return { totalTax: tTax, totalService: tService, taxBreakdown: breakdown };
-  }, [taxConfigs, discountedSubtotal]);
+    return { taxAmount: tAmt, serviceAmount: sAmt, taxRate: tRate, serviceRate: sRate };
+  }, [taxConfigs, afterDiscount]);
 
   // 4. Net Total
-  const finalTotal = Math.round(discountedSubtotal + totalTax + totalService);
+  const total = Math.max(0, afterDiscount + taxAmount + serviceAmount);
+  const paymentAmount = method === 'cash' ? parseFloat(numpadStr) || 0 : total;
+  const change = method === 'cash' ? Math.max(0, paymentAmount - total) : 0;
+  const isBankMethod = method === 'qris' || method === 'transfer';
 
-  // Cash Amount Paid & Change
-  const cashPaid = parseInt(numpadStr || '0', 10);
-  const changeAmount = activeTab === 'cash' ? Math.max(0, cashPaid - finalTotal) : 0;
-  const isCashSufficient = activeTab === 'cash' ? cashPaid >= finalTotal : true;
-
-  // Payment Categories from active methods
-  const paymentTypes = useMemo(() => {
-    const typesMap: Record<string, { key: string; label: string; methods: PaymentMethodItem[] }> = {
-      cash: { key: 'cash', label: 'Cash', methods: [] },
-    };
-
-    paymentMethods.forEach((m) => {
-      if (!typesMap[m.type_key]) {
-        typesMap[m.type_key] = {
-          key: m.type_key,
-          label: m.type_label,
-          methods: [],
-        };
-      }
-      typesMap[m.type_key].methods.push(m);
-    });
-
-    return Object.values(typesMap);
+  const activeQrisBanks = useMemo(() => {
+    return paymentMethods.filter((m) => m.type_key === 'qris').map((m) => m.method_name);
   }, [paymentMethods]);
 
-  // Handle Numpad Key Press
-  const handleNumpadKey = (key: string) => {
-    if (key === '⌫') {
-      setNumpadStr((prev) => prev.slice(0, -1));
-    } else if (key === '000') {
-      if (numpadStr && numpadStr.length < 9) {
-        setNumpadStr((prev) => prev + '000');
-      }
-    } else {
-      if (numpadStr.length < 10) {
-        setNumpadStr((prev) => (prev === '0' ? key : prev + key));
-      }
-    }
+  const activeTransferBanks = useMemo(() => {
+    return paymentMethods.filter((m) => m.type_key === 'transfer').map((m) => m.method_name);
+  }, [paymentMethods]);
+
+  const canConfirm =
+    paymentAmount >= total &&
+    subtotal > 0 &&
+    (!isBankMethod || selectedBank !== null);
+
+  const shortfall = total - paymentAmount;
+
+  const handleNumpad = (key: string) => {
+    if (key === '⌫') setNumpadStr((prev) => prev.slice(0, -1));
+    else if (key === '000') setNumpadStr((prev) => (prev + '000').replace(/^0+(\d)/, '$1'));
+    else setNumpadStr((prev) => (prev + key).replace(/^0+(\d)/, '$1'));
   };
 
-  const handleQuickAmount = (amount: number) => {
-    setNumpadStr(amount.toString());
-  };
+  const handleQuickAmount = (amt: number) => setNumpadStr(String(amt));
 
-  // Execute Checkout Transaction into SQLite database
-  const handleConfirmPayment = async () => {
-    if (cart.length === 0) {
-      Alert.alert('Empty Order', 'Cart is empty. Please add products before checking out.');
-      return;
-    }
+  const handleConfirm = async () => {
+    if (!canConfirm) return;
 
-    if (activeTab === 'cash' && !isCashSufficient) {
-      Alert.alert(
-        'Insufficient Cash',
-        `Amount paid (${formatCurrency(cashPaid)}) is less than total (${formatCurrency(finalTotal)})`
-      );
-      return;
-    }
-
-    if (activeTab !== 'cash' && !selectedMethodName) {
-      Alert.alert('Select Method', 'Please select a payment provider or bank.');
-      return;
-    }
-
-    setProcessing(true);
+    setConfirming(true);
     try {
       const db = await getDatabase();
       const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
-      const amountPaid = activeTab === 'cash' ? cashPaid : finalTotal;
+      const displayMethodName =
+        (method === 'qris' || method === 'transfer') && selectedBank
+          ? `${method.toUpperCase()} | ${selectedBank}`
+          : method.toUpperCase();
 
-      // 1. Process FIFO/FEFO stock deductions for cart items
+      // 1. Deduct Stock FIFO/FEFO
       await handleCheckoutOrder(
         db,
         cart.map((c) => ({
@@ -228,19 +496,19 @@ export default function POSPaymentScreen() {
         }))
       );
 
-      // 2. Create Completed Order record in SQLite Database
+      // 2. Save Order to SQLite DB
       const orderId = await dbOperations.createCompletedOrder(db, {
         orderNumber,
         subtotal,
         discountAmount,
         discountName: selectedDiscount?.name || null,
-        taxAmount: totalTax,
-        serviceAmount: totalService,
-        total: finalTotal,
-        paymentType: activeTab,
-        paymentMethod: selectedMethodName,
-        amountPaid,
-        changeAmount,
+        taxAmount,
+        serviceAmount,
+        total,
+        paymentType: method,
+        paymentMethod: displayMethodName,
+        amountPaid: method === 'cash' ? paymentAmount : total,
+        changeAmount: change,
         items: cart.map((c) => ({
           productId: c.productId,
           productName: c.name,
@@ -250,19 +518,19 @@ export default function POSPaymentScreen() {
         })),
       });
 
-      const completedOrder: CompletedOrder = {
+      const receiptOrder: CompletedOrder = {
         id: orderId,
         order_number: orderNumber,
         subtotal,
         discount_amount: discountAmount,
         discount_name: selectedDiscount?.name || null,
-        tax_amount: totalTax,
-        service_amount: totalService,
-        total: finalTotal,
-        payment_type: activeTab,
-        payment_method: selectedMethodName,
-        amount_paid: amountPaid,
-        change_amount: changeAmount,
+        tax_amount: taxAmount,
+        service_amount: serviceAmount,
+        total,
+        payment_type: method,
+        payment_method: displayMethodName,
+        amount_paid: method === 'cash' ? paymentAmount : total,
+        change_amount: change,
         items_count: cart.length,
         created_at: new Date().toISOString(),
         items: cart.map((c, idx) => ({
@@ -276,468 +544,401 @@ export default function POSPaymentScreen() {
         })),
       };
 
-      // 3. Clear temporary Zustand cart
+      // 3. Clear Zustand temporary cart
       CartProcess.clearCart();
-      setSuccessOrder(completedOrder);
+      setCompletedReceipt(receiptOrder);
     } catch (error: any) {
-      console.error('Payment checkout failed:', error);
-      Alert.alert('Checkout Failed', error.message || 'Failed to complete transaction');
+      console.error('Payment failed:', error);
     } finally {
-      setProcessing(false);
+      setConfirming(false);
     }
   };
 
-  const handleFinishNewSale = () => {
-    setSuccessOrder(null);
-    router.replace('/');
-  };
+  const discountRightIcon = selectedDiscount ? (
+    <View style={p.discountHeaderBadge}>
+      <Tag size={16} color="#fff" />
+    </View>
+  ) : (
+    <Tag size={20} color={theme.text} />
+  );
+
+  const hasExtraBreakdown = Boolean(
+    selectedDiscount || (taxConfigs.length > 0 && (taxAmount > 0 || serviceAmount > 0))
+  );
+
+  const mobileSummary = hasExtraBreakdown ? (
+    <View style={p.summaryGrid}>
+      <SummaryCell label="Subtotal" value={fmt(subtotal)} />
+      {discountAmount > 0 ? (
+        <SummaryCell label="Discount" value={`-${fmt(discountAmount)}`} red />
+      ) : null}
+      {serviceAmount > 0 ? (
+        <SummaryCell label={`Service (${serviceRate}%)`} value={fmt(serviceAmount)} />
+      ) : null}
+      {taxAmount > 0 ? (
+        <SummaryCell label={`Tax (${taxRate}%)`} value={fmt(taxAmount)} />
+      ) : null}
+      <SummaryCell label="Total" value={fmt(total)} accent />
+      <SummaryCell label="Paid" value={fmt(paymentAmount)} />
+      <SummaryCell label="Change" value={fmt(change)} green={change > 0} />
+    </View>
+  ) : (
+    <View style={p.summaryRow}>
+      <SummaryCell label="Total" value={fmt(total)} />
+      <SummaryCell label="Paid" value={fmt(paymentAmount)} accent />
+      <SummaryCell label="Change" value={fmt(change)} green={change > 0} />
+    </View>
+  );
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.background }]}>
-      <Header title="Payment Checkout" />
+    <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+      {/* Header with back button + discount icon */}
+      <Header
+        title="Payment Checkout"
+        leftIcon={<ArrowLeft size={22} color={theme.text} />}
+        onLeftPress={() => router.back()}
+        rightIcon={discountRightIcon}
+        onRightPress={() => setDiscountPickerVisible(true)}
+      />
 
       {loadingConfigs ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-            Loading payment options...
-          </Text>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#065F46" />
+          <Text style={{ marginTop: 10, color: '#6B7280', fontSize: 13 }}>Loading payment options...</Text>
         </View>
       ) : (
-        <View style={[styles.mainLayout, isTablet ? styles.tabletRow : styles.mobileCol]}>
-          {/* LEFT PANEL: ORDER SUMMARY & DISCOUNTS / TAX BREAKDOWN */}
-          <View
-            style={[
-              styles.summarySection,
-              isTablet ? styles.summaryTablet : styles.summaryMobile,
-              { backgroundColor: theme.card, borderColor: theme.border },
-            ]}
-          >
-            <View style={styles.summaryHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>Order Summary</Text>
-              <Text style={[styles.itemCountText, { color: theme.primary }]}>
-                {cart.length} item{cart.length !== 1 ? 's' : ''}
-              </Text>
-            </View>
+        <View style={{ flex: 1, flexDirection: isWide ? 'row' : 'column' }}>
+          {/* LEFT PANEL */}
+          <View style={{ flex: isWide ? 2 : 1 }}>
+            {mobileSummary}
 
-            {/* Items List Mini Scroll */}
-            <ScrollView style={styles.itemsMiniList} showsVerticalScrollIndicator={false}>
-              {cart.length === 0 ? (
-                <Text style={[styles.emptyCartNote, { color: theme.textSecondary }]}>
-                  No items in order
-                </Text>
-              ) : (
-                cart.map((item) => (
-                  <View key={item.productId} style={styles.itemRow}>
-                    <Text style={[styles.itemNameText, { color: theme.text }]} numberOfLines={1}>
-                      {item.quantity}x {item.name}
-                    </Text>
-                    <Text style={[styles.itemPriceText, { color: theme.textSecondary }]}>
-                      {formatCurrency(item.price * item.quantity)}
-                    </Text>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-            {/* Subtotal */}
-            <View style={styles.calcRow}>
-              <Text style={[styles.calcLabel, { color: theme.textSecondary }]}>Subtotal</Text>
-              <Text style={[styles.calcVal, { color: theme.text }]}>{formatCurrency(subtotal)}</Text>
-            </View>
-
-            {/* Discount Selector Trigger */}
-            <TouchableOpacity
-              style={[
-                styles.discountSelector,
-                {
-                  borderColor: selectedDiscount ? theme.primary : theme.border,
-                  backgroundColor: selectedDiscount ? theme.primary + '10' : theme.background,
-                },
-              ]}
-              activeOpacity={0.7}
-              onPress={() => setShowDiscountPicker(true)}
-            >
-              <View style={styles.discountSelectorLeft}>
-                <Tag size={16} color={selectedDiscount ? theme.primary : theme.textSecondary} />
-                <Text
-                  style={[
-                    styles.discountSelectorTitle,
-                    { color: selectedDiscount ? theme.primary : theme.text },
-                  ]}
+            <View style={{ flex: 1, flexDirection: isWide ? 'row' : 'column' }}>
+              {/* Payment methods column */}
+              <View
+                style={[
+                  p.methodsCol,
+                  {
+                    width: isWide ? 110 : undefined,
+                    flexDirection: isWide ? 'column' : 'row',
+                    borderRightWidth: isWide ? 1 : 0,
+                    borderBottomWidth: isWide ? 0 : 1,
+                    borderBottomColor: '#E5E7EB',
+                  },
+                ]}
+              >
+                <ScrollView
+                  horizontal={!isWide}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={
+                    isWide
+                      ? { gap: 8, marginBottom: 8 }
+                      : { gap: 8, paddingHorizontal: 12, paddingVertical: 8 }
+                  }
                 >
-                  {selectedDiscount ? selectedDiscount.name : 'Apply Discount / Voucher'}
-                </Text>
-              </View>
-              {selectedDiscount ? (
-                <Text style={[styles.discountAmountText, { color: theme.error }]}>
-                  -{formatCurrency(discountAmount)}
-                </Text>
-              ) : (
-                <ChevronDown size={18} color={theme.textSecondary} />
-              )}
-            </TouchableOpacity>
-
-            {/* Taxes & Service Charges Breakdown */}
-            {taxBreakdown.map((t, idx) => (
-              <View key={idx} style={styles.calcRow}>
-                <Text style={[styles.calcLabel, { color: theme.textSecondary }]}>
-                  {t.name} {t.type === 'percentage' ? `(${t.rate}%)` : ''}
-                </Text>
-                <Text style={[styles.calcVal, { color: theme.text }]}>
-                  +{formatCurrency(t.amount)}
-                </Text>
-              </View>
-            ))}
-
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-            {/* Net Total */}
-            <View style={styles.totalRow}>
-              <Text style={[styles.totalLabel, { color: theme.text }]}>Total Due</Text>
-              <Text style={[styles.totalValue, { color: theme.primary }]}>
-                {formatCurrency(finalTotal)}
-              </Text>
-            </View>
-          </View>
-
-          {/* RIGHT PANEL: PAYMENT METHOD TABS & NUMPAD / PROVIDER GRIDS */}
-          <View style={styles.paymentSection}>
-            {/* Payment Method Selector Tabs */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.tabsScroll}
-              contentContainerStyle={styles.tabsContainer}
-            >
-              {paymentTypes.map((type) => {
-                const isTabActive = activeTab === type.key;
-                let IconComp = Banknote;
-                if (type.key === 'qris') IconComp = QrCode;
-                else if (type.key === 'transfer') IconComp = CreditCard;
-                else if (type.key === 'ewallet') IconComp = Wallet;
-
-                return (
-                  <TouchableOpacity
-                    key={type.key}
-                    style={[
-                      styles.paymentTab,
-                      { borderColor: theme.border, backgroundColor: theme.card },
-                      isTabActive && {
-                        backgroundColor: theme.primary,
-                        borderColor: theme.primary,
-                      },
-                    ]}
-                    onPress={() => {
-                      setActiveTab(type.key);
-                      if (type.key === 'cash') {
-                        setSelectedMethodName('Cash');
-                      } else if (type.methods.length > 0) {
-                        setSelectedMethodName(type.methods[0].method_name);
-                      }
-                    }}
-                  >
-                    <IconComp size={18} color={isTabActive ? '#FFFFFF' : theme.textSecondary} />
-                    <Text
-                      style={[
-                        styles.tabText,
-                        { color: isTabActive ? '#FFFFFF' : theme.textSecondary },
-                        isTabActive && { fontWeight: '700' },
-                      ]}
-                    >
-                      {type.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            {/* TAB CONTENT: CASH */}
-            {activeTab === 'cash' && (
-              <ScrollView style={styles.cashContent} showsVerticalScrollIndicator={false}>
-                {/* Amount Display & Change Box */}
-                <View style={[styles.amountDisplayCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <View style={styles.amountDisplayRow}>
-                    <Text style={[styles.amountLabel, { color: theme.textSecondary }]}>Amount Paid:</Text>
-                    <Text style={[styles.amountValue, { color: theme.text }]}>
-                      {formatCurrency(cashPaid)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.amountDisplayRow}>
-                    <Text style={[styles.amountLabel, { color: theme.textSecondary }]}>Change (Kembalian):</Text>
-                    <Text
-                      style={[
-                        styles.changeValue,
-                        { color: isCashSufficient ? theme.success || '#16A34A' : theme.error },
-                      ]}
-                    >
-                      {isCashSufficient
-                        ? formatCurrency(changeAmount)
-                        : `Kurang ${formatCurrency(finalTotal - cashPaid)}`}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Quick Cash Chips */}
-                <View style={styles.quickChipsGrid}>
-                  <TouchableOpacity
-                    style={[styles.quickChip, { backgroundColor: theme.primary + '15', borderColor: theme.primary }]}
-                    onPress={() => handleQuickAmount(finalTotal)}
-                  >
-                    <Text style={[styles.quickChipText, { color: theme.primary, fontWeight: '700' }]}>
-                      Uang Pas
-                    </Text>
-                  </TouchableOpacity>
-
-                  {[10000, 20000, 50000, 100000, 200000, 500000].map((amt) => (
+                  {(['cash', 'qris', 'transfer'] as PaymentMethodType[]).map((m) => (
                     <TouchableOpacity
-                      key={amt}
-                      style={[styles.quickChip, { backgroundColor: theme.card, borderColor: theme.border }]}
-                      onPress={() => handleQuickAmount(amt)}
+                      key={m}
+                      style={[
+                        p.methodCard,
+                        { flex: isWide ? undefined : undefined, minWidth: isWide ? undefined : 80 },
+                        method === m && p.methodCardActive,
+                      ]}
+                      onPress={() => {
+                        setMethod(m);
+                        setNumpadStr('');
+                        setSelectedBank(null);
+                      }}
                     >
-                      <Text style={[styles.quickChipText, { color: theme.text }]}>
-                        {formatCurrency(amt)}
+                      <Ionicons
+                        name={
+                          m === 'cash'
+                            ? 'cash-outline'
+                            : m === 'qris'
+                            ? 'qr-code-outline'
+                            : 'card-outline'
+                        }
+                        size={22}
+                        color={method === m ? '#065F46' : '#6B7280'}
+                      />
+                      <Text style={[p.methodLabel, method === m && p.methodLabelActive]}>
+                        {m === 'cash' ? 'Cash' : m === 'qris' ? 'QRIS' : 'Transfer'}
                       </Text>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
+              </View>
 
-                {/* Numeric Numpad Grid */}
-                <View style={styles.numpadGrid}>
-                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', '⌫'].map((key) => (
-                    <TouchableOpacity
-                      key={key}
-                      activeOpacity={0.7}
-                      style={[styles.numpadKey, { backgroundColor: theme.card, borderColor: theme.border }]}
-                      onPress={() => handleNumpadKey(key)}
-                    >
-                      <Text style={[styles.numpadKeyText, { color: theme.text }]}>{key}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-            )}
-
-            {/* TAB CONTENT: NON-CASH (QRIS / TRANSFER / E-WALLET / OTHER) */}
-            {activeTab !== 'cash' && (
-              <ScrollView style={styles.nonCashContent} showsVerticalScrollIndicator={false}>
-                <Text style={[styles.subMethodHeader, { color: theme.textSecondary }]}>
-                  Select {paymentTypes.find((t) => t.key === activeTab)?.label} Provider / Bank:
-                </Text>
-
-                {paymentMethods.filter((m) => m.type_key === activeTab).length === 0 ? (
-                  <View style={styles.emptyMethodBox}>
-                    <Text style={[styles.emptyMethodText, { color: theme.textSecondary }]}>
-                      No active providers configured for this type.
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.providerGrid}>
-                    {paymentMethods
-                      .filter((m) => m.type_key === activeTab)
-                      .map((method) => {
-                        const isSelected = selectedMethodName === method.method_name;
-
-                        return (
-                          <TouchableOpacity
-                            key={method.id}
-                            activeOpacity={0.7}
-                            style={[
-                              styles.providerCard,
-                              { backgroundColor: theme.card, borderColor: theme.border },
-                              isSelected && {
-                                borderColor: theme.primary,
-                                backgroundColor: theme.primary + '10',
-                              },
-                            ]}
-                            onPress={() => setSelectedMethodName(method.method_name)}
-                          >
-                            <View style={styles.providerCardHeader}>
-                              {activeTab === 'qris' ? (
-                                <QrCode size={24} color={isSelected ? theme.primary : theme.textSecondary} />
-                              ) : (
-                                <CreditCard size={24} color={isSelected ? theme.primary : theme.textSecondary} />
-                              )}
-                              {isSelected && <CheckCircle2 size={18} color={theme.primary} />}
-                            </View>
-                            <Text
-                              style={[
-                                styles.providerName,
-                                { color: isSelected ? theme.primary : theme.text },
-                                isSelected && { fontWeight: '700' },
-                              ]}
-                            >
-                              {method.method_name}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                  </View>
+              {/* Contextual input column */}
+              <View style={{ flex: 1.2, padding: 12 }}>
+                {method === 'cash' && (
+                  <CashInput
+                    numpadStr={numpadStr}
+                    onKey={handleNumpad}
+                    onQuick={handleQuickAmount}
+                  />
                 )}
+                {method === 'qris' && (
+                  <BankGrid
+                    banks={activeQrisBanks}
+                    selected={selectedBank}
+                    onSelect={(b) => setSelectedBank(b)}
+                  />
+                )}
+                {method === 'transfer' && (
+                  <BankGrid
+                    banks={activeTransferBanks}
+                    selected={selectedBank}
+                    onSelect={(b) => setSelectedBank(b)}
+                  />
+                )}
+              </View>
+            </View>
 
-                {selectedMethodName ? (
-                  <View style={[styles.methodInstructionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                    <Text style={[styles.instructionTitle, { color: theme.text }]}>
-                      Selected: {selectedMethodName}
-                    </Text>
-                    <Text style={[styles.instructionText, { color: theme.textSecondary }]}>
-                      Please collect payment of {formatCurrency(finalTotal)} via {selectedMethodName} before confirming.
-                    </Text>
-                  </View>
-                ) : null}
-              </ScrollView>
-            )}
-
-            {/* BOTTOM CONFIRM BUTTON */}
-            <View style={[styles.bottomActionRow, { borderTopColor: theme.border, backgroundColor: theme.card }]}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={[
-                  styles.confirmButton,
-                  {
-                    backgroundColor:
-                      activeTab === 'cash' && !isCashSufficient
-                        ? '#94A3B8'
-                        : theme.primary,
-                  },
-                ]}
-                onPress={handleConfirmPayment}
-                disabled={processing || (activeTab === 'cash' && !isCashSufficient)}
+            {/* Bottom Bar for Mobile only */}
+            {!isWide && (
+              <View
+                style={{
+                  gap: 12,
+                  padding: 12,
+                  borderTopWidth: 1,
+                  borderTopColor: '#E5E7EB',
+                  backgroundColor: '#fff',
+                }}
               >
-                {processing ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <CheckCircle2 size={20} color="#FFFFFF" />
-                    <Text style={styles.confirmButtonText}>
-                      {activeTab === 'cash'
-                        ? `Pay ${formatCurrency(finalTotal)}`
-                        : `Confirm ${selectedMethodName} (${formatCurrency(finalTotal)})`}
-                    </Text>
-                  </>
+                {!canConfirm && total > 0 && method === 'cash' && (
+                  <Text style={p.shortfallText}>
+                    Insufficient amount: -{fmt(shortfall)}
+                  </Text>
                 )}
+
+                <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      height: 48,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: '#065F46',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                    onPress={() => setCartModalVisible(true)}
+                  >
+                    <Text style={{ color: '#065F46', fontWeight: '700', fontSize: 15 }}>
+                      See Cart ({cart.length})
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      {
+                        flex: 1.5,
+                        height: 48,
+                        borderRadius: 10,
+                        backgroundColor: '#065F46',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      },
+                      (!canConfirm || confirming) && p.confirmBtnDisabled,
+                    ]}
+                    onPress={handleConfirm}
+                    disabled={!canConfirm || confirming}
+                  >
+                    <Text style={p.confirmBtnText}>
+                      {confirming ? 'Processing...' : 'Confirm Payment'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* RIGHT 30% PANEL (Wide only) */}
+          {isWide && (
+            <View style={p.rightPanel}>
+              <FlatList
+                data={cart}
+                keyExtractor={(i) => i.productId.toString()}
+                renderItem={({ item }) => (
+                  <View style={p.cartItem}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={p.cartItemName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={p.cartItemPrice}>{fmt(item.price)}</Text>
+                    </View>
+                    <View style={p.qtyBadgeStatic}>
+                      <Text style={p.qtyTextStatic}>{item.quantity}x</Text>
+                    </View>
+                    <Text style={p.cartItemSubtotal}>
+                      {fmt(item.price * item.quantity)}
+                    </Text>
+                  </View>
+                )}
+                ItemSeparatorComponent={() => (
+                  <View style={{ height: 1, backgroundColor: '#F3F4F6' }} />
+                )}
+              />
+
+              {discountAmount > 0 && (
+                <View style={p.wideDiscountRow}>
+                  <View style={p.wideDiscountLeft}>
+                    <Ionicons name="pricetag-outline" size={14} color="#065F46" />
+                    <Text style={p.wideDiscountName}>{selectedDiscount?.name || 'Discount'}</Text>
+                  </View>
+                  <Text style={p.wideDiscountAmt}>-{fmt(discountAmount)}</Text>
+                </View>
+              )}
+
+              {hasExtraBreakdown && (
+                <View style={p.rightSummaryLine}>
+                  <Text style={p.rightSummaryLabel}>Subtotal</Text>
+                  <Text style={p.rightSummaryValue}>{fmt(subtotal)}</Text>
+                </View>
+              )}
+
+              {serviceAmount > 0 ? (
+                <View style={p.rightSummaryLine}>
+                  <Text style={p.rightSummaryLabel}>Service ({serviceRate}%)</Text>
+                  <Text style={p.rightSummaryValue}>{fmt(serviceAmount)}</Text>
+                </View>
+              ) : null}
+
+              {taxAmount > 0 ? (
+                <View style={p.rightSummaryLine}>
+                  <Text style={p.rightSummaryLabel}>Tax ({taxRate}%)</Text>
+                  <Text style={p.rightSummaryValue}>{fmt(taxAmount)}</Text>
+                </View>
+              ) : null}
+
+              {!canConfirm && total > 0 && method === 'cash' && (
+                <Text style={p.shortfallText}>Insufficient amount: -{fmt(shortfall)}</Text>
+              )}
+
+              <View style={p.rightTotal}>
+                <Text style={p.rightTotalLabel}>Total</Text>
+                <Text style={p.rightTotalValue}>{fmt(total)}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  p.confirmBtn,
+                  (!canConfirm || confirming) && p.confirmBtnDisabled,
+                ]}
+                onPress={handleConfirm}
+                disabled={!canConfirm || confirming}
+              >
+                <Text style={p.confirmBtnText}>
+                  {confirming ? 'Processing...' : 'Confirm Payment'}
+                </Text>
               </TouchableOpacity>
             </View>
-          </View>
+          )}
         </View>
       )}
 
-      {/* DISCOUNT PICKER MODAL */}
+      {/* Cart Modal (Mobile) */}
       <Modal
-        visible={showDiscountPicker}
+        visible={cartModalVisible}
         transparent
-        animationType="fade"
-        onRequestClose={() => setShowDiscountPicker(false)}
+        animationType="slide"
+        onRequestClose={() => setCartModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.pickerSheet, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <View style={styles.pickerHeader}>
-              <Text style={[styles.pickerTitle, { color: theme.text }]}>Select Discount Preset</Text>
-              <TouchableOpacity onPress={() => setShowDiscountPicker(false)}>
-                <X size={20} color={theme.textSecondary} />
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%', padding: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827' }}>Order Items ({cart.length})</Text>
+              <TouchableOpacity onPress={() => setCartModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.discountsList} showsVerticalScrollIndicator={false}>
-              {/* No Discount Option */}
-              <TouchableOpacity
-                style={[
-                  styles.discountOptionCard,
-                  { borderColor: theme.border },
-                  selectedDiscount === null && { borderColor: theme.primary, backgroundColor: theme.primary + '10' },
-                ]}
-                onPress={() => {
-                  setSelectedDiscount(null);
-                  setShowDiscountPicker(false);
-                }}
-              >
-                <Text style={[styles.discountOptionName, { color: theme.text }]}>None (No Discount)</Text>
-              </TouchableOpacity>
-
-              {discounts.map((d) => {
-                const isSelected = selectedDiscount?.id === d.id;
-                const isEligible = !d.min_order_amount || subtotal >= d.min_order_amount;
-
-                return (
-                  <TouchableOpacity
-                    key={d.id}
-                    disabled={!isEligible}
-                    style={[
-                      styles.discountOptionCard,
-                      { borderColor: theme.border },
-                      isSelected && { borderColor: theme.primary, backgroundColor: theme.primary + '10' },
-                      !isEligible && { opacity: 0.5 },
-                    ]}
-                    onPress={() => {
-                      setSelectedDiscount(d);
-                      setShowDiscountPicker(false);
-                    }}
-                  >
-                    <View style={styles.discountOptionMain}>
-                      <Text style={[styles.discountOptionName, { color: theme.text }]}>{d.name}</Text>
-                      <Text style={[styles.discountOptionValue, { color: theme.primary }]}>
-                        {d.type === 'percentage' ? `${d.value}% OFF` : `${formatCurrency(d.value)} OFF`}
-                      </Text>
-                    </View>
-                    {d.min_order_amount > 0 && (
-                      <Text style={[styles.discountOptionSub, { color: theme.textSecondary }]}>
-                        Min Order: {formatCurrency(d.min_order_amount)}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {cart.map((item) => (
+                <View key={item.productId} style={p.cartItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={p.cartItemName}>{item.name}</Text>
+                    <Text style={p.cartItemPrice}>{fmt(item.price)} each</Text>
+                  </View>
+                  <Text style={p.qtyTextStatic}>x{item.quantity}</Text>
+                  <Text style={p.cartItemSubtotal}>{fmt(item.price * item.quantity)}</Text>
+                </View>
+              ))}
             </ScrollView>
+
+            <View style={{ borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 12, marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827' }}>Total:</Text>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: '#065F46' }}>{fmt(total)}</Text>
+              </View>
+              <TouchableOpacity
+                style={[p.confirmBtn, (!canConfirm || confirming) && p.confirmBtnDisabled]}
+                onPress={() => {
+                  setCartModalVisible(false);
+                  handleConfirm();
+                }}
+                disabled={!canConfirm || confirming}
+              >
+                <Text style={p.confirmBtnText}>{confirming ? 'Processing...' : 'Confirm Payment'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
 
-      {/* PAYMENT SUCCESS RECEIPT MODAL */}
-      <Modal visible={successOrder !== null} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.receiptCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <View style={[styles.receiptIconBox, { backgroundColor: theme.primary + '15' }]}>
-              <CheckCircle2 size={44} color={theme.primary} />
+      {/* Discount Picker Modal */}
+      <DiscountPickerModal
+        visible={discountPickerVisible}
+        discounts={discounts}
+        loading={false}
+        selectedDiscount={selectedDiscount}
+        subtotal={subtotal}
+        onDiscountSelect={(d) => {
+          setSelectedDiscount(d);
+          setDiscountPickerVisible(false);
+        }}
+        onClose={() => setDiscountPickerVisible(false)}
+      />
+
+      {/* Receipt Success Dialog */}
+      <Modal visible={completedReceipt !== null} transparent animationType="fade">
+        <View style={p.modalOverlay}>
+          <View style={p.receiptCard}>
+            <View style={p.receiptIconBox}>
+              <Ionicons name="checkmark-circle" size={54} color="#065F46" />
             </View>
 
-            <Text style={[styles.receiptTitle, { color: theme.text }]}>Payment Successful!</Text>
-            <Text style={[styles.receiptSubtitle, { color: theme.textSecondary }]}>
-              Order #{successOrder?.order_number}
-            </Text>
+            <Text style={p.receiptTitle}>Payment Successful!</Text>
+            <Text style={p.receiptSubtitle}>Order #{completedReceipt?.order_number}</Text>
 
-            <View style={[styles.receiptSummary, { backgroundColor: theme.input + '40' }]}>
-              <View style={styles.receiptRow}>
-                <Text style={[styles.receiptLabel, { color: theme.textSecondary }]}>Total Paid:</Text>
-                <Text style={[styles.receiptVal, { color: theme.text }]}>
-                  {formatCurrency(successOrder?.amount_paid || 0)}
-                </Text>
+            <View style={p.receiptSummary}>
+              <View style={p.receiptRow}>
+                <Text style={p.receiptLabel}>Total Paid:</Text>
+                <Text style={p.receiptVal}>{fmt(completedReceipt?.amount_paid || 0)}</Text>
               </View>
-              <View style={styles.receiptRow}>
-                <Text style={[styles.receiptLabel, { color: theme.textSecondary }]}>Payment Method:</Text>
-                <Text style={[styles.receiptVal, { color: theme.text }]}>
-                  {successOrder?.payment_method?.toUpperCase()}
-                </Text>
+              <View style={p.receiptRow}>
+                <Text style={p.receiptLabel}>Payment Method:</Text>
+                <Text style={p.receiptVal}>{completedReceipt?.payment_method}</Text>
               </View>
-              {successOrder?.payment_type === 'cash' && (
-                <View style={styles.receiptRow}>
-                  <Text style={[styles.receiptLabel, { color: theme.textSecondary }]}>Kembalian (Change):</Text>
-                  <Text style={[styles.receiptVal, { color: theme.success || '#16A34A', fontWeight: '800' }]}>
-                    {formatCurrency(successOrder?.change_amount || 0)}
+              {completedReceipt?.payment_type === 'cash' && (
+                <View style={p.receiptRow}>
+                  <Text style={p.receiptLabel}>Kembalian (Change):</Text>
+                  <Text style={[p.receiptVal, { color: '#065F46', fontWeight: '800' }]}>
+                    {fmt(completedReceipt?.change_amount || 0)}
                   </Text>
                 </View>
               )}
             </View>
 
             <TouchableOpacity
-              activeOpacity={0.8}
-              style={[styles.finishBtn, { backgroundColor: theme.primary }]}
-              onPress={handleFinishNewSale}
+              activeOpacity={0.85}
+              style={p.finishBtn}
+              onPress={() => {
+                setCompletedReceipt(null);
+                router.replace('/');
+              }}
             >
-              <ShoppingCart size={18} color="#FFFFFF" />
-              <Text style={styles.finishBtnText}>Start New Sale</Text>
+              <Ionicons name="cart-outline" size={18} color="#FFFFFF" />
+              <Text style={p.finishBtnText}>Start New Sale</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -746,291 +947,287 @@ export default function POSPaymentScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  loadingBox: {
-    flex: 1,
+// ─── Styles matching POSProject ────────────────────────────────────────────────
+
+const p = StyleSheet.create({
+  discountHeaderBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F59E0B',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 14,
-  },
-  mainLayout: {
-    flex: 1,
-  },
-  tabletRow: {
+
+  // Summary row & grid
+  summaryRow: {
     flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    padding: 12,
   },
-  mobileCol: {
-    flexDirection: 'column',
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    padding: 12,
+  },
+  summaryCell: {
+    width: '33.33%',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  summaryCellLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  summaryCellValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
   },
 
-  // Summary section
-  summarySection: {
+  // Payment methods column
+  methodsCol: {
+    width: 110,
     borderRightWidth: 1,
-    padding: 16,
+    borderRightColor: '#E5E7EB',
+    backgroundColor: '#fff',
+    padding: 8,
+    gap: 8,
   },
-  summaryTablet: {
-    width: '40%',
+  methodCard: {
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  summaryMobile: {
-    maxHeight: 250,
-    borderRightWidth: 0,
-    borderBottomWidth: 1,
+  methodCardActive: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#065F46',
   },
-  summaryHeaderRow: {
+  methodLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  methodLabelActive: {
+    color: '#065F46',
+  },
+
+  // Confirm area
+  confirmBtn: {
+    backgroundColor: '#065F46',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+  },
+  confirmBtnDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
+  confirmBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  shortfallText: {
+    color: '#EF4444',
+    textAlign: 'center',
+    marginBottom: 8,
+    fontSize: 13,
+  },
+
+  // Right panel
+  rightPanel: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderLeftWidth: 1,
+    borderLeftColor: '#E5E7EB',
+    padding: 12,
+  },
+  cartItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+  },
+  cartItemName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  cartItemPrice: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  qtyBadgeStatic: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginHorizontal: 8,
+  },
+  qtyTextStatic: {
+    fontWeight: '700',
+    fontSize: 12,
+    color: '#475569',
+  },
+  cartItemSubtotal: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F766E',
+    minWidth: 80,
+    textAlign: 'right',
+  },
+
+  wideDiscountRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+  wideDiscountLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
   },
-  itemCountText: {
+  wideDiscountName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#065F46',
+  },
+  wideDiscountAmt: {
     fontSize: 13,
     fontWeight: '700',
+    color: '#EF4444',
   },
-  itemsMiniList: {
-    maxHeight: 120,
-  },
-  emptyCartNote: {
-    fontSize: 13,
-    paddingVertical: 10,
-  },
-  itemRow: {
+  rightSummaryLine: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 4,
+    paddingHorizontal: 2,
   },
-  itemNameText: {
-    fontSize: 13,
-    flex: 1,
-    marginRight: 8,
+  rightSummaryLabel: {
+    fontSize: 12,
+    color: '#6B7280',
   },
-  itemPriceText: {
-    fontSize: 13,
-    fontWeight: '600',
+  rightSummaryValue: {
+    fontSize: 12,
+    color: '#6B7280',
   },
-  divider: {
-    height: 1,
-    marginVertical: 8,
-  },
-  calcRow: {
+  rightTotal: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 3,
+    paddingTop: 10,
+    marginVertical: 4,
   },
-  calcLabel: {
-    fontSize: 13,
-  },
-  calcVal: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  discountSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginVertical: 6,
-  },
-  discountSelectorLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  discountSelectorTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  discountAmountText: {
-    fontSize: 13,
+  rightTotalLabel: {
     fontWeight: '700',
-  },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 4,
-  },
-  totalLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  totalValue: {
-    fontSize: 20,
-    fontWeight: '800',
-  },
-
-  // Payment section
-  paymentSection: {
-    flex: 1,
-  },
-  tabsScroll: {
-    maxHeight: 56,
-  },
-  tabsContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 8,
-  },
-  paymentTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    gap: 6,
-  },
-  tabText: {
-    fontSize: 13,
-  },
-
-  // Cash tab
-  cashContent: {
-    flex: 1,
-    padding: 16,
-  },
-  amountDisplayCard: {
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  amountDisplayRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 3,
-  },
-  amountLabel: {
     fontSize: 14,
+    color: '#111827',
   },
-  amountValue: {
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  changeValue: {
-    fontSize: 16,
+  rightTotalValue: {
     fontWeight: '700',
+    fontSize: 14,
+    color: '#065F46',
   },
-  quickChipsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  quickChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  quickChipText: {
-    fontSize: 13,
+
+  // Numpad
+  numpadDisplay: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'right',
+    color: '#111827',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
   numpadGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'space-between',
+    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   numpadKey: {
-    width: '31%',
-    height: 52,
+    width: '30%',
+    height: 60,
+    backgroundColor: '#F3F4F6',
     borderRadius: 10,
-    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   numpadKeyText: {
     fontSize: 18,
     fontWeight: '700',
+    color: '#111827',
   },
-
-  // Non cash tab
-  nonCashContent: {
-    flex: 1,
-    padding: 16,
-  },
-  subMethodHeader: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  emptyMethodBox: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  emptyMethodText: {
-    fontSize: 14,
-  },
-  providerGrid: {
+  quickAmounts: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-  },
-  providerCard: {
-    width: '47%',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  providerCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  providerName: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  methodInstructionCard: {
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
+    gap: 8,
     marginTop: 16,
   },
-  instructionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  instructionText: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-
-  // Bottom action
-  bottomActionRow: {
-    padding: 16,
-    borderTopWidth: 1,
-  },
-  confirmButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+  quickChip: {
+    width: '48%',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#065F46',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
     alignItems: 'center',
-    height: 52,
-    borderRadius: 12,
+  },
+  quickChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  bankGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
-  confirmButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
+  bankTile: {
+    width: '48%',
+    padding: 14,
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  bankTileActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#065F46',
+  },
+  bankTileText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  bankTileTextActive: {
+    color: '#065F46',
   },
 
-  // Modal overlay & sheets
+  // Modal overlays & Receipt Card
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -1038,79 +1235,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
   },
-  pickerSheet: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 18,
-    maxHeight: '80%',
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  pickerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  discountsList: {
-    maxHeight: 320,
-  },
-  discountOptionCard: {
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  discountOptionMain: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  discountOptionName: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  discountOptionValue: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  discountOptionSub: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-
-  // Receipt card
   receiptCard: {
     width: '100%',
     maxWidth: 380,
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    borderWidth: 1,
     padding: 24,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 8,
   },
   receiptIconBox: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 12,
   },
   receiptTitle: {
     fontSize: 20,
     fontWeight: '800',
+    color: '#111827',
     marginBottom: 2,
   },
   receiptSubtitle: {
     fontSize: 13,
+    color: '#6B7280',
     marginBottom: 16,
   },
   receiptSummary: {
     width: '100%',
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     padding: 14,
     marginBottom: 20,
@@ -1123,14 +1277,17 @@ const styles = StyleSheet.create({
   },
   receiptLabel: {
     fontSize: 13,
+    color: '#6B7280',
   },
   receiptVal: {
     fontSize: 14,
     fontWeight: '700',
+    color: '#111827',
   },
   finishBtn: {
     width: '100%',
     height: 48,
+    backgroundColor: '#065F46',
     borderRadius: 12,
     flexDirection: 'row',
     justifyContent: 'center',
@@ -1141,5 +1298,112 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
+  },
+});
+
+// ─── Discount Sheet Styles matching POSProject ───────────────────────────────
+
+const dm = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  sheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '75%',
+    paddingBottom: 8,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  sheetTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  closeBtn: {
+    padding: 4,
+  },
+  discountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  discountRowActive: {
+    backgroundColor: '#F0FDF4',
+  },
+  discountRowDisabled: {
+    opacity: 0.45,
+  },
+  discountIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  discountName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  discountSub: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  discountSaving: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#EF4444',
+    minWidth: 70,
+    textAlign: 'right',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginHorizontal: 20,
+  },
+  centered: {
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  sheetFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  doneBtn: {
+    backgroundColor: '#065F46',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+  },
+  doneBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
