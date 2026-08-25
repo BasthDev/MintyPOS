@@ -14,6 +14,7 @@ import {
   getDatabase,
 } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
+import { CartProcess } from '@/processes/cartProcess';
 import { useStore } from '@/store/useStore';
 import {
   CreditCard,
@@ -24,7 +25,7 @@ import {
   ShoppingCart,
   Trash2,
 } from 'lucide-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -37,7 +38,7 @@ import {
 
 export default function POSScreen() {
   const { theme } = useTheme();
-  const { cart, addToCart, removeFromCart, updateCartQuantity, clearCart, getCartTotal } = useStore();
+  const { cart, getCartTotal } = useStore();
 
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -88,7 +89,7 @@ export default function POSScreen() {
   };
 
   const handleAddToCart = (product: any) => {
-    addToCart({
+    const res = CartProcess.addItem({
       productId: product.id,
       name: product.name,
       price: product.selling_price || product.price,
@@ -96,9 +97,11 @@ export default function POSScreen() {
       hasRecipe: !!product.recipe_definition_id,
     });
 
-    const currentItem = cart.find((c) => c.productId === product.id);
-    const newQty = (currentItem?.quantity || 0) + 1;
-    showToastNotification('Item Added', `${product.name} added (x${newQty})`);
+    if (res.success) {
+      const currentItem = (res.data || cart).find((c) => c.productId === product.id);
+      const newQty = currentItem?.quantity || 1;
+      showToastNotification('Item Added', `${product.name} added (x${newQty})`);
+    }
   };
 
   // Filter products by category and search (name and SKU)
@@ -115,10 +118,22 @@ export default function POSScreen() {
     });
   }, [products, selectedCategory, search]);
 
-  // Handle Enter / OK / Selesai on Search Bar
+  const lastActionTimeRef = useRef<number>(0);
+
+  const checkDebounce = (): boolean => {
+    const now = Date.now();
+    if (now - lastActionTimeRef.current < 600) {
+      return false; // Suppress duplicate rapid trigger
+    }
+    lastActionTimeRef.current = now;
+    return true;
+  };
+
+  // Handle Enter / OK / Selesai on Keyboard for Search Bar
   const handleSearchSubmit = () => {
     const query = search.trim().toLowerCase();
     if (!query) return;
+    if (!checkDebounce()) return;
 
     // 1. Look for exact SKU match first
     const exactSku = products.find((p) => p.sku && p.sku.toLowerCase() === query);
@@ -136,9 +151,11 @@ export default function POSScreen() {
     }
   };
 
-  // Handle Camera Barcode Scanner success
+  // Handle Camera Barcode Scanner success (Bypasses keyboard confirm/OK to prevent double adding)
   const handleScanSuccess = (scannedCode: string) => {
     setScannerVisible(false);
+    if (!checkDebounce()) return;
+
     const query = scannedCode.trim().toLowerCase();
     const exactSku = products.find((p) => p.sku && p.sku.toLowerCase() === query);
     if (exactSku) {
@@ -151,7 +168,7 @@ export default function POSScreen() {
   };
 
   const handlePaymentSuccess = async (order: CompletedOrder) => {
-    clearCart();
+    CartProcess.clearCart();
     setShowCartMobile(false);
     showToastNotification('Order Completed', `Order #${order.order_number} processed successfully!`);
     // Refresh stats
@@ -306,6 +323,11 @@ export default function POSScreen() {
     </View>
   );
 
+  const handleClearCart = () => {
+    CartProcess.clearCart();
+    showToastNotification('Cart Cleared', 'All items removed from current order');
+  };
+
   // --- RIGHT PANEL (Cart Panel & Checkout Controls) ---
   const rightPanel = (
     <View style={styles.cartPanel}>
@@ -350,7 +372,7 @@ export default function POSScreen() {
               <View style={styles.qtyRow}>
                 <TouchableOpacity
                   style={[styles.qtyBtn, { backgroundColor: theme.input }]}
-                  onPress={() => updateCartQuantity(item.productId, item.quantity - 1)}
+                  onPress={() => CartProcess.updateQuantity(item.productId, item.quantity - 1)}
                 >
                   <Minus size={14} color={theme.text} />
                 </TouchableOpacity>
@@ -360,7 +382,7 @@ export default function POSScreen() {
                 <TouchableOpacity
                   style={[styles.qtyBtn, { backgroundColor: theme.input }]}
                   onPress={() => {
-                    updateCartQuantity(item.productId, item.quantity + 1);
+                    CartProcess.updateQuantity(item.productId, item.quantity + 1);
                     showToastNotification('Cart Updated', `${item.name} (x${item.quantity + 1})`);
                   }}
                 >
@@ -371,6 +393,16 @@ export default function POSScreen() {
               <Text style={[styles.cartItemTotal, { color: theme.primary }]}>
                 {formatCurrency(item.price * item.quantity)}
               </Text>
+
+              <TouchableOpacity
+                style={{ marginLeft: 8, padding: 4 }}
+                onPress={() => {
+                  CartProcess.removeItem(item.productId);
+                  showToastNotification('Item Removed', `${item.name} removed from order`);
+                }}
+              >
+                <Trash2 size={16} color="#EF4444" />
+              </TouchableOpacity>
             </View>
           ))
         )}
@@ -389,7 +421,7 @@ export default function POSScreen() {
           <View style={styles.footerActionsRow}>
             <TouchableOpacity
               style={[styles.clearBtn, { borderColor: theme.border }]}
-              onPress={clearCart}
+              onPress={handleClearCart}
             >
               <Trash2 size={18} color="#EF4444" />
             </TouchableOpacity>

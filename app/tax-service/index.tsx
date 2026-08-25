@@ -188,7 +188,7 @@ export default function TaxServiceScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.listScroll} contentContainerStyle={{ paddingBottom: 80 }} showsVerticalScrollIndicator={false}>
           {filteredTaxes.map((item) => {
             const isSelected = selectedTax?.id === item.id;
             const isActive = item.is_active === 1;

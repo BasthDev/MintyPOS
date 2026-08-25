@@ -1,7 +1,7 @@
 import { useTheme } from '@/constants/colorTheme';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { QrCode, ScanLine, X } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
   Modal,
@@ -26,6 +26,14 @@ export const DripScannerModal: React.FC<DripScannerModalProps> = ({
   const [permission, requestPermission] = useCameraPermissions();
   const [scanMode, setScanMode] = useState<'barcode' | 'qr'>('barcode');
   const [scanned, setScanned] = useState(false);
+  const isScanningRef = useRef(false);
+
+  useEffect(() => {
+    if (visible) {
+      isScanningRef.current = false;
+      setScanned(false);
+    }
+  }, [visible]);
 
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
@@ -68,31 +76,13 @@ export const DripScannerModal: React.FC<DripScannerModalProps> = ({
   }
 
   const handleBarCodeScanned = (scanningResult: { type: string; data: string; cornerPoints?: { x: number; y: number }[] }) => {
-    if (scanned) return;
-
-    const { data, cornerPoints } = scanningResult;
-
-    // Strict boundary validation: Ensure all code corner points fall inside the box
-    if (cornerPoints && cornerPoints.length > 0) {
-      const isInsideBox = cornerPoints.every(
-        (point) =>
-          point.x >= frameX &&
-          point.x <= frameX + (isSquare ? 250 : screenWidth * 0.85) &&
-          point.y >= frameY &&
-          point.y <= frameY + frameHeight
-      );
-
-      if (!isInsideBox) {
-        return; // Ignore if scanned outside the box
-      }
-    }
-
+    if (isScanningRef.current || scanned) return;
+    isScanningRef.current = true;
     setScanned(true);
+
+    const { data } = scanningResult;
     onScanSuccess(data);
-    setTimeout(() => {
-      setScanned(false);
-      onClose();
-    }, 500);
+    onClose();
   };
 
   return (

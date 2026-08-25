@@ -201,7 +201,7 @@ export default function PaymentMethodsScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.listScroll} contentContainerStyle={{ paddingBottom: 80 }} showsVerticalScrollIndicator={false}>
           {Object.entries(groupedMethods).map(([typeLabel, items]) => (
             <View key={typeLabel} style={styles.typeGroup}>
               <View style={styles.typeGroupHeader}>

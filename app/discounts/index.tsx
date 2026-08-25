@@ -192,7 +192,7 @@ export default function DiscountsScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.listScroll} contentContainerStyle={{ paddingBottom: 80 }} showsVerticalScrollIndicator={false}>
           {filteredDiscounts.map((item) => {
             const isSelected = selectedDiscount?.id === item.id;
             const isActive = item.is_active === 1;
