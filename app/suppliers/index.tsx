@@ -6,7 +6,7 @@ import { useTheme } from '@/constants/colorTheme';
 import { getDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import { SupplierProcess } from '@/processes/supplierProcess';
-import { Edit, Plus, Trash2, Truck } from 'lucide-react-native';
+import { ChevronRight, Edit, Plus, Trash2, Truck } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -197,26 +197,10 @@ export default function SuppliersScreen() {
                     )}
                   </View>
 
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity
-                      style={[
-                        styles.actionIconBtn,
-                        { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : theme.input },
-                      ]}
-                      onPress={() => handleEditSupplier(s)}
-                    >
-                      <Edit size={16} color={isSelected ? '#FFFFFF' : theme.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.actionIconBtn,
-                        { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : '#FEE2E2' },
-                      ]}
-                      onPress={() => handleDeleteSupplier(s.id)}
-                    >
-                      <Trash2 size={16} color={isSelected ? '#FFFFFF' : theme.error} />
-                    </TouchableOpacity>
-                  </View>
+                  <ChevronRight
+                    size={20}
+                    color={isSelected ? '#FFFFFF' : theme.textTertiary || '#888'}
+                  />
                 </View>
               </TouchableOpacity>
             );

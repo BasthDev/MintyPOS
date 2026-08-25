@@ -7,7 +7,7 @@ import { useTheme } from '@/constants/colorTheme';
 import { calculateRecipeCost } from '@/lib/businessLogic';
 import { getDatabase } from '@/lib/database';
 import { ProductProcess } from '@/processes/productProcess';
-import { AlertTriangle, Edit, Image as ImageIcon, Package, Plus, Trash2 } from 'lucide-react-native';
+import { AlertTriangle, ChevronRight, Edit, Image as ImageIcon, Package, Plus, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -325,26 +325,10 @@ export default function ProductsScreen() {
                       </View>
                     )}
 
-                    <View style={styles.cardActions}>
-                      <TouchableOpacity
-                        style={[
-                          styles.actionIconBtn,
-                          { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : theme.input },
-                        ]}
-                        onPress={() => handleEditProduct(p)}
-                      >
-                        <Edit size={16} color={isSelected ? '#FFFFFF' : theme.primary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.actionIconBtn,
-                          { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : '#FEE2E2' },
-                        ]}
-                        onPress={() => handleDeleteProduct(p.id)}
-                      >
-                        <Trash2 size={16} color={isSelected ? '#FFFFFF' : theme.error} />
-                      </TouchableOpacity>
-                    </View>
+                    <ChevronRight
+                      size={20}
+                      color={isSelected ? '#FFFFFF' : theme.textTertiary || '#888'}
+                    />
                   </View>
                 </View>
               </TouchableOpacity>

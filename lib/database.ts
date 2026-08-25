@@ -284,6 +284,13 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
     ON products(recipe_definition_id);
   `);
 
+  // Add column migrations for existing databases
+  try {
+    await db.execAsync('ALTER TABLE products ADD COLUMN image_uri TEXT;');
+  } catch {
+    // Column already exists
+  }
+
   // Update database version
   await db.execAsync(`PRAGMA user_version = ${TARGET_VERSION};`);
 
@@ -590,6 +597,7 @@ export const dbOperations = {
       recipe_definition_id?: number;
       stock_deduction_method?: string;
       current_stock?: number;
+      image_uri?: string | null;
     }
   ): Promise<void> {
     const updateFields: string[] = [];
@@ -626,6 +634,10 @@ export const dbOperations = {
     if (updates.current_stock !== undefined) {
       updateFields.push('current_stock = ?');
       values.push(updates.current_stock);
+    }
+    if (updates.image_uri !== undefined) {
+      updateFields.push('image_uri = ?');
+      values.push(updates.image_uri);
     }
 
     if (updateFields.length > 0) {

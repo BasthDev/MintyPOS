@@ -2,7 +2,7 @@ import { calculateRecipeCost } from '@/lib/businessLogic';
 import * as ImagePicker from 'expo-image-picker';
 import { Barcode, Package, Scan, Upload, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../constants/colorTheme';
 import { dbOperations, getDatabase } from '../../lib/database';
 import { DripButton } from '../Button';
@@ -197,6 +197,15 @@ export const ProductFormSheet: React.FC<ProductFormSheetProps> = ({
 
   const handlePickImage = async () => {
     try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Needed',
+          'Please grant camera roll permissions to select a product image.'
+        );
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -205,10 +214,11 @@ export const ProductFormSheet: React.FC<ProductFormSheetProps> = ({
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setFormData({ ...formData, imageUri: result.assets[0].uri });
+        setFormData(prev => ({ ...prev, imageUri: result.assets[0].uri }));
       }
     } catch (error) {
       console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image');
     }
   };
 

@@ -5,7 +5,7 @@ import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
 import { getDatabase } from '@/lib/database';
 import { IngredientProcess } from '@/processes/ingredientProcess';
-import { Edit, Plus, Scale, Trash2 } from 'lucide-react-native';
+import { ChevronRight, Edit, Plus, Scale, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -184,26 +184,10 @@ export default function IngredientsScreen() {
                     </Text>
                   </View>
 
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity
-                      style={[
-                        styles.actionIconBtn,
-                        { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : theme.input },
-                      ]}
-                      onPress={() => handleEditIngredient(item)}
-                    >
-                      <Edit size={16} color={isSelected ? '#FFFFFF' : theme.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.actionIconBtn,
-                        { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : '#FEE2E2' },
-                      ]}
-                      onPress={() => handleDeleteIngredient(item.id)}
-                    >
-                      <Trash2 size={16} color={isSelected ? '#FFFFFF' : theme.error} />
-                    </TouchableOpacity>
-                  </View>
+                  <ChevronRight
+                    size={20}
+                    color={isSelected ? '#FFFFFF' : theme.textTertiary || '#888'}
+                  />
                 </View>
               </TouchableOpacity>
             );

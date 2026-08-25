@@ -87,6 +87,51 @@ export class RecipeProcess {
   }
 
   /**
+   * Update complete recipe with ingredients
+   */
+  static async updateCompleteRecipe(
+    db: SQLite.SQLiteDatabase,
+    id: number,
+    definition: RecipeDefinitionUpdateInput,
+    ingredients: Array<{ ingredientId: number; quantityNeededBase: number }>
+  ): Promise<ProcessResult<any>> {
+    const idValidation = RecipeValidator.validateId(id);
+    if (!idValidation.isValid) {
+      return {
+        success: false,
+        errors: idValidation.errors,
+      };
+    }
+
+    if (!definition.name || definition.name.trim().length === 0) {
+      return {
+        success: false,
+        errors: ['Recipe name is required'],
+      };
+    }
+
+    if (!ingredients || ingredients.length === 0) {
+      return {
+        success: false,
+        errors: ['At least one ingredient is required'],
+      };
+    }
+
+    try {
+      const recipe = await RecipeService.updateCompleteRecipe(db, id, definition, ingredients);
+      return {
+        success: true,
+        data: recipe,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update recipe',
+      };
+    }
+  }
+
+  /**
    * Update recipe definition with validation
    */
   static async updateDefinition(

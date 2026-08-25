@@ -5,7 +5,7 @@ import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
 import { dbOperations, getDatabase } from '@/lib/database';
 import { RecipeProcess } from '@/processes/recipeProcess';
-import { ChefHat, Edit, Eye, Plus, Trash2 } from 'lucide-react-native';
+import { ChefHat, ChevronRight, Edit, Plus, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -90,6 +90,20 @@ export default function RecipesScreen() {
     setFormVisible(true);
   };
 
+  const handleEditRecipe = (recipe: any) => {
+    setEditingRecipe({
+      id: recipe.id,
+      name: recipe.name,
+      description: recipe.description || '',
+      ingredients: (recipe.ingredients || []).map((ing: any) => ({
+        ingredientId: ing.ingredient_id,
+        quantityNeededBase: ing.quantity_needed_base,
+      })),
+    });
+    setFormMode('edit');
+    setFormVisible(true);
+  };
+
   const handleDeleteRecipe = async (recipeId: number) => {
     Alert.alert(
       'Delete Recipe',
@@ -133,8 +147,12 @@ export default function RecipesScreen() {
       if (formMode === 'create') {
         result = await RecipeProcess.createCompleteRecipe(db, data, data.ingredients);
       } else {
-        Alert.alert('Info', 'Edit functionality coming soon');
-        return;
+        result = await RecipeProcess.updateCompleteRecipe(
+          db,
+          editingRecipe.id,
+          { name: data.name, description: data.description },
+          data.ingredients
+        );
       }
 
       if (result.success) {
@@ -227,17 +245,10 @@ export default function RecipesScreen() {
                     </Text>
                   </View>
 
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity
-                      style={[
-                        styles.actionIconBtn,
-                        { backgroundColor: isSelected ? 'rgba(255,255,255,0.2)' : '#FEE2E2' },
-                      ]}
-                      onPress={() => handleDeleteRecipe(r.id)}
-                    >
-                      <Trash2 size={16} color={isSelected ? '#FFFFFF' : theme.error} />
-                    </TouchableOpacity>
-                  </View>
+                  <ChevronRight
+                    size={20}
+                    color={isSelected ? '#FFFFFF' : theme.textTertiary || '#888'}
+                  />
                 </View>
               </TouchableOpacity>
             );
@@ -275,12 +286,20 @@ export default function RecipesScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
-          onPress={() => handleDeleteRecipe(selectedRecipe.id)}
-        >
-          <Trash2 size={18} color={theme.error} />
-        </TouchableOpacity>
+        <View style={styles.detailsHeaderActions}>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => handleEditRecipe(selectedRecipe)}
+          >
+            <Edit size={18} color={theme.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => handleDeleteRecipe(selectedRecipe.id)}
+          >
+            <Trash2 size={18} color={theme.error} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
@@ -391,19 +410,11 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   cardDesc: {
-    fontSize: 13,
+    fontSize: 12,
     marginBottom: 4,
   },
   cardMeta: {
     fontSize: 12,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  actionIconBtn: {
-    padding: 8,
-    borderRadius: 6,
   },
 
   // FAB
@@ -429,7 +440,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Details Panel
+  // Details
   detailsContainer: {
     flex: 1,
   },
@@ -462,8 +473,11 @@ const styles = StyleSheet.create({
   },
   detailsCost: {
     fontSize: 14,
-    fontWeight: '700',
     marginTop: 2,
+  },
+  detailsHeaderActions: {
+    flexDirection: 'row',
+    gap: 8,
   },
   headerActionBtn: {
     padding: 10,
@@ -486,6 +500,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 14,
+    lineHeight: 20,
   },
   ingredientRow: {
     flexDirection: 'row',
@@ -507,7 +522,7 @@ const styles = StyleSheet.create({
   },
   ingredientCost: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   emptyDetailsState: {
     flex: 1,

@@ -7,7 +7,7 @@ import { useTheme } from '@/constants/colorTheme';
 import { getDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import { InventoryProcess } from '@/processes/inventoryProcess';
-import { Layers, Package, Plus } from 'lucide-react-native';
+import { ChevronRight, Layers, Package, Plus } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -182,22 +182,29 @@ export default function InventoryScreen() {
                   </View>
 
                   <View style={styles.cardRightColumn}>
-                    <Text
-                      style={[
-                        styles.stockText,
-                        { color: isSelected ? '#FFFFFF' : theme.primary },
-                      ]}
-                    >
-                      {b.remaining_quantity_base} {b.unit_symbol}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.costText,
-                        { color: isSelected ? '#CBD5E1' : theme.textSecondary },
-                      ]}
-                    >
-                      {formatCurrency(b.cost_per_base_unit)}/{b.unit_symbol}
-                    </Text>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text
+                        style={[
+                          styles.stockText,
+                          { color: isSelected ? '#FFFFFF' : theme.primary },
+                        ]}
+                      >
+                        {b.remaining_quantity_base} {b.unit_symbol}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.costText,
+                          { color: isSelected ? '#CBD5E1' : theme.textSecondary },
+                        ]}
+                      >
+                        {formatCurrency(b.cost_per_base_unit)}/{b.unit_symbol}
+                      </Text>
+                    </View>
+                    <ChevronRight
+                      size={20}
+                      color={isSelected ? '#FFFFFF' : theme.textTertiary || '#888'}
+                      style={{ marginLeft: 8 }}
+                    />
                   </View>
                 </View>
               </TouchableOpacity>
@@ -378,7 +385,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   cardRightColumn: {
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   stockText: {
     fontSize: 14,

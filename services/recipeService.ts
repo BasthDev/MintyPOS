@@ -124,6 +124,31 @@ export class RecipeService {
   }
 
   /**
+   * Update complete recipe with ingredients
+   */
+  static async updateCompleteRecipe(
+    db: SQLite.SQLiteDatabase,
+    id: number,
+    definition: RecipeDefinitionUpdateInput,
+    ingredients: Array<{ ingredientId: number; quantityNeededBase: number }>
+  ) {
+    await this.updateDefinition(db, id, definition);
+
+    // Delete existing recipe ingredients and re-insert updated ones
+    await db.runAsync('DELETE FROM recipe_ingredients WHERE recipe_id = ?', [id]);
+
+    for (const ingredient of ingredients) {
+      await this.addIngredient(db, {
+        recipeId: id,
+        ingredientId: ingredient.ingredientId,
+        quantityNeededBase: ingredient.quantityNeededBase,
+      });
+    }
+
+    return await this.getDefinitionById(db, id);
+  }
+
+  /**
    * Search recipe definitions
    */
   static async searchDefinitions(db: SQLite.SQLiteDatabase, query: string) {
