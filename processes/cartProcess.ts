@@ -66,6 +66,21 @@ export class CartProcess {
   }
 
   /**
+   * Update item note in cart
+   */
+  static updateNote(productId: number, note: string): ProcessResult<CartItem[]> {
+    try {
+      const updatedCart = CartService.updateNote(productId, note);
+      return { success: true, data: updatedCart };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update item note',
+      };
+    }
+  }
+
+  /**
    * Remove item from cart with validation
    */
   static removeItem(productId: number): ProcessResult<CartItem[]> {

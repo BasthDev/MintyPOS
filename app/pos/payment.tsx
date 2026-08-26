@@ -737,6 +737,9 @@ export default function POSPaymentScreen() {
                         {item.name}
                       </Text>
                       <Text style={p.cartItemPrice}>{fmt(item.price)}</Text>
+                      {item.note && (
+                        <Text style={p.cartItemNote}>Note: {item.note}</Text>
+                      )}
                     </View>
                     <Text style={p.cartItemSubtotal}>
                       {fmt(item.price * item.quantity)}
@@ -830,6 +833,9 @@ export default function POSPaymentScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={p.cartItemName}>{item.name}</Text>
                     <Text style={p.cartItemPrice}>{fmt(item.price)} each</Text>
+                    {item.note && (
+                      <Text style={p.cartItemNote}>Note: {item.note}</Text>
+                    )}
                   </View>
                   <Text style={p.cartItemSubtotal}>{fmt(item.price * item.quantity)}</Text>
                   {/* <Text style={p.qtyTextStatic}>x{item.quantity}</Text> */}
@@ -899,6 +905,23 @@ export default function POSPaymentScreen() {
                   </Text>
                 </View>
               )}
+            </View>
+
+            {/* Order Items in Receipt */}
+            <View style={p.receiptItems}>
+              <Text style={p.receiptItemsTitle}>Order Items</Text>
+              {completedReceipt?.items?.map((item, idx) => (
+                <View key={idx} style={p.receiptItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={p.receiptItemName}>{item.product_name}</Text>
+                    <Text style={p.receiptItemQty}>{item.quantity}x @ {fmt(item.price)}</Text>
+                    {item.note && (
+                      <Text style={p.receiptItemNote}>Note: {item.note}</Text>
+                    )}
+                  </View>
+                  <Text style={p.receiptItemTotal}>{fmt(item.subtotal)}</Text>
+                </View>
+              ))}
             </View>
 
             <TouchableOpacity
@@ -1043,6 +1066,12 @@ const p = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     marginTop: 2,
+  },
+  cartItemNote: {
+    fontSize: 11,
+    color: '#F59E0B',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   qtyBadgeStatic: {
     backgroundColor: '#F1F5F9',
@@ -1255,6 +1284,46 @@ const p = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#111827',
+  },
+  receiptItems: {
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+  },
+  receiptItemsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  receiptItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 6,
+  },
+  receiptItemName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  receiptItemQty: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  receiptItemNote: {
+    fontSize: 11,
+    color: '#F59E0B',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  receiptItemTotal: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#065F46',
   },
   finishBtn: {
     width: '100%',

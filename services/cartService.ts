@@ -33,6 +33,14 @@ export class CartService {
   }
 
   /**
+   * Update item note in cart
+   */
+  static updateNote(productId: number, note: string): CartItem[] {
+    useStore.getState().updateCartNote(productId, note);
+    return useStore.getState().cart;
+  }
+
+  /**
    * Clear all items from cart
    */
   static clear(): CartItem[] {

@@ -156,6 +156,7 @@ export interface CompletedOrderItem {
   price: number;
   quantity: number;
   subtotal: number;
+  note?: string;
 }
 
 // Database singleton instance and initialization promise
@@ -326,7 +327,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
       // Get current database version
       const versionResult = await db.getFirstAsync<{ version: number }>('PRAGMA user_version');
       const currentVersion = versionResult?.version || 0;
-      const TARGET_VERSION = 5;
+      const TARGET_VERSION = 6;
 
       // Create all base tables first
       await db.execAsync(`
@@ -487,6 +488,23 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
             await db.execAsync('CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(type);');
           } catch (error) {
             console.error('Migration error for version 5:', error);
+          }
+        }
+
+        if (currentVersion < 6) {
+          try {
+            // Check if note column already exists
+            const tableInfo = await db.getAllAsync('PRAGMA table_info(order_items)');
+            const hasNoteColumn = tableInfo.some((col: any) => col.name === 'note');
+
+            if (!hasNoteColumn) {
+              // Add note column to order_items table
+              await db.execAsync(`
+                ALTER TABLE order_items ADD COLUMN note TEXT;
+              `);
+            }
+          } catch (error) {
+            console.error('Migration error for version 6:', error);
           }
         }
       }
@@ -1201,6 +1219,7 @@ export const dbOperations = {
         price: number;
         quantity: number;
         subtotal: number;
+        note?: string;
       }>;
     }
   ): Promise<number> {
@@ -1230,8 +1249,8 @@ export const dbOperations = {
 
     for (const item of orderData.items) {
       await db.runAsync(
-        'INSERT INTO order_items (order_id, product_id, product_name, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?)',
-        [orderId, item.productId, item.productName, item.price, item.quantity, item.subtotal]
+        'INSERT INTO order_items (order_id, product_id, product_name, price, quantity, subtotal, note) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [orderId, item.productId, item.productName, item.price, item.quantity, item.subtotal, item.note || null]
       );
     }
 

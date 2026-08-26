@@ -1,11 +1,10 @@
 import { validateSaleStock } from '../lib/businessLogic';
 import {
-  CompletedOrder,
-  dbOperations,
-  DiscountItem,
-  getDatabase,
-  handleCheckoutOrder,
-  TaxConfigItem,
+    CompletedOrder,
+    dbOperations,
+    DiscountItem,
+    getDatabase,
+    handleCheckoutOrder
 } from '../lib/database';
 import { CartItem } from '../store/useStore';
 import { CheckoutValidator } from '../validators/checkoutValidator';
@@ -130,6 +129,7 @@ export class CheckoutProcess {
           price: c.price,
           quantity: c.quantity,
           subtotal: c.price * c.quantity,
+          note: c.note,
         })),
       });
 
@@ -157,6 +157,7 @@ export class CheckoutProcess {
           price: c.price,
           quantity: c.quantity,
           subtotal: c.price * c.quantity,
+          note: c.note,
         })),
       };
 

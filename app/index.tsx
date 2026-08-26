@@ -1,5 +1,6 @@
 import { DripButton } from '@/components/Button';
 import { DripChip } from '@/components/Chip';
+import { CartNoteFormSheet } from '@/components/forms/CartNoteFormSheet';
 import { Header } from '@/components/Header';
 import { DripScannerModal } from '@/components/ScannerModal';
 import { DripSearchBar } from '@/components/SearchBar';
@@ -53,6 +54,8 @@ export default function POSScreen() {
   // UI state
   const [showCartMobile, setShowCartMobile] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [noteSheetVisible, setNoteSheetVisible] = useState(false);
+  const [selectedCartItem, setSelectedCartItem] = useState<{ productId: number; name: string; note?: string } | null>(null);
 
   // Toast state
   const [toastVisible, setToastVisible] = useState(false);
@@ -103,6 +106,20 @@ export default function POSScreen() {
       const currentItem = (res.data || cart).find((c) => c.productId === product.id);
       const newQty = currentItem?.quantity || 1;
       showToastNotification('Item Added', `${product.name} added (x${newQty})`);
+    }
+  };
+
+  const handleOpenNoteSheet = (item: { productId: number; name: string; note?: string }) => {
+    setSelectedCartItem(item);
+    setNoteSheetVisible(true);
+  };
+
+  const handleSaveNote = (note: string) => {
+    if (selectedCartItem) {
+      const { updateCartNote } = useStore.getState();
+      updateCartNote(selectedCartItem.productId, note);
+      setNoteSheetVisible(false);
+      showToastNotification('Note Updated', 'Item note has been saved');
     }
   };
 
@@ -355,6 +372,19 @@ export default function POSScreen() {
                 <Text style={[styles.cartItemUnitCost, { color: theme.textSecondary }]}>
                   {formatCurrency(item.price)} each
                 </Text>
+                {item.note && (
+                  <Text style={[styles.cartItemNote, { color: theme.primary }]} numberOfLines={2}>
+                    Note: {item.note}
+                  </Text>
+                )}
+                <TouchableOpacity
+                  style={styles.addNoteButton}
+                  onPress={() => handleOpenNoteSheet({ productId: item.productId, name: item.name, note: item.note })}
+                >
+                  <Text style={[styles.addNoteButtonText, { color: theme.primary }]}>
+                    {item.note ? 'Edit Note' : 'Add Note'}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.cartItemRight}>
@@ -457,6 +487,16 @@ export default function POSScreen() {
         visible={scannerVisible}
         onClose={() => setScannerVisible(false)}
         onScanSuccess={handleScanSuccess}
+      />
+
+      {/* Cart Note Form Sheet */}
+      <CartNoteFormSheet
+        visible={noteSheetVisible}
+        onClose={() => setNoteSheetVisible(false)}
+        onSubmit={handleSaveNote}
+        initialNote={selectedCartItem?.note}
+        productName={selectedCartItem?.name || ''}
+        autoClose={false}
       />
     </>
   );
@@ -662,6 +702,18 @@ const styles = StyleSheet.create({
   cartItemUnitCost: {
     fontSize: 12,
     marginTop: 2,
+  },
+  cartItemNote: {
+    fontSize: 11,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  addNoteButton: {
+    marginTop: 6,
+  },
+  addNoteButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   cartItemRight: {
     alignItems: 'flex-end',

@@ -9,6 +9,7 @@ export interface CartItem {
   price: number;
   quantity: number;
   hasRecipe: boolean;
+  note?: string;
 }
 
 export interface Product {
@@ -61,6 +62,7 @@ interface StoreState {
   addToCart: (item: CartItem) => void;
   removeFromCart: (productId: number) => void;
   updateCartQuantity: (productId: number, quantity: number) => void;
+  updateCartNote: (productId: number, note: string) => void;
   clearCart: () => void;
   getCartTotal: () => number;
 
@@ -140,6 +142,13 @@ export const useStore = create<StoreState>()(
             ),
           });
         }
+      },
+      updateCartNote: (productId, note) => {
+        set({
+          cart: get().cart.map((item) =>
+            item.productId === productId ? { ...item, note } : item
+          ),
+        });
       },
       clearCart: () => set({ cart: [] }),
       getCartTotal: () => {
