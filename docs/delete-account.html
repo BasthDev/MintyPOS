@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Account - MintyPOS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 60px;
+        }
+
+        h1 {
+            font-size: 36px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            font-size: 24px;
+            color: #333;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+
+        p {
+            color: #666;
+            line-height: 1.8;
+            margin-bottom: 15px;
+        }
+
+        .warning {
+            background: #fef2f2;
+            border-left: 4px solid #ef4444;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+
+        .warning p {
+            color: #dc2626;
+            margin-bottom: 0;
+        }
+
+        .steps {
+            counter-reset: step-counter;
+            margin: 20px 0;
+        }
+
+        .step {
+            position: relative;
+            padding-left: 50px;
+            margin-bottom: 20px;
+        }
+
+        .step::before {
+            counter-increment: step-counter;
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 35px;
+            height: 35px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .step p {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 30px;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: transform 0.3s ease;
+        }
+
+        .back-link:hover {
+            transform: translateY(-2px);
+        }
+
+        .last-updated {
+            margin-top: 40px;
+            font-size: 14px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Delete Account</h1>
+        
+        <div class="warning">
+            <p><strong>Warning:</strong> This action is permanent and cannot be undone. All your data will be permanently deleted from our servers.</p>
+        </div>
+
+        <h2>How to Delete Your Account</h2>
+        
+        <div class="steps">
+            <div class="step">
+                <p><strong>Step 1:</strong> Open the MintyPOS app on your device and log in to your account.</p>
+            </div>
+            <div class="step">
+                <p><strong>Step 2:</strong> Navigate to the Profile section from the main menu or drawer.</p>
+            </div>
+            <div class="step">
+                <p><strong>Step 3:</strong> Scroll down to find the "Delete Account" option.</p>
+            </div>
+            <div class="step">
+                <p><strong>Step 4:</strong> Tap on "Delete Account" and confirm your decision when prompted.</p>
+            </div>
+            <div class="step">
+                <p><strong>Step 5:</strong> Enter your password to verify your identity and complete the deletion process.</p>
+            </div>
+        </div>
+
+        <h2>What Happens When You Delete Your Account</h2>
+        <ul>
+            <li>All your personal data will be permanently deleted</li>
+            <li>Your business data (products, inventory, sales history) will be removed</li>
+            <li>You will lose access to all MintyPOS features</li>
+            <li>Your account cannot be recovered after deletion</li>
+        </ul>
+
+        <h2>Data Retention</h2>
+        <p>After account deletion, we retain certain data for legal and security purposes:</p>
+        <ul>
+            <li>Transaction logs for 7 years (as required by law)</li>
+            <li>Security and fraud prevention records</li>
+            <li>Legal compliance records</li>
+        </ul>
+
+        <h2>Before You Delete</h2>
+        <p>Consider these alternatives before deleting your account:</p>
+        <ul>
+            <li>Export your data if you need it for records</li>
+            <li>Contact support if you're experiencing issues</li>
+            <li>Deactivate your account temporarily if you plan to return</li>
+        </ul>
+
+        <h2>Need Help?</h2>
+        <p>If you have any questions or need assistance with account deletion, please contact our support team through the app or our official channels.</p>
+
+        <a href="index.html" class="back-link">Back to Home</a>
+
+        <div class="last-updated">
+            Last updated: August 27, 2026
+        </div>
+    </div>
+</body>
+</html>
