@@ -1189,11 +1189,12 @@ const p = StyleSheet.create({
   },
   quickChip: {
     width: '48%',
+    // height: 60,
     backgroundColor: '#F0FDF4',
     borderColor: '#065F46',
     borderWidth: 1,
     borderRadius: 8,
-    paddingVertical: 10,
+    paddingVertical: 20,
     alignItems: 'center',
   },
   quickChipText: {

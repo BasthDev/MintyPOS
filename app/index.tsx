@@ -358,70 +358,75 @@ export default function POSScreen() {
           </View>
         ) : (
           cart.map((item) => (
-            <View
-              key={item.productId}
-              style={[
-                styles.cartItemCard,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-            >
-              <View style={styles.cartItemLeft}>
-                <Text style={[styles.cartItemName, { color: theme.text }]} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Text style={[styles.cartItemUnitCost, { color: theme.textSecondary }]}>
-                  {formatCurrency(item.price)} each
-                </Text>
-                {item.note && (
-                  <Text style={[styles.cartItemNote, { color: theme.primary }]} numberOfLines={2}>
-                    Note: {item.note}
+            <View key={item.productId} style={styles.cartItemWrapper}>
+              <View
+                style={[
+                  styles.cartItemCard,
+                  { backgroundColor: theme.card, borderColor: theme.border },
+                ]}
+              >
+                <View style={styles.cartItemLeft}>
+                  <Text style={[styles.cartItemName, { color: theme.text }]} numberOfLines={1}>
+                    {item.name}
                   </Text>
-                )}
-                <TouchableOpacity
-                  style={styles.addNoteButton}
-                  onPress={() => handleOpenNoteSheet({ productId: item.productId, name: item.name, note: item.note })}
-                >
-                  <Text style={[styles.addNoteButtonText, { color: theme.primary }]}>
-                    {item.note ? 'Edit Note' : 'Add Note'}
+                  <Text style={[styles.cartItemUnitCost, { color: theme.textSecondary }]}>
+                    {formatCurrency(item.price)} each
                   </Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.cartItemRight}>
-                <Text style={[styles.cartItemTotal, { color: theme.primary }]}>
-                  {formatCurrency(item.price * item.quantity)}
-                </Text>
-
-                <View style={styles.cartItemActions}>
-                  {/* Quantity Adjusters - Using DripStepper */}
-                  <DripStepper
-                    value={item.quantity}
-                    onValueChange={(newQty) => {
-                      if (newQty === 0) {
-                        CartProcess.removeItem(item.productId);
-                        showToastNotification('Item Removed', `${item.name} removed from order`);
-                      } else {
-                        CartProcess.updateQuantity(item.productId, newQty);
-                        showToastNotification('Cart Updated', `${item.name} (x${newQty})`);
-                      }
-                    }}
-                    min={0}
-                    max={99}
-                    step={1}
-                    style={styles.cartStepper}
-                  />
-
                   <TouchableOpacity
-                    style={styles.cartItemDelete}
-                    onPress={() => {
-                      CartProcess.removeItem(item.productId);
-                      showToastNotification('Item Removed', `${item.name} removed from order`);
-                    }}
+                    style={styles.addNoteButton}
+                    onPress={() => handleOpenNoteSheet({ productId: item.productId, name: item.name, note: item.note })}
                   >
-                    <Trash2 size={16} color="#EF4444" />
+                    <Text style={[styles.addNoteButtonText, { color: theme.primary }]}>
+                      {item.note ? 'Edit Note' : 'Add Note'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
+
+                <View style={styles.cartItemRight}>
+                  <Text style={[styles.cartItemTotal, { color: theme.primary }]}>
+                    {formatCurrency(item.price * item.quantity)}
+                  </Text>
+
+                  <View style={styles.cartItemActions}>
+                    {/* Quantity Adjusters - Using DripStepper */}
+                    <DripStepper
+                      value={item.quantity}
+                      onValueChange={(newQty) => {
+                        if (newQty === 0) {
+                          CartProcess.removeItem(item.productId);
+                          showToastNotification('Item Removed', `${item.name} removed from order`);
+                        } else {
+                          CartProcess.updateQuantity(item.productId, newQty);
+                          showToastNotification('Cart Updated', `${item.name} (x${newQty})`);
+                        }
+                      }}
+                      min={0}
+                      max={99}
+                      step={1}
+                      style={styles.cartStepper}
+                    />
+
+                    <TouchableOpacity
+                      style={styles.cartItemDelete}
+                      onPress={() => {
+                        CartProcess.removeItem(item.productId);
+                        showToastNotification('Item Removed', `${item.name} removed from order`);
+                      }}
+                    >
+                      <Trash2 size={16} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
+
+              {/* Note Back Overlay */}
+              {item.note && (
+                <View style={[styles.cartItemNoteOverlay, { backgroundColor: theme.input, borderColor: theme.border }]}>
+                  <Text style={[styles.cartItemNoteText, { color: theme.textSecondary }]}>
+                    Note: {item.note}
+                  </Text>
+                </View>
+              )}
             </View>
           ))
         )}
@@ -683,13 +688,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
   },
+  cartItemWrapper: {
+    marginBottom: 8,
+  },
   cartItemCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 8,
   },
   cartItemLeft: {
     flex: 1,
@@ -703,13 +710,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  cartItemNote: {
-    fontSize: 11,
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
   addNoteButton: {
-    marginTop: 6,
+    marginTop: 10,
   },
   addNoteButtonText: {
     fontSize: 12,
@@ -717,6 +719,20 @@ const styles = StyleSheet.create({
   },
   cartItemRight: {
     alignItems: 'flex-end',
+  },
+  cartItemNoteOverlay: {
+    zIndex: -2,
+    marginTop: -16,
+    padding: 8,
+    margin:10,
+    paddingTop:20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+  },
+  cartItemNoteText: {
+    fontSize: 11,
+    fontStyle: 'italic',
   },
   cartItemTotal: {
     fontSize: 14,
