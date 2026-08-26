@@ -4,6 +4,7 @@ import { Header } from '@/components/Header';
 import { DripScannerModal } from '@/components/ScannerModal';
 import { DripSearchBar } from '@/components/SearchBar';
 import { Section } from '@/components/Section';
+import { DripStepper } from '@/components/Stepper';
 import { DripToast } from '@/components/Toast';
 import { useTheme } from '@/constants/colorTheme';
 import {
@@ -17,12 +18,10 @@ import { useStore } from '@/store/useStore';
 import { router, useFocusEffect } from 'expo-router';
 import {
   CreditCard,
-  Minus,
   Package,
-  Plus,
   ScanLine,
   ShoppingCart,
-  Trash2,
+  Trash2
 } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -357,41 +356,41 @@ export default function POSScreen() {
                 </Text>
               </View>
 
-              {/* Quantity Adjusters */}
-              <View style={styles.qtyRow}>
-                <TouchableOpacity
-                  style={[styles.qtyBtn, { backgroundColor: theme.input }]}
-                  onPress={() => CartProcess.updateQuantity(item.productId, item.quantity - 1)}
-                >
-                  <Minus size={14} color={theme.text} />
-                </TouchableOpacity>
+              <View style={styles.cartItemRight}>
+                <Text style={[styles.cartItemTotal, { color: theme.primary }]}>
+                  {formatCurrency(item.price * item.quantity)}
+                </Text>
 
-                <Text style={[styles.qtyNumber, { color: theme.text }]}>{item.quantity}</Text>
+                <View style={styles.cartItemActions}>
+                  {/* Quantity Adjusters - Using DripStepper */}
+                  <DripStepper
+                    value={item.quantity}
+                    onValueChange={(newQty) => {
+                      if (newQty === 0) {
+                        CartProcess.removeItem(item.productId);
+                        showToastNotification('Item Removed', `${item.name} removed from order`);
+                      } else {
+                        CartProcess.updateQuantity(item.productId, newQty);
+                        showToastNotification('Cart Updated', `${item.name} (x${newQty})`);
+                      }
+                    }}
+                    min={0}
+                    max={99}
+                    step={1}
+                    style={styles.cartStepper}
+                  />
 
-                <TouchableOpacity
-                  style={[styles.qtyBtn, { backgroundColor: theme.input }]}
-                  onPress={() => {
-                    CartProcess.updateQuantity(item.productId, item.quantity + 1);
-                    showToastNotification('Cart Updated', `${item.name} (x${item.quantity + 1})`);
-                  }}
-                >
-                  <Plus size={14} color={theme.text} />
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.cartItemDelete}
+                    onPress={() => {
+                      CartProcess.removeItem(item.productId);
+                      showToastNotification('Item Removed', `${item.name} removed from order`);
+                    }}
+                  >
+                    <Trash2 size={16} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
               </View>
-
-              <Text style={[styles.cartItemTotal, { color: theme.primary }]}>
-                {formatCurrency(item.price * item.quantity)}
-              </Text>
-
-              <TouchableOpacity
-                style={{ marginLeft: 8, padding: 4 }}
-                onPress={() => {
-                  CartProcess.removeItem(item.productId);
-                  showToastNotification('Item Removed', `${item.name} removed from order`);
-                }}
-              >
-                <Trash2 size={16} color="#EF4444" />
-              </TouchableOpacity>
             </View>
           ))
         )}
@@ -578,6 +577,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 4,
   },
+  productStepperContainer: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+  },
+  productStepper: {
+    height: 32,
+  },
   mobileCartTrigger: {
     marginTop: 12,
   },
@@ -629,7 +636,7 @@ const styles = StyleSheet.create({
   },
   cartItemCard: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
@@ -637,38 +644,34 @@ const styles = StyleSheet.create({
   },
   cartItemLeft: {
     flex: 1,
-    marginRight: 8,
+    alignItems: 'flex-start',
   },
   cartItemName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
   },
   cartItemUnitCost: {
     fontSize: 12,
     marginTop: 2,
   },
-  qtyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginRight: 12,
-  },
-  qtyBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  qtyNumber: {
-    fontSize: 14,
-    fontWeight: '700',
-    minWidth: 18,
-    textAlign: 'center',
+  cartItemRight: {
+    alignItems: 'flex-end',
   },
   cartItemTotal: {
     fontSize: 14,
     fontWeight: '700',
+    marginBottom: 8,
+  },
+  cartItemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cartItemDelete: {
+    padding: 8,
+  },
+  cartStepper: {
+    height: 36,
   },
 
   // Cart Footer
