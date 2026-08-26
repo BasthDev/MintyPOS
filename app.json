@@ -4,7 +4,7 @@
     "slug": "MintyPOS",
     "version": "1.0.0",
     "orientation": "dafault",
-    "icon": "./assets/logo/logo.png",
+    "icon": "./assets/logo/logo-text.jpg",
     "scheme": "mintypos",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,12 +14,13 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#3D7066",
-        "foregroundImage": "./assets/logo/logo.png",
-        "backgroundImage": "./assets/logo/logo.png",
-        "monochromeImage": "./assets/logo/logo.png"
+        "foregroundImage": "./assets/logo/logo-text.jpg",
+        "backgroundImage": "./assets/logo/logo-text.jpg",
+        "monochromeImage": "./assets/logo/logo-text.jpg"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.basth.mintypos"
     },
     "web": {
       "output": "static",

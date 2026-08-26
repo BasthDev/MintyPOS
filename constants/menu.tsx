@@ -15,8 +15,7 @@ import {
   ShoppingCart,
   Store, // Added for catalog grouping
   Tag,
-  Truck,
-  Users,
+  Truck
 } from 'lucide-react-native';
 
 export type UserRole = 'Admin' | 'Manager' | 'Staff';
@@ -115,12 +114,12 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
     icon: BarChart3,
     roles: ['Admin', 'Manager'],
   },
-  {
-    title: 'Staff',
-    path: '/staff',
-    icon: Users,
-    roles: ['Admin'],
-  },
+  // {
+  //   title: 'Staff',
+  //   path: '/staff',
+  //   icon: Users,
+  //   roles: ['Admin'],
+  // },
   // --- EXISTING GROUP: PAYMENT & TAXES ---
   {
     title: 'Payment & Taxes',
