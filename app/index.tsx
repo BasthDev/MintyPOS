@@ -174,8 +174,8 @@ export default function POSScreen() {
   // --- LEFT PANEL (Product Catalog Grid + Stats + Categories) ---
   const leftPanel = (
     <View style={styles.leftPanelContainer}>
-      {/* Top Stats */}
-      <View style={styles.topStatsRow}>
+      {/* Top Stats - Hide for now */}
+      {/* <View style={styles.topStatsRow}>
         <View style={[styles.statBadge, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Today's Sales</Text>
           <Text style={[styles.statVal, { color: theme.primary }]}>
@@ -186,7 +186,7 @@ export default function POSScreen() {
           <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Orders</Text>
           <Text style={[styles.statVal, { color: theme.text }]}>{todayStats.orderCount}</Text>
         </View>
-      </View>
+      </View> */}
 
       {/* DripSearchBar with SKU search, submit listener & scanner modal trigger */}
       <DripSearchBar
@@ -243,7 +243,7 @@ export default function POSScreen() {
         </View>
       ) : (
         <ScrollView style={styles.catalogScroll} showsVerticalScrollIndicator={false}>
-          <View style={styles.catalogGrid}>
+          <View style={[styles.catalogGrid, isWide && styles.catalogGridTablet]}>
             {filteredProducts.map((product) => {
               const inCartItem = cart.find((c) => c.productId === product.id);
               const cartQty = inCartItem?.quantity || 0;
@@ -255,6 +255,7 @@ export default function POSScreen() {
                   style={[
                     styles.productCard,
                     { backgroundColor: theme.card, borderColor: theme.border },
+                    isWide && styles.productCardTablet,
                     cartQty > 0 && { borderColor: theme.primary, borderWidth: 2 },
                   ]}
                   onPress={() => handleAddToCart(product)}
@@ -525,15 +526,21 @@ const styles = StyleSheet.create({
   catalogGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10, // Default gap for mobile (2 cards per row)
     paddingBottom: 24,
   },
+  catalogGridTablet: {
+    gap: 9, // Smaller gap for 4-column layout on tablet
+  },
   productCard: {
-    width: '48%',
+    width: '48.5%', // 2 cards per row (mobile default)
     borderRadius: 14,
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
+  },
+  productCardTablet: {
+    width: '24%', // 4 cards per row on tablet
   },
   productThumbnail: {
     width: '100%',

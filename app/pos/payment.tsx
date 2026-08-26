@@ -738,12 +738,12 @@ export default function POSPaymentScreen() {
                       </Text>
                       <Text style={p.cartItemPrice}>{fmt(item.price)}</Text>
                     </View>
-                    <View style={p.qtyBadgeStatic}>
-                      <Text style={p.qtyTextStatic}>{item.quantity}x</Text>
-                    </View>
                     <Text style={p.cartItemSubtotal}>
                       {fmt(item.price * item.quantity)}
                     </Text>
+                    <View style={p.qtyBadgeStatic}>
+                      <Text style={p.qtyTextStatic}>{item.quantity}x</Text>
+                    </View>
                   </View>
                 )}
                 ItemSeparatorComponent={() => (
@@ -831,8 +831,11 @@ export default function POSPaymentScreen() {
                     <Text style={p.cartItemName}>{item.name}</Text>
                     <Text style={p.cartItemPrice}>{fmt(item.price)} each</Text>
                   </View>
-                  <Text style={p.qtyTextStatic}>x{item.quantity}</Text>
                   <Text style={p.cartItemSubtotal}>{fmt(item.price * item.quantity)}</Text>
+                  {/* <Text style={p.qtyTextStatic}>x{item.quantity}</Text> */}
+                   <View style={p.qtyBadgeStatic}>
+                      <Text style={p.qtyTextStatic}>{item.quantity}x</Text>
+                    </View>
                 </View>
               ))}
             </ScrollView>

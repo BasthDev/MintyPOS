@@ -273,7 +273,9 @@ const seedMockDataIfNeeded = async (db: SQLite.SQLiteDatabase) => {
       INSERT INTO products (name, sku, category_id, buy_price, selling_price, recipe_definition_id, current_stock, stock_deduction_method) VALUES 
       ('Caffe Latte', 'BEV-001', 1, 12500, 28000, 1, 0, 'recipe'),
       ('Butter Croissant', 'SND-001', 3, 10000, 20000, NULL, 15, 'product'),
-      ('Mineral Water', 'BEV-002', 1, 3000, 6000, NULL, 30, 'product');
+      ('Mineral Water', 'BEV-002', 1, 3000, 6000, NULL, 30, 'product'),
+      ('Sparkling Water', 'BEV-003', 1, 3000, 6000, NULL, 30, 'product'),
+      ('Diet Soda', 'BEV-004', 1, 3000, 6000, NULL, 30, 'product');
     `);
 
     // 10. Payment Methods
