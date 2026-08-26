@@ -124,7 +124,7 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
   // Dynamic Org Name
   const [displayOrg, setDisplayOrg] = useState<string>('MintyPOS');
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    'Payment & Taxes': true,
+    'Payment & Taxes': false,
   });
 
   // Auto-expand group if on a child route

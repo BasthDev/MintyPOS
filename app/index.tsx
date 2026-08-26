@@ -24,7 +24,7 @@ import {
   ShoppingCart,
   Trash2,
 } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -33,11 +33,14 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 
 export default function POSScreen() {
   const { theme } = useTheme();
   const { cart, getCartTotal } = useStore();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 768; // Tablet/Desktop breakpoint
 
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -296,8 +299,8 @@ export default function POSScreen() {
         </ScrollView>
       )}
 
-      {/* Mobile Floating Cart Summary Button */}
-      {cart.length > 0 && (
+      {/* Mobile Floating Cart Summary Button - Only show on mobile */}
+      {!isWide && cart.length > 0 && (
         <View style={styles.mobileCartTrigger}>
           <DripButton
             title={`View Order (${cart.length} items • ${formatCurrency(cartTotal)})`}
@@ -432,7 +435,7 @@ export default function POSScreen() {
       <Section
         leftPanel={leftPanel}
         rightPanel={rightPanel}
-        showNextScreen={showCartMobile}
+        showNextScreen={!isWide && showCartMobile}
         onBack={() => setShowCartMobile(false)}
         backButtonTitle="Back to Catalog"
         childrenPadding={16}

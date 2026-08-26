@@ -4,13 +4,6 @@ import * as SQLite from 'expo-sqlite';
 // Database name
 const DB_NAME = 'mintypos.db';
 
-// ==========================================
-// MOCK DATA CONFIGURATION FLAG
-// ==========================================
-// Set to true to seed/reset mock data on app restart.
-// Set to false for production or to preserve user data.
-const ENABLE_MOCK_DATA = true;
-
 // Types
 export interface Category {
   id: number;
@@ -71,8 +64,7 @@ export interface Product {
   selling_price: number;
   recipe_definition_id: number;
   current_stock: number;
-  stock_deduction_method: 'product' | 'recipe' | 'none';
-  image_uri?: string;
+  stock_deduction_method: 'product' | 'recipe';
 }
 
 export interface Recipe {
@@ -162,148 +154,6 @@ export interface CompletedOrderItem {
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
-// Mock Data Seeding Helper
-const seedMockDataIfNeeded = async (db: SQLite.SQLiteDatabase) => {
-  if (!ENABLE_MOCK_DATA) return;
-
-  try {
-    // Temporarily disable foreign keys for clean resetting
-    await db.execAsync('PRAGMA foreign_keys = OFF;');
-
-    // Clear existing transactional & master data to prevent duplication on restart
-    await db.execAsync(`
-      DELETE FROM order_items;
-      DELETE FROM orders;
-      DELETE FROM activity_logs;
-      DELETE FROM inventory_batches;
-      DELETE FROM recipe_ingredients;
-      DELETE FROM products;
-      DELETE FROM recipe_definitions;
-      DELETE FROM ingredient_units;
-      DELETE FROM ingredients;
-      DELETE FROM suppliers;
-      DELETE FROM categories;
-      DELETE FROM payment_methods;
-      DELETE FROM tax_configs;
-      DELETE FROM discounts;
-      DELETE FROM units;
-    `);
-
-    // Re-enable foreign keys
-    await db.execAsync('PRAGMA foreign_keys = ON;');
-
-    // 1. Units
-    await db.execAsync(`
-      INSERT INTO units (id, name, symbol) VALUES 
-      (1, 'gram', 'g'),
-      (2, 'milliliter', 'ml'),
-      (3, 'piece', 'pcs');
-    `);
-
-    // 2. Categories
-    await db.execAsync(`
-      INSERT INTO categories (id, name) VALUES 
-      (1, 'Beverages'),
-      (2, 'Food'),
-      (3, 'Snacks'),
-      (4, 'Merchandise');
-    `);
-
-    // 3. Suppliers
-    await db.execAsync(`
-      INSERT INTO suppliers (id, name, contact) VALUES 
-      (1, 'PT Sumber Kopi Nusantara', '+62 811-2233-4455'),
-      (2, 'CV Fresh Dairy Indo', '+62 812-9988-7766'),
-      (3, 'Toko Bahan Kue Manis', '+62 813-5544-3322');
-    `);
-
-    // 4. Ingredients
-    await db.execAsync(`
-      INSERT INTO ingredients (id, name, base_unit_id, minimum_stock) VALUES 
-      (1, 'Coffee Beans', 1, 500),
-      (2, 'Fresh Milk', 2, 2000),
-      (3, 'Sugar Syrup', 2, 1000),
-      (4, 'Paper Cup 12oz', 3, 50);
-    `);
-
-    // 5. Ingredient Units (Conversions)
-    await db.execAsync(`
-      INSERT INTO ingredient_units (ingredient_id, unit_name, multiplier_to_base) VALUES 
-      (1, 'Bag (250g)', 250),
-      (2, 'Liter (1000ml)', 1000),
-      (3, 'Bottle (750ml)', 750);
-    `);
-
-    // 6. Inventory Batches
-    const today = new Date().toISOString();
-    await db.runAsync(
-      `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
-      [1, 1, 2500, 2500, 150, today] // 2500g coffee beans @ 150/g
-    );
-    await db.runAsync(
-      `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
-      [2, 2, 10000, 10000, 25, today] // 10000ml milk @ 25/ml
-    );
-    await db.runAsync(
-      `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
-      [3, 3, 3000, 3000, 40, today] // 3000ml syrup @ 40/ml
-    );
-    await db.runAsync(
-      `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
-      [4, 3, 200, 200, 500, today] // 200 cups @ 500/pcs
-    );
-
-    // 7. Recipe Definitions
-    await db.runAsync(
-      `INSERT INTO recipe_definitions (id, name, description) VALUES (?, ?, ?)`,
-      [1, 'Caffe Latte Recipe', 'Standard 12oz hot cafe latte recipe']
-    );
-
-    // 8. Recipe Ingredients
-    await db.execAsync(`
-      INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity_needed_base) VALUES 
-      (1, 1, 18),   -- 18g Coffee Beans
-      (1, 2, 150),  -- 150ml Fresh Milk
-      (1, 3, 30),   -- 30ml Sugar Syrup
-      (1, 4, 1);    -- 1 Paper Cup
-    `);
-
-    // 9. Products
-    await db.execAsync(`
-      INSERT INTO products (name, sku, category_id, buy_price, selling_price, recipe_definition_id, current_stock, stock_deduction_method) VALUES 
-      ('Caffe Latte', 'BEV-001', 1, 12500, 28000, 1, 0, 'recipe'),
-      ('Butter Croissant', 'SND-001', 3, 10000, 20000, NULL, 15, 'product'),
-      ('Mineral Water', 'BEV-002', 1, 3000, 6000, NULL, 30, 'product');
-    `);
-
-    // 10. Payment Methods
-    await db.execAsync(`
-      INSERT INTO payment_methods (type_key, type_label, method_name, is_active, is_system) VALUES 
-      ('cash', 'Cash', 'Cash', 1, 1),
-      ('qris', 'QRIS', 'QRIS All Payment', 1, 0),
-      ('transfer', 'Bank Transfer', 'BCA', 1, 0);
-    `);
-
-    // 11. Tax Configs
-    await db.execAsync(`
-      INSERT INTO tax_configs (name, rate, type, is_active) VALUES 
-      ('PB1 / PPN', 10, 'percentage', 1),
-      ('Service Charge', 5, 'percentage', 1);
-    `);
-
-    // 12. Discounts
-    await db.execAsync(`
-      INSERT INTO discounts (name, type, value, min_order_amount, max_discount_amount, is_active) VALUES 
-      ('Member Discount', 'percentage', 10, 50000, 25000, 1),
-      ('Grand Opening Promo', 'flat', 10000, 30000, NULL, 1);
-    `);
-
-    console.log('Mock data seeded successfully.');
-  } catch (error) {
-    console.error('Error seeding mock data:', error);
-  }
-};
-
 // Database initialization
 export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   if (dbInstance) {
@@ -318,7 +168,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
     try {
       const db = await SQLite.openDatabaseAsync(DB_NAME);
 
-      // Enable foreign keys and WAL (Write-Ahead Logging) mode
+      // Enable foreign keys and WAL (Write-Ahead Logging) mode for robust multi-threaded read/write
       await db.execAsync('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
 
       // Get current database version
@@ -326,255 +176,320 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
       const currentVersion = versionResult?.version || 0;
       const TARGET_VERSION = 5;
 
-      // Create all base tables first
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS units (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          symbol TEXT NOT NULL
-        );
-      `);
+  // Create all base tables first
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS units (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      symbol TEXT NOT NULL
+    );
+  `);
 
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS suppliers (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          contact TEXT
-        );
-      `);
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS suppliers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      contact TEXT
+    );
+  `);
 
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS ingredients (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          base_unit_id INTEGER NOT NULL,
-          minimum_stock REAL NOT NULL DEFAULT 0,
-          FOREIGN KEY (base_unit_id) REFERENCES units(id)
-        );
-      `);
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS ingredients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      base_unit_id INTEGER NOT NULL,
+      minimum_stock REAL NOT NULL DEFAULT 0,
+      FOREIGN KEY (base_unit_id) REFERENCES units(id)
+    );
+  `);
 
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS ingredient_units (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          ingredient_id INTEGER NOT NULL,
-          unit_name TEXT NOT NULL,
-          multiplier_to_base REAL NOT NULL,
-          FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
-        );
-      `);
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS ingredient_units (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ingredient_id INTEGER NOT NULL,
+      unit_name TEXT NOT NULL,
+      multiplier_to_base REAL NOT NULL,
+      FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
+    );
+  `);
 
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS inventory_batches (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          ingredient_id INTEGER NOT NULL,
-          supplier_id INTEGER NOT NULL,
-          initial_quantity_base REAL NOT NULL,
-          remaining_quantity_base REAL NOT NULL,
-          cost_per_base_unit REAL NOT NULL,
-          received_date TEXT NOT NULL,
-          expiration_date TEXT,
-          FOREIGN KEY (ingredient_id) REFERENCES ingredients(id),
-          FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
-        );
-      `);
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS inventory_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ingredient_id INTEGER NOT NULL,
+      supplier_id INTEGER NOT NULL,
+      initial_quantity_base REAL NOT NULL,
+      remaining_quantity_base REAL NOT NULL,
+      cost_per_base_unit REAL NOT NULL,
+      received_date TEXT NOT NULL,
+      expiration_date TEXT,
+      FOREIGN KEY (ingredient_id) REFERENCES ingredients(id),
+      FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    );
+  `);
 
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS categories (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL
-        );
-      `);
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL
+    );
+  `);
 
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS recipe_definitions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          description TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      `);
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS recipe_definitions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
 
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS recipe_ingredients (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          recipe_id INTEGER NOT NULL,
-          ingredient_id INTEGER NOT NULL,
-          quantity_needed_base REAL NOT NULL,
-          FOREIGN KEY (recipe_id) REFERENCES recipe_definitions(id),
-          FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
-        );
-      `);
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS recipe_ingredients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recipe_id INTEGER NOT NULL,
+      ingredient_id INTEGER NOT NULL,
+      quantity_needed_base REAL NOT NULL,
+      FOREIGN KEY (recipe_id) REFERENCES recipe_definitions(id),
+      FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
+    );
+  `);
 
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS products (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          sku TEXT,
-          category_id INTEGER,
-          buy_price REAL,
-          selling_price REAL NOT NULL,
-          recipe_definition_id INTEGER,
-          current_stock REAL DEFAULT 0,
-          stock_deduction_method TEXT NOT NULL DEFAULT 'none',
-          image_uri TEXT,
-          FOREIGN KEY (category_id) REFERENCES categories(id),
-          FOREIGN KEY (recipe_definition_id) REFERENCES recipe_definitions(id)
-        );
-      `);
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      sku TEXT,
+      category_id INTEGER,
+      buy_price REAL,
+      selling_price REAL NOT NULL,
+      recipe_definition_id INTEGER,
+      current_stock REAL DEFAULT 0,
+      stock_deduction_method TEXT NOT NULL DEFAULT 'none',
+      image_uri TEXT,
+      FOREIGN KEY (category_id) REFERENCES categories(id),
+      FOREIGN KEY (recipe_definition_id) REFERENCES recipe_definitions(id)
+    );
+  `);
 
-      // Create indexes for better performance
-      await db.execAsync(`
-        CREATE INDEX IF NOT EXISTS idx_inventory_batches_ingredient 
-        ON inventory_batches(ingredient_id);
+  // Create indexes for better performance
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS idx_inventory_batches_ingredient 
+    ON inventory_batches(ingredient_id);
+    
+    CREATE INDEX IF NOT EXISTS idx_inventory_batches_date 
+    ON inventory_batches(received_date);
+    
+    CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe 
+    ON recipe_ingredients(recipe_id);
+    
+    CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient 
+    ON recipe_ingredients(ingredient_id);
+    
+    CREATE INDEX IF NOT EXISTS idx_products_recipe 
+    ON products(recipe_definition_id);
+  `);
+
+  // Migration: Incremental migrations to preserve data
+  if (currentVersion < TARGET_VERSION) {
+    // Version 4: Add expiration_date to inventory_batches and update stock_deduction_method default
+    if (currentVersion < 4) {
+      try {
+        // Check if column exists
+        const columns = await db.getAllAsync('PRAGMA table_info(inventory_batches)');
+        const hasExpirationDate = columns.some((col: any) => col.name === 'expiration_date');
         
-        CREATE INDEX IF NOT EXISTS idx_inventory_batches_date 
-        ON inventory_batches(received_date);
-        
-        CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe 
-        ON recipe_ingredients(recipe_id);
-        
-        CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient 
-        ON recipe_ingredients(ingredient_id);
-        
-        CREATE INDEX IF NOT EXISTS idx_products_recipe 
-        ON products(recipe_definition_id);
-      `);
-
-      // Migration checks
-      if (currentVersion < TARGET_VERSION) {
-        if (currentVersion < 4) {
-          try {
-            const columns = await db.getAllAsync('PRAGMA table_info(inventory_batches)');
-            const hasExpirationDate = columns.some((col: any) => col.name === 'expiration_date');
-            if (!hasExpirationDate) {
-              await db.execAsync('ALTER TABLE inventory_batches ADD COLUMN expiration_date TEXT');
-            }
-
-            await db.execAsync(`
-              UPDATE products 
-              SET stock_deduction_method = 'none' 
-              WHERE stock_deduction_method = 'product' AND (current_stock IS NULL OR current_stock = 0)
-            `);
-
-            const productColumns = await db.getAllAsync('PRAGMA table_info(products)');
-            const hasImageUri = productColumns.some((col: any) => col.name === 'image_uri');
-            if (!hasImageUri) {
-              await db.execAsync('ALTER TABLE products ADD COLUMN image_uri TEXT');
-            }
-          } catch (error) {
-            console.error('Migration error for version 4:', error);
-          }
+        if (!hasExpirationDate) {
+          await db.execAsync('ALTER TABLE inventory_batches ADD COLUMN expiration_date TEXT');
         }
 
-        if (currentVersion < 5) {
-          try {
-            await db.execAsync(`
-              CREATE TABLE IF NOT EXISTS activity_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                type TEXT NOT NULL,
-                entity_type TEXT NOT NULL,
-                entity_id INTEGER NOT NULL,
-                entity_name TEXT NOT NULL,
-                quantity REAL,
-                unit TEXT,
-                description TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
-              );
-            `);
-            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);');
-            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(type);');
-          } catch (error) {
-            console.error('Migration error for version 5:', error);
-          }
+        // Update existing products with 'product' method to 'none' if they don't have stock
+        await db.execAsync(`
+          UPDATE products 
+          SET stock_deduction_method = 'none' 
+          WHERE stock_deduction_method = 'product' AND (current_stock IS NULL OR current_stock = 0)
+        `);
+
+        // Add image_uri column to products
+        const productColumns = await db.getAllAsync('PRAGMA table_info(products)');
+        const hasImageUri = productColumns.some((col: any) => col.name === 'image_uri');
+        
+        if (!hasImageUri) {
+          await db.execAsync('ALTER TABLE products ADD COLUMN image_uri TEXT');
         }
+      } catch (error) {
+        console.error('Migration error for version 4:', error);
       }
+    }
 
-      await db.execAsync(`PRAGMA user_version = ${TARGET_VERSION};`);
-
-      // Create configuration & operational tables
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS payment_methods (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          type_key TEXT NOT NULL,
-          type_label TEXT NOT NULL,
-          method_name TEXT NOT NULL,
-          is_active INTEGER NOT NULL DEFAULT 1,
-          is_system INTEGER NOT NULL DEFAULT 0,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      `);
-
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS tax_configs (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          rate REAL NOT NULL,
-          type TEXT NOT NULL DEFAULT 'percentage',
-          is_active INTEGER NOT NULL DEFAULT 1,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      `);
-
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS discounts (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          type TEXT NOT NULL DEFAULT 'percentage',
-          value REAL NOT NULL,
-          min_order_amount REAL NOT NULL DEFAULT 0,
-          max_discount_amount REAL,
-          is_active INTEGER NOT NULL DEFAULT 1,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      `);
-
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS orders (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          order_number TEXT NOT NULL,
-          subtotal REAL NOT NULL,
-          discount_amount REAL NOT NULL DEFAULT 0,
-          discount_name TEXT,
-          tax_amount REAL NOT NULL DEFAULT 0,
-          service_amount REAL NOT NULL DEFAULT 0,
-          total REAL NOT NULL,
-          payment_type TEXT NOT NULL,
-          payment_method TEXT NOT NULL,
-          amount_paid REAL NOT NULL,
-          change_amount REAL NOT NULL DEFAULT 0,
-          items_count INTEGER NOT NULL DEFAULT 0,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      `);
-
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS order_items (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          order_id INTEGER NOT NULL,
-          product_id INTEGER NOT NULL,
-          product_name TEXT NOT NULL,
-          price REAL NOT NULL,
-          quantity REAL NOT NULL,
-          subtotal REAL NOT NULL,
-          FOREIGN KEY (order_id) REFERENCES orders(id)
-        );
-      `);
-
-      // Seed mock data if enabled
-      if (ENABLE_MOCK_DATA) {
-        await seedMockDataIfNeeded(db);
-      } else {
-        // Fallback minimal default rows if mock data is disabled
-        const existingUnits = await db.getAllAsync<Unit>('SELECT * FROM units LIMIT 1');
-        if (existingUnits.length === 0) {
-          await db.execAsync(`
-            INSERT INTO units (name, symbol) VALUES 
-            ('gram', 'g'),
-            ('milliliter', 'ml'),
-            ('piece', 'pcs');
-          `);
-        }
+    // Version 5: Add activity_logs table
+    if (currentVersion < 5) {
+      try {
+        await db.execAsync(`
+          CREATE TABLE IF NOT EXISTS activity_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id INTEGER NOT NULL,
+            entity_name TEXT NOT NULL,
+            quantity REAL,
+            unit TEXT,
+            description TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+        `);
+        
+        // Create index for faster queries
+        await db.execAsync('CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);');
+        await db.execAsync('CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(type);');
+      } catch (error) {
+        console.error('Migration error for version 5:', error);
       }
+    }
+  }
+
+  // Update database version
+  await db.execAsync(`PRAGMA user_version = ${TARGET_VERSION};`);
+
+  // Create payment_methods table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS payment_methods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type_key TEXT NOT NULL,
+      type_label TEXT NOT NULL,
+      method_name TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      is_system INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Create tax_configs table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS tax_configs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      rate REAL NOT NULL,
+      type TEXT NOT NULL DEFAULT 'percentage',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Create discounts table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS discounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'percentage',
+      value REAL NOT NULL,
+      min_order_amount REAL NOT NULL DEFAULT 0,
+      max_discount_amount REAL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Create orders table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_number TEXT NOT NULL,
+      subtotal REAL NOT NULL,
+      discount_amount REAL NOT NULL DEFAULT 0,
+      discount_name TEXT,
+      tax_amount REAL NOT NULL DEFAULT 0,
+      service_amount REAL NOT NULL DEFAULT 0,
+      total REAL NOT NULL,
+      payment_type TEXT NOT NULL,
+      payment_method TEXT NOT NULL,
+      amount_paid REAL NOT NULL,
+      change_amount REAL NOT NULL DEFAULT 0,
+      items_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Create order_items table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS order_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      product_id INTEGER NOT NULL,
+      product_name TEXT NOT NULL,
+      price REAL NOT NULL,
+      quantity REAL NOT NULL,
+      subtotal REAL NOT NULL,
+      FOREIGN KEY (order_id) REFERENCES orders(id)
+    );
+  `);
+
+  // Insert default units if they don't exist
+  const existingUnits = await db.getAllAsync<Unit>('SELECT * FROM units LIMIT 1');
+  if (existingUnits.length === 0) {
+    await db.execAsync(`
+      INSERT INTO units (name, symbol) VALUES 
+      ('gram', 'g'),
+      ('milliliter', 'ml'),
+      ('piece', 'pcs');
+    `);
+  }
+
+  // Insert default categories if they don't exist
+  const existingCategories = await db.getAllAsync('SELECT * FROM categories LIMIT 1');
+  if (existingCategories.length === 0) {
+    await db.execAsync(`
+      INSERT INTO categories (name) VALUES 
+      ('Beverages'),
+      ('Food'),
+      ('Snacks'),
+      ('Merchandise');
+    `);
+  }
+
+  // Insert default payment methods if they don't exist
+  const existingPayments = await db.getAllAsync('SELECT * FROM payment_methods LIMIT 1');
+  if (existingPayments.length === 0) {
+    await db.execAsync(`
+      INSERT INTO payment_methods (type_key, type_label, method_name, is_active, is_system) VALUES 
+      ('cash', 'Cash', 'Cash', 1, 1),
+      ('qris', 'QRIS', 'BYOND', 1, 0),
+      ('qris', 'QRIS', 'DANA', 1, 0),
+      ('qris', 'QRIS', 'GoPay', 1, 0),
+      ('qris', 'QRIS', 'OVO', 1, 0),
+      ('qris', 'QRIS', 'ShopeePay', 1, 0),
+      ('transfer', 'Bank Transfer', 'BCA', 1, 0),
+      ('transfer', 'Bank Transfer', 'Mandiri', 1, 0),
+      ('transfer', 'Bank Transfer', 'BRI', 1, 0),
+      ('transfer', 'Bank Transfer', 'BNI', 1, 0);
+    `);
+  }
+
+  // Insert default tax configs if they don't exist
+  const existingTaxes = await db.getAllAsync('SELECT * FROM tax_configs LIMIT 1');
+  if (existingTaxes.length === 0) {
+    await db.execAsync(`
+      INSERT INTO tax_configs (name, rate, type, is_active) VALUES 
+      ('PB1 / PPN', 10, 'percentage', 1),
+      ('Service Charge', 5, 'percentage', 0);
+    `);
+  }
+
+  // Insert default discounts if they don't exist
+  const existingDiscounts = await db.getAllAsync('SELECT * FROM discounts LIMIT 1');
+  if (existingDiscounts.length === 0) {
+    await db.execAsync(`
+      INSERT INTO discounts (name, type, value, min_order_amount, max_discount_amount, is_active) VALUES 
+      ('Member Discount', 'percentage', 10, 50000, 25000, 1),
+      ('Opening Promo', 'flat', 10000, 30000, NULL, 1);
+    `);
+  }
+
+  // Insert default conversion units if they don't exist
+  const existingConversionUnits = await db.getAllAsync('SELECT * FROM ingredient_units LIMIT 1');
+  if (existingConversionUnits.length === 0) {
+    // Example conversions
+  }
 
       dbInstance = db;
       return db;
@@ -595,8 +510,9 @@ export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   return await initDatabase();
 };
 
-// Database operations (same as your implementation)
+// Database operations
 export const dbOperations = {
+  // Categories operations
   async getAllCategories(db: SQLite.SQLiteDatabase): Promise<Category[]> {
     return await db.getAllAsync<Category>('SELECT * FROM categories ORDER BY name');
   },
@@ -606,6 +522,7 @@ export const dbOperations = {
     return result.lastInsertRowId;
   },
 
+  // Recipe Definitions operations
   async getAllRecipeDefinitions(db: SQLite.SQLiteDatabase): Promise<RecipeDefinition[]> {
     return await db.getAllAsync<RecipeDefinition>('SELECT * FROM recipe_definitions ORDER BY name');
   },
@@ -661,6 +578,7 @@ export const dbOperations = {
     await db.runAsync('DELETE FROM recipe_definitions WHERE id = ?', [id]);
   },
 
+  // Recipe Ingredients operations
   async getRecipeIngredients(db: SQLite.SQLiteDatabase, recipeId: number): Promise<RecipeIngredient[]> {
     return await db.getAllAsync<RecipeIngredient>(
       `SELECT ri.*, i.name as ingredient_name, u.symbol as unit_symbol
@@ -700,6 +618,7 @@ export const dbOperations = {
     await db.runAsync('DELETE FROM recipe_ingredients WHERE id = ?', [id]);
   },
 
+  // Units operations
   async getAllUnits(db: SQLite.SQLiteDatabase): Promise<Unit[]> {
     return await db.getAllAsync<Unit>('SELECT * FROM units ORDER BY id');
   },
@@ -709,6 +628,7 @@ export const dbOperations = {
     return result.lastInsertRowId;
   },
 
+  // Ingredients operations
   async getAllIngredients(db: SQLite.SQLiteDatabase): Promise<Ingredient[]> {
     return await db.getAllAsync<Ingredient>(`
       SELECT i.*, u.name as unit_name, u.symbol as unit_symbol 
@@ -731,6 +651,7 @@ export const dbOperations = {
     return result.lastInsertRowId;
   },
 
+  // Ingredient units operations
   async getIngredientUnits(db: SQLite.SQLiteDatabase, ingredientId: number): Promise<IngredientUnit[]> {
     return await db.getAllAsync<IngredientUnit>(
       'SELECT * FROM ingredient_units WHERE ingredient_id = ?',
@@ -751,6 +672,7 @@ export const dbOperations = {
     return result.lastInsertRowId;
   },
 
+  // Products operations
   async getAllProducts(db: SQLite.SQLiteDatabase): Promise<Product[]> {
     return await db.getAllAsync<Product>(`
       SELECT p.*, c.name as category_name, rd.name as recipe_name 
@@ -780,6 +702,65 @@ export const dbOperations = {
     );
     return result.lastInsertRowId;
   },
+
+  // async updateProduct(
+  //   db: SQLite.SQLiteDatabase,
+  //   id: number,
+  //   updates: {
+  //     name?: string;
+  //     selling_price?: number;
+  //     has_recipe?: number;
+  //     sku?: string;
+  //     category_id?: number;
+  //     buy_price?: number;
+  //     stock_deduction_method?: string;
+  //     current_stock?: number;
+  //   }
+  // ): Promise<void> {
+  //   const updateFields: string[] = [];
+  //   const values: any[] = [];
+
+  //   if (updates.name !== undefined) {
+  //     updateFields.push('name = ?');
+  //     values.push(updates.name);
+  //   }
+  //   if (updates.selling_price !== undefined) {
+  //     updateFields.push('selling_price = ?');
+  //     values.push(updates.selling_price);
+  //   }
+  //   if (updates.has_recipe !== undefined) {
+  //     updateFields.push('has_recipe = ?');
+  //     values.push(updates.has_recipe);
+  //   }
+  //   if (updates.sku !== undefined) {
+  //     updateFields.push('sku = ?');
+  //     values.push(updates.sku);
+  //   }
+  //   if (updates.category_id !== undefined) {
+  //     updateFields.push('category_id = ?');
+  //     values.push(updates.category_id);
+  //   }
+  //   if (updates.buy_price !== undefined) {
+  //     updateFields.push('buy_price = ?');
+  //     values.push(updates.buy_price);
+  //   }
+  //   if (updates.stock_deduction_method !== undefined) {
+  //     updateFields.push('stock_deduction_method = ?');
+  //     values.push(updates.stock_deduction_method);
+  //   }
+  //   if (updates.current_stock !== undefined) {
+  //     updateFields.push('current_stock = ?');
+  //     values.push(updates.current_stock);
+  //   }
+
+  //   if (updateFields.length > 0) {
+  //     values.push(id);
+  //     await db.runAsync(
+  //       `UPDATE products SET ${updateFields.join(', ')} WHERE id = ?`,
+  //       values
+  //     );
+  //   }
+  // },
 
   async updateProduct(
     db: SQLite.SQLiteDatabase,
@@ -845,6 +826,7 @@ export const dbOperations = {
     }
   },
 
+  // Recipes operations
   async getProductRecipes(db: SQLite.SQLiteDatabase, productId: number): Promise<Recipe[]> {
     return await db.getAllAsync<Recipe>(
       'SELECT * FROM recipes WHERE product_id = ?',
@@ -865,6 +847,7 @@ export const dbOperations = {
     return result.lastInsertRowId;
   },
 
+  // Inventory operations
   async getIngredientBatches(db: SQLite.SQLiteDatabase, ingredientId: number): Promise<InventoryBatch[]> {
     return await db.getAllAsync<InventoryBatch>(
       `SELECT * FROM inventory_batches 
@@ -895,6 +878,7 @@ export const dbOperations = {
       [ingredientId, supplierId, initialQuantityBase, initialQuantityBase, costPerBaseUnit, new Date().toISOString(), expirationDate || null]
     );
     
+    // Log activity
     const ingredient = await db.getFirstAsync<{ name: string; base_unit_id: number }>(
       'SELECT name, base_unit_id FROM ingredients WHERE id = ?',
       [ingredientId]
@@ -918,6 +902,7 @@ export const dbOperations = {
     return result.lastInsertRowId;
   },
 
+  // Suppliers operations
   async getAllSuppliers(db: SQLite.SQLiteDatabase): Promise<Supplier[]> {
     return await db.getAllAsync<Supplier>('SELECT * FROM suppliers ORDER BY name');
   },
@@ -930,6 +915,7 @@ export const dbOperations = {
     return result.lastInsertRowId;
   },
 
+  // Activity logs operations
   async logActivity(
     db: SQLite.SQLiteDatabase,
     type: 'stock_add' | 'stock_deduct' | 'order' | 'restock',
@@ -965,6 +951,7 @@ export const dbOperations = {
     );
   },
 
+  // Payment Methods operations
   async getAllPaymentMethods(db: SQLite.SQLiteDatabase): Promise<PaymentMethodItem[]> {
     return await db.getAllAsync<PaymentMethodItem>(
       'SELECT * FROM payment_methods ORDER BY id ASC'
@@ -1030,6 +1017,7 @@ export const dbOperations = {
     await db.runAsync('DELETE FROM payment_methods WHERE id = ?', [id]);
   },
 
+  // Tax Configs operations
   async getAllTaxConfigs(db: SQLite.SQLiteDatabase): Promise<TaxConfigItem[]> {
     return await db.getAllAsync<TaxConfigItem>(
       'SELECT * FROM tax_configs ORDER BY id ASC'
@@ -1083,6 +1071,7 @@ export const dbOperations = {
     await db.runAsync('DELETE FROM tax_configs WHERE id = ?', [id]);
   },
 
+  // Discounts operations
   async getAllDiscounts(db: SQLite.SQLiteDatabase): Promise<DiscountItem[]> {
     return await db.getAllAsync<DiscountItem>(
       'SELECT * FROM discounts ORDER BY id ASC'
@@ -1140,6 +1129,7 @@ export const dbOperations = {
     await db.runAsync('DELETE FROM discounts WHERE id = ?', [id]);
   },
 
+  // Orders operations
   async getAllOrders(db: SQLite.SQLiteDatabase, limit: number = 100): Promise<CompletedOrder[]> {
     const orders = await db.getAllAsync<CompletedOrder>(
       'SELECT * FROM orders ORDER BY created_at DESC LIMIT ?',
@@ -1237,6 +1227,7 @@ export const dbOperations = {
   },
 
   async getTodaysSalesStats(db: SQLite.SQLiteDatabase): Promise<{ totalSales: number; orderCount: number }> {
+    const today = new Date().toISOString().split('T')[0];
     const result = await db.getFirstAsync<{ total: number; count: number }>(
       `SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as count 
        FROM orders 
@@ -1249,6 +1240,7 @@ export const dbOperations = {
   },
 };
 
+// Get current stock for an ingredient (sum of all batch remaining quantities)
 export const getCurrentStock = async (db: SQLite.SQLiteDatabase, ingredientId: number): Promise<number> => {
   const result = await db.getFirstAsync<{ total: number }>(
     `SELECT COALESCE(SUM(remaining_quantity_base), 0) as total 
@@ -1259,6 +1251,8 @@ export const getCurrentStock = async (db: SQLite.SQLiteDatabase, ingredientId: n
   return result?.total || 0;
 };
 
+// FEFO (First Expired First Out) stock deduction logic
+// Priority: 1. Expired items first, 2. Soonest expiration date, 3. FIFO as fallback
 export const deductStockFIFO = async (
   db: SQLite.SQLiteDatabase,
   ingredientId: number,
@@ -1285,6 +1279,7 @@ export const deductStockFIFO = async (
     const batchQuantity = new Decimal(batch.remaining_quantity_base);
 
     if (batchQuantity.gte(remainingToDeduct)) {
+      // This batch has enough stock
       const newRemaining = batchQuantity.minus(remainingToDeduct);
       await db.runAsync(
         'UPDATE inventory_batches SET remaining_quantity_base = ? WHERE id = ?',
@@ -1292,6 +1287,7 @@ export const deductStockFIFO = async (
       );
       remainingToDeduct = new Decimal(0);
     } else {
+      // Use this entire batch and move to the next
       remainingToDeduct = remainingToDeduct.minus(batchQuantity);
       await db.runAsync(
         'UPDATE inventory_batches SET remaining_quantity_base = 0 WHERE id = ?',
@@ -1306,6 +1302,7 @@ export const deductStockFIFO = async (
     );
   }
 
+  // Log stock deduction activity
   const ingredient = await db.getFirstAsync<{ name: string; base_unit_id: number }>(
     'SELECT name, base_unit_id FROM ingredients WHERE id = ?',
     [ingredientId]
@@ -1327,6 +1324,7 @@ export const deductStockFIFO = async (
   );
 };
 
+// Process restock with unit conversion
 export interface RestockPayload {
   ingredientId: number;
   supplierId: number;
@@ -1337,6 +1335,7 @@ export interface RestockPayload {
 }
 
 export const processRestockToSmallestUnit = (payload: RestockPayload) => {
+  // Convert to base unit using Decimal.js for precision
   const quantityBought = new Decimal(payload.quantityBought);
   const unitMultiplier = new Decimal(payload.unitMultiplier);
   const totalCostPaid = new Decimal(payload.totalCostPaid);
@@ -1354,6 +1353,7 @@ export const processRestockToSmallestUnit = (payload: RestockPayload) => {
   };
 };
 
+// Handle checkout order with recipe processing
 export interface CartItem {
   productId: number;
   quantitySold: number;
@@ -1367,6 +1367,7 @@ export const handleCheckoutOrder = async (
 
   try {
     for (const item of cartItems) {
+      // Check if product has recipe definition
       const product = await db.getFirstAsync<{ recipe_definition_id: number; stock_deduction_method: string }>(
         'SELECT recipe_definition_id, stock_deduction_method FROM products WHERE id = ?',
         [item.productId]
@@ -1380,11 +1381,13 @@ export const handleCheckoutOrder = async (
       }
 
       if (product && product.recipe_definition_id && product.stock_deduction_method === 'recipe') {
+        // Get recipe components from new structure
         const recipes = await db.getAllAsync<{ ingredient_id: number; quantity_needed_base: number }>(
           'SELECT ingredient_id, quantity_needed_base FROM recipe_ingredients WHERE recipe_id = ?',
           [product.recipe_definition_id]
         );
 
+        // Deduct stock for each recipe ingredient using FIFO
         for (const recipe of recipes) {
           const quantityNeeded = new Decimal(recipe.quantity_needed_base);
           const quantitySold = new Decimal(item.quantitySold);
@@ -1394,6 +1397,7 @@ export const handleCheckoutOrder = async (
         }
       }
 
+      // Log order activity
       const productWithDetails = await db.getFirstAsync<{ name: string }>(
         'SELECT name FROM products WHERE id = ?',
         [item.productId]

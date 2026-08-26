@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  Boxes, // Added for stock/inventory grouping
   ChefHat,
   ClipboardList,
   Coins,
@@ -12,6 +13,7 @@ import {
   Scale,
   Settings,
   ShoppingCart,
+  Store, // Added for catalog grouping
   Tag,
   Truck,
   Users,
@@ -42,52 +44,70 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
     roles: ['Admin', 'Manager', 'Staff'],
   },
   {
-    title: 'Products',
+    title: 'Orders',
+    path: '/orders',
+    icon: ClipboardList,
+    roles: ['Admin', 'Manager', 'Staff'],
+  },
+  // --- GROUP 1: CATALOG MANAGEMENT ---
+  {
+    title: 'Catalog',
     path: '/products',
-    icon: Package,
+    icon: Store,
     roles: ['Admin', 'Manager'],
+    children: [
+      {
+        title: 'Products',
+        path: '/products',
+        icon: Package,
+        roles: ['Admin', 'Manager'],
+      },
+      {
+        title: 'Categories',
+        path: '/categories',
+        icon: Folder,
+        roles: ['Admin', 'Manager'],
+      },
+    ],
   },
+  // --- GROUP 2: INVENTORY & PRODUCTION ---
   {
-    title: 'Ingredients',
-    path: '/ingredients',
-    icon: Scale,
-    roles: ['Admin', 'Manager'],
-  },
-  {
-    title: 'Recipes',
-    path: '/recipes',
-    icon: ChefHat,
-    roles: ['Admin', 'Manager'],
-  },
-  {
-    title: 'Inventory',
+    title: 'Inventory & Stock',
     path: '/inventory',
-    icon: Layers,
+    icon: Boxes,
     roles: ['Admin', 'Manager'],
+    children: [
+      {
+        title: 'Inventory',
+        path: '/inventory',
+        icon: Layers,
+        roles: ['Admin', 'Manager'],
+      },
+      {
+        title: 'Ingredients',
+        path: '/ingredients',
+        icon: Scale,
+        roles: ['Admin', 'Manager'],
+      },
+      {
+        title: 'Recipes',
+        path: '/recipes',
+        icon: ChefHat,
+        roles: ['Admin', 'Manager'],
+      },
+      {
+        title: 'Suppliers',
+        path: '/suppliers',
+        icon: Truck,
+        roles: ['Admin', 'Manager'],
+      },
+    ],
   },
   {
     title: 'Activity',
     path: '/activity',
     icon: Activity,
     roles: ['Admin', 'Manager'],
-  },
-  {
-    title: 'Suppliers',
-    path: '/suppliers',
-    icon: Truck,
-    roles: ['Admin', 'Manager'],
-  },
-  {
-    title: 'Categories',
-    path: '/categories',
-    icon: Folder,
-    roles: ['Admin', 'Manager'],
-  },
-  {
-    title: 'Orders',
-    path: '/orders',
-    icon: ClipboardList,
-    roles: ['Admin', 'Manager', 'Staff'],
   },
   {
     title: 'Reports',
@@ -101,6 +121,7 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
     icon: Users,
     roles: ['Admin'],
   },
+  // --- EXISTING GROUP: PAYMENT & TAXES ---
   {
     title: 'Payment & Taxes',
     path: '/payment-methods',

@@ -181,6 +181,7 @@ const styles = StyleSheet.create({
   },
   rightPanel: {
     height: '100%',
+    marginBottom: 40,
   },
   mobileContainer: {
     flex: 1,
