@@ -438,6 +438,8 @@ export default function POSScreen() {
         onBack={() => setShowCartMobile(false)}
         backButtonTitle="Back to Catalog"
         childrenPadding={16}
+        leftPanelFlex={2}
+        rightPanelFlex={1}
       />
 
       {/* DripToast Notification */}
@@ -677,6 +679,8 @@ const styles = StyleSheet.create({
   // Cart Footer
   cartFooter: {
     paddingTop: 12,
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
   },
   footerSummaryRow: {
