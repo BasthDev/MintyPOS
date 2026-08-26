@@ -46,11 +46,14 @@ export const CartNoteFormSheet: React.FC<CartNoteFormSheetProps> = ({
     />
   );
 
+  const isEditing = initialNote && initialNote.trim().length > 0;
+  const title = isEditing ? `Edit Note - ${productName}` : `Add Note - ${productName}`;
+
   return (
     <DripSheet
       visible={visible}
       onClose={onClose}
-      title={`Add Note - ${productName}`}
+      title={title}
       headerIcon={<FileText size={20} color={theme.primary} />}
       footer={footer}
     >

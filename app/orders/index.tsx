@@ -5,18 +5,18 @@ import { useTheme } from '@/constants/colorTheme';
 import { CompletedOrder, dbOperations, getDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import {
-    ChevronRight,
-    ClipboardList,
-    Receipt
+  ChevronRight,
+  ClipboardList,
+  Receipt
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export default function OrdersScreen() {
@@ -207,7 +207,7 @@ export default function OrdersScreen() {
               <View style={styles.orderItemLeft}>
                 <Text style={[styles.orderItemName, { color: theme.text }]}>{item.product_name}</Text>
                 <Text style={[styles.orderItemSub, { color: theme.textSecondary }]}>
-                  {item.quantity}x @ {formatCurrency(item.price)}
+                  {item.quantity}x {formatCurrency(item.price)}
                 </Text>
                 {item.note && (
                   <Text style={[styles.orderItemNote, { color: theme.primary }]}>
