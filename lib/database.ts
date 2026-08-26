@@ -203,7 +203,7 @@ const seedMockDataIfNeeded = async (db: SQLite.SQLiteDatabase) => {
 
     // 2. Categories
     await db.execAsync(`
-      INSERT INTO categories (id, name) VALUES 
+      INSERT INTO categories (id, name) VALUES
       (1, 'Beverages'),
       (2, 'Food'),
       (3, 'Snacks'),
@@ -212,93 +212,207 @@ const seedMockDataIfNeeded = async (db: SQLite.SQLiteDatabase) => {
 
     // 3. Suppliers
     await db.execAsync(`
-      INSERT INTO suppliers (id, name, contact) VALUES 
-      (1, 'PT Sumber Kopi Nusantara', '+62 811-2233-4455'),
-      (2, 'CV Fresh Dairy Indo', '+62 812-9988-7766'),
-      (3, 'Toko Bahan Kue Manis', '+62 813-5544-3322');
+      INSERT INTO suppliers (id, name, contact) VALUES
+      (1, 'Global Coffee Suppliers Ltd', '+1 555-123-4567'),
+      (2, 'Fresh Dairy Farms Inc', '+1 555-987-6543'),
+      (3, 'Sweeteners & Syrups Co', '+1 555-456-7890'),
+      (4, 'Premium Packaging Supplies', '+1 555-321-0987'),
+      (5, 'Food Merchandise Wholesalers', '+1 555-654-3210');
     `);
 
     // 4. Ingredients
     await db.execAsync(`
-      INSERT INTO ingredients (id, name, base_unit_id, minimum_stock) VALUES 
-      (1, 'Coffee Beans', 1, 500),
-      (2, 'Fresh Milk', 2, 2000),
-      (3, 'Sugar Syrup', 2, 1000),
-      (4, 'Paper Cup 12oz', 3, 50);
+      INSERT INTO ingredients (id, name, base_unit_id, minimum_stock) VALUES
+      (1, 'Arabica Coffee Beans', 1, 1000),
+      (2, 'Fresh Whole Milk', 2, 5000),
+      (3, 'Vanilla Sugar Syrup', 2, 2000),
+      (4, 'Paper Cup 12oz', 3, 100),
+      (5, 'Espresso Coffee Beans', 1, 800),
+      (6, 'Oat Milk', 2, 3000),
+      (7, 'Caramel Syrup', 2, 1500),
+      (8, 'Paper Cup 16oz', 3, 80),
+      (9, 'Croissant Dough', 1, 500),
+      (10, 'Butter', 1, 400);
     `);
 
     // 5. Ingredient Units (Conversions)
     await db.execAsync(`
-      INSERT INTO ingredient_units (ingredient_id, unit_name, multiplier_to_base) VALUES 
-      (1, 'Bag (250g)', 250),
-      (2, 'Liter (1000ml)', 1000),
-      (3, 'Bottle (750ml)', 750);
+      INSERT INTO ingredient_units (ingredient_id, unit_name, multiplier_to_base) VALUES
+      (1, 'Bag (500g)', 500),
+      (2, 'Gallon (3785ml)', 3785),
+      (3, 'Bottle (750ml)', 750),
+      (5, 'Bag (500g)', 500),
+      (6, 'Carton (1000ml)', 1000),
+      (7, 'Bottle (750ml)', 750),
+      (8, 'Case (100pcs)', 100),
+      (9, 'Box (20pcs)', 20),
+      (10, 'Block (500g)', 500);
     `);
 
-    // 6. Inventory Batches
+    // 6. Inventory Batches (with proper HPP calculations)
     const today = new Date().toISOString();
+    const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const lastMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Coffee beans batches
     await db.runAsync(
       `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
-      [1, 1, 2500, 2500, 150, today] // 2500g coffee beans @ 150/g
+      [1, 1, 5000, 4800, 180, lastMonth] // 5000g Arabica @ 180/g
     );
     await db.runAsync(
       `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
-      [2, 2, 10000, 10000, 25, today] // 10000ml milk @ 25/ml
+      [1, 1, 3000, 3000, 195, lastWeek] // 3000g Arabica @ 195/g
+    );
+
+    // Fresh milk batches
+    await db.runAsync(
+      `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
+      [2, 2, 20000, 18000, 22, lastWeek] // 20000ml milk @ 22/ml
     );
     await db.runAsync(
       `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
-      [3, 3, 3000, 3000, 40, today] // 3000ml syrup @ 40/ml
+      [2, 2, 15000, 15000, 25, today] // 15000ml milk @ 25/ml
+    );
+
+    // Oat milk batches
+    await db.runAsync(
+      `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
+      [6, 2, 8000, 7500, 35, lastWeek] // 8000ml oat milk @ 35/ml
+    );
+
+    // Syrups batches
+    await db.runAsync(
+      `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
+      [3, 3, 5000, 4800, 45, lastMonth] // 5000ml vanilla syrup @ 45/ml
     );
     await db.runAsync(
       `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
-      [4, 3, 200, 200, 500, today] // 200 cups @ 500/pcs
+      [7, 3, 4000, 4000, 50, lastWeek] // 4000ml caramel syrup @ 50/ml
+    );
+
+    // Paper cups batches
+    await db.runAsync(
+      `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
+      [4, 4, 500, 450, 250, lastMonth] // 500 cups 12oz @ 250/pcs
+    );
+    await db.runAsync(
+      `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
+      [8, 4, 400, 380, 300, lastWeek] // 400 cups 16oz @ 300/pcs
+    );
+
+    // Food ingredients batches
+    await db.runAsync(
+      `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
+      [9, 5, 2000, 1800, 80, lastWeek] // 2000g croissant dough @ 80/g
+    );
+    await db.runAsync(
+      `INSERT INTO inventory_batches (ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date) VALUES (?, ?, ?, ?, ?, ?)`,
+      [10, 5, 1500, 1400, 120, lastWeek] // 1500g butter @ 120/g
     );
 
     // 7. Recipe Definitions
     await db.runAsync(
       `INSERT INTO recipe_definitions (id, name, description) VALUES (?, ?, ?)`,
-      [1, 'Caffe Latte Recipe', 'Standard 12oz hot cafe latte recipe']
+      [1, 'Classic Caffe Latte', 'Standard 12oz hot cafe latte with espresso and steamed milk']
+    );
+    await db.runAsync(
+      `INSERT INTO recipe_definitions (id, name, description) VALUES (?, ?, ?)`,
+      [2, 'Iced Caramel Latte', '16oz iced latte with caramel syrup and cold milk']
+    );
+    await db.runAsync(
+      `INSERT INTO recipe_definitions (id, name, description) VALUES (?, ?, ?)`,
+      [3, 'Oat Milk Latte', '12oz latte made with oat milk for dairy-free option']
     );
 
-    // 8. Recipe Ingredients
+    // 8. Recipe Ingredients (with proper quantities)
     await db.execAsync(`
-      INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity_needed_base) VALUES 
-      (1, 1, 18),   -- 18g Coffee Beans
-      (1, 2, 150),  -- 150ml Fresh Milk
-      (1, 3, 30),   -- 30ml Sugar Syrup
-      (1, 4, 1);    -- 1 Paper Cup
+      INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity_needed_base) VALUES
+      (1, 1, 18),   -- 18g Arabica Coffee Beans
+      (1, 2, 150),  -- 150ml Fresh Whole Milk
+      (1, 3, 20),   -- 20ml Vanilla Sugar Syrup
+      (1, 4, 1);    -- 1 Paper Cup 12oz
     `);
 
-    // 9. Products
     await db.execAsync(`
-      INSERT INTO products (name, sku, category_id, buy_price, selling_price, recipe_definition_id, current_stock, stock_deduction_method) VALUES 
-      ('Caffe Latte', 'BEV-001', 1, 12500, 28000, 1, 0, 'recipe'),
-      ('Butter Croissant', 'SND-001', 3, 10000, 20000, NULL, 15, 'product'),
-      ('Mineral Water', 'BEV-002', 1, 3000, 6000, NULL, 30, 'product'),
-      ('Sparkling Water', 'BEV-003', 1, 3000, 6000, NULL, 30, 'product'),
-      ('Diet Soda', 'BEV-004', 1, 3000, 6000, NULL, 30, 'product');
+      INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity_needed_base) VALUES
+      (2, 5, 20),   -- 20g Espresso Coffee Beans
+      (2, 2, 180),  -- 180ml Fresh Whole Milk
+      (2, 7, 25),   -- 25ml Caramel Syrup
+      (2, 8, 1);    -- 1 Paper Cup 16oz
     `);
 
-    // 10. Payment Methods
     await db.execAsync(`
-      INSERT INTO payment_methods (type_key, type_label, method_name, is_active, is_system) VALUES 
+      INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity_needed_base) VALUES
+      (3, 1, 18),   -- 18g Arabica Coffee Beans
+      (3, 6, 150),  -- 150ml Oat Milk
+      (3, 3, 20),   -- 20ml Vanilla Sugar Syrup
+      (3, 4, 1);    -- 1 Paper Cup 12oz
+    `);
+
+    // 9. Products (with proper HPP calculations)
+    await db.execAsync(`
+      INSERT INTO products (name, sku, category_id, buy_price, selling_price, recipe_definition_id, current_stock, stock_deduction_method) VALUES
+      ('Classic Caffe Latte', 'BEV-001', 1, 9490, 28000, 1, 0, 'recipe'),
+      ('Iced Caramel Latte', 'BEV-002', 1, 11100, 32000, 2, 0, 'recipe'),
+      ('Oat Milk Latte', 'BEV-003', 1, 10490, 30000, 3, 0, 'recipe'),
+      ('Butter Croissant', 'SND-001', 3, 5200, 15000, NULL, 45, 'product'),
+      ('Chocolate Muffin', 'SND-002', 3, 4500, 12000, NULL, 30, 'product'),
+      ('Blueberry Danish', 'SND-003', 3, 4800, 14000, NULL, 25, 'product'),
+      ('Cinnamon Roll', 'SND-004', 3, 5000, 13000, NULL, 20, 'product'),
+      ('Apple Pie Slice', 'SND-005', 3, 4000, 11000, NULL, 35, 'product'),
+      ('Cheese Danish', 'SND-006', 3, 4600, 13500, NULL, 22, 'product'),
+      ('Mineral Water 500ml', 'BEV-004', 1, 2000, 5000, NULL, 60, 'product'),
+      ('Sparkling Water 330ml', 'BEV-005', 1, 2500, 6000, NULL, 45, 'product'),
+      ('Diet Cola 330ml', 'BEV-006', 1, 3000, 7000, NULL, 40, 'product'),
+      ('Orange Juice 250ml', 'BEV-007', 1, 3500, 8000, NULL, 35, 'product'),
+      ('Iced Tea 300ml', 'BEV-008', 1, 2200, 5500, NULL, 50, 'product'),
+      ('Lemonade 300ml', 'BEV-009', 1, 2400, 6000, NULL, 40, 'product'),
+      ('MintyPOS T-Shirt', 'MER-001', 4, 45000, 99000, NULL, 20, 'product'),
+      ('MintyPOS Cap', 'MER-002', 4, 25000, 55000, NULL, 30, 'product'),
+      ('MintyPOS Tote Bag', 'MER-003', 4, 18000, 35000, NULL, 25, 'product'),
+      ('Coffee Mug', 'MER-004', 4, 22000, 45000, NULL, 15, 'product'),
+      ('Espresso Shot Glass', 'MER-005', 4, 15000, 30000, NULL, 40, 'product'),
+      ('Barista Apron', 'MER-006', 4, 65000, 120000, NULL, 12, 'product'),
+      ('Coffee Beans Bag 250g', 'MER-007', 4, 35000, 75000, NULL, 18, 'product'),
+      ('Lunch Box', 'MER-008', 4, 38000, 85000, NULL, 15, 'product'),
+      ('Travel Tumbler', 'MER-009', 4, 55000, 110000, NULL, 10, 'product'),
+      ('Keychain', 'MER-010', 4, 8000, 15000, NULL, 50, 'product');
+    `);
+
+    // 10. Payment Methods (International)
+    await db.execAsync(`
+      INSERT INTO payment_methods (type_key, type_label, method_name, is_active, is_system) VALUES
       ('cash', 'Cash', 'Cash', 1, 1),
-      ('qris', 'QRIS', 'QRIS All Payment', 1, 0),
-      ('transfer', 'Bank Transfer', 'BCA', 1, 0);
+      ('card', 'Card', 'Visa', 1, 0),
+      ('card', 'Card', 'Mastercard', 1, 0),
+      ('card', 'Card', 'American Express', 1, 0),
+      ('card', 'Card', 'Discover', 1, 0),
+      ('transfer', 'Bank Transfer', 'Chase Bank', 1, 0),
+      ('transfer', 'Bank Transfer', 'Bank of America', 1, 0),
+      ('transfer', 'Bank Transfer', 'Wells Fargo', 1, 0),
+      ('transfer', 'Bank Transfer', 'Citibank', 1, 0),
+      ('ewallet', 'Digital Wallet', 'Apple Pay', 1, 0),
+      ('ewallet', 'Digital Wallet', 'Google Pay', 1, 0),
+      ('ewallet', 'Digital Wallet', 'PayPal', 1, 0),
+      ('ewallet', 'Digital Wallet', 'Samsung Pay', 1, 0),
+      ('ewallet', 'Digital Wallet', 'Venmo', 1, 0);
     `);
 
     // 11. Tax Configs
     await db.execAsync(`
-      INSERT INTO tax_configs (name, rate, type, is_active) VALUES 
-      ('PB1 / PPN', 10, 'percentage', 1),
+      INSERT INTO tax_configs (name, rate, type, is_active) VALUES
+      ('VAT / GST', 10, 'percentage', 1),
       ('Service Charge', 5, 'percentage', 1);
     `);
 
     // 12. Discounts
     await db.execAsync(`
-      INSERT INTO discounts (name, type, value, min_order_amount, max_discount_amount, is_active) VALUES 
-      ('Member Discount', 'percentage', 10, 50000, 25000, 1),
-      ('Grand Opening Promo', 'flat', 10000, 30000, NULL, 1);
+      INSERT INTO discounts (name, type, value, min_order_amount, max_discount_amount, is_active) VALUES
+      ('Loyalty Member Discount', 'percentage', 10, 50000, 25000, 1),
+      ('Happy Hour Special', 'percentage', 15, 30000, 15000, 1),
+      ('Bulk Order Discount', 'percentage', 5, 100000, 10000, 1),
+      ('First Time Customer', 'flat', 5000, 20000, NULL, 1),
+      ('Weekend Promo', 'flat', 10000, 50000, NULL, 1);
     `);
 
     console.log('Mock data seeded successfully.');

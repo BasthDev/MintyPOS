@@ -93,7 +93,7 @@ export default function ReportsScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Text style={[styles.infoCardTitle, { color: theme.text }]}>Report Insights</Text>
           <Text style={[styles.infoText, { color: theme.textSecondary }]}>

@@ -3,7 +3,7 @@ import { DripSearchBar } from '@/components/SearchBar';
 import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
 import { dbOperations, getDatabase } from '@/lib/database';
-import { Activity, ArrowDown, ArrowUp, Clock, Package, RefreshCw, ShoppingCart } from 'lucide-react-native';
+import { Activity, ArrowDown, ArrowUp, Clock, Package, ShoppingCart } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -215,7 +215,7 @@ export default function ActivityScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
           {filteredActivities.map((item) => {
             const isSelected = selectedActivity?.id === item.id;
 

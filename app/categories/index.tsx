@@ -145,7 +145,7 @@ export default function CategoriesScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
           {filteredCategories.map((c) => {
             const isSelected = selectedCategory?.id === c.id;
 

@@ -7,7 +7,7 @@ import { useTheme } from '@/constants/colorTheme';
 import { getDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import { InventoryProcess } from '@/processes/inventoryProcess';
-import { ChevronRight, Layers, Package, Plus } from 'lucide-react-native';
+import { ChevronRight, Layers, Plus } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -143,7 +143,7 @@ export default function InventoryScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
           {filteredBatches.map((b) => {
             const isSelected = selectedBatch?.id === b.id;
 

@@ -146,7 +146,7 @@ export default function IngredientsScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
           {filteredIngredients.map((item) => {
             const isSelected = selectedIngredient?.id === item.id;
 

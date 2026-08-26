@@ -156,7 +156,7 @@ export default function SuppliersScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}> 
           {filteredSuppliers.map((s) => {
             const isSelected = selectedSupplier?.id === s.id;
 

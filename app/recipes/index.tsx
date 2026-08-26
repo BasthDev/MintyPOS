@@ -195,7 +195,7 @@ export default function RecipesScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
           {filteredRecipes.map((r) => {
             const isSelected = selectedRecipe?.id === r.id;
 

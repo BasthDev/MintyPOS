@@ -80,7 +80,7 @@ export default function OrdersScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
           {filteredOrders.map((o) => {
             const isSelected = selectedOrder?.id === o.id;
 

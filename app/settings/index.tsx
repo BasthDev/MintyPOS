@@ -37,7 +37,7 @@ export default function SettingsScreen() {
         Configure preferences & learn how to use MintyPOS
       </Text>
 
-      <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
         {settingGroups.map((group) => {
           const isSelected = selectedSetting === group.id;
           const IconComp = group.icon;

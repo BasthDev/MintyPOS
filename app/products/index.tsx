@@ -1,4 +1,3 @@
-import { DripButton } from '@/components/Button';
 import { ProductFormSheet } from '@/components/forms/ProductFormSheet';
 import { Header } from '@/components/Header';
 import { DripSearchBar } from '@/components/SearchBar';
@@ -7,7 +6,7 @@ import { useTheme } from '@/constants/colorTheme';
 import { calculateRecipeCost } from '@/lib/businessLogic';
 import { getDatabase } from '@/lib/database';
 import { ProductProcess } from '@/processes/productProcess';
-import { AlertTriangle, ChevronRight, Edit, Image as ImageIcon, Package, Plus, Trash2 } from 'lucide-react-native';
+import { AlertTriangle, ChevronRight, Edit, Package, Plus, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -207,7 +206,7 @@ export default function ProductsScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
           {filteredProducts.map((p) => {
             const isSelected = selectedProduct?.id === p.id;
             const isLowStock = p.stock_deduction_method === 'product' && (p.current_stock || 0) <= 5;
