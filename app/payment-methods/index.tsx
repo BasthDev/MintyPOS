@@ -13,8 +13,9 @@ import {
   Plus,
   QrCode,
   Sliders,
+  Smartphone,
   Trash2,
-  Wallet,
+  Wallet
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
@@ -155,7 +156,7 @@ export default function PaymentMethodsScreen() {
       case 'qris':
         return <QrCode size={20} color={theme.primary} />;
       case 'transfer':
-        return <CreditCard size={20} color={theme.warning} />;
+        return <Smartphone size={20} color={theme.warning} />;
       case 'ewallet':
         return <Wallet size={20} color="#0284C7" />;
       default:

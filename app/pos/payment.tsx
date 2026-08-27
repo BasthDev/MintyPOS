@@ -1,6 +1,18 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { ArrowLeft, Tag } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Banknote,
+  CheckCircle,
+  CheckCircle2,
+  CreditCard,
+  FileText,
+  QrCode,
+  Smartphone,
+  Tag,
+  Wallet,
+  X,
+  XCircle
+} from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -59,6 +71,7 @@ function SummaryCell({
   red,
   theme,
   styles,
+  itemCount,
 }: {
   label: string;
   value: string;
@@ -67,9 +80,23 @@ function SummaryCell({
   red?: boolean;
   theme: ColorTheme;
   styles: any;
+  itemCount: number;
 }) {
+  // Dynamic width layout based on your specifications:
+  // 4 items -> 2x2 layout (~48% width)
+  // 3 items -> 3 in a row (~31% width)
+  // 5 items -> 3 and 2
+  // 6 items -> 3 and 3
+  // 7 items -> 3, 3, and 1
+  let widthPercent = '31%';
+  if (itemCount === 4 || itemCount === 2) {
+    widthPercent = '48%';
+  } else if (itemCount === 1) {
+    widthPercent = '100%';
+  }
+
   return (
-    <View style={styles.summaryCell}>
+    <View style={[styles.summaryCell, { width: widthPercent }]}>
       <Text style={[styles.summaryCellLabel, { color: theme.textSecondary }]}>{label}</Text>
       <Text
         style={[
@@ -160,7 +187,7 @@ function BankGrid({
   if (banks.length === 0) {
     return (
       <View style={{ padding: 24, alignItems: 'center' }}>
-        <Ionicons name="card-outline" size={36} color={theme.textTertiary} />
+        <CreditCard size={36} color={theme.textTertiary} />
         <Text style={{ fontSize: 14, color: theme.textSecondary, textAlign: 'center', marginTop: 10 }}>
           No {methodName} providers configured
         </Text>
@@ -199,12 +226,13 @@ function BankGrid({
                 {b}
               </Text>
               {isSelected && (
-                <Ionicons
-                  name="checkmark-circle"
+                <View style={{position: 'absolute', top: 0, right: 5}}>
+                <CheckCircle2
                   size={18}
                   color={theme.primary}
                   style={{ marginTop: 4 }}
                 />
+                </View>
               )}
             </TouchableOpacity>
           );
@@ -271,7 +299,7 @@ function DiscountPickerModal({
               onPress={Keyboard.dismiss}
             >
               <View style={dm.sheetTitleRow}>
-                <Ionicons name="pricetag-outline" size={18} color={theme.primary} />
+                <Tag size={18} color={theme.primary} />
                 <Text style={[dm.sheetTitle, { color: theme.text }]}>Select Discount</Text>
               </View>
               <TouchableOpacity
@@ -281,7 +309,7 @@ function DiscountPickerModal({
                 }}
                 style={dm.closeBtn}
               >
-                <Ionicons name="close" size={20} color={theme.textSecondary} />
+                <X size={20} color={theme.textSecondary} />
               </TouchableOpacity>
             </Pressable>
 
@@ -298,14 +326,14 @@ function DiscountPickerModal({
               activeOpacity={0.75}
             >
               <View style={[dm.discountIcon, { backgroundColor: theme.input }]}>
-                <Ionicons name="close-circle-outline" size={18} color={theme.textSecondary} />
+                <XCircle size={18} color={theme.textSecondary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[dm.discountName, { color: theme.text }]}>No Discount</Text>
                 <Text style={[dm.discountSub, { color: theme.textSecondary }]}>Full price, no deduction</Text>
               </View>
               {!selectedDiscount && (
-                <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
+                <CheckCircle2 size={20} color={theme.primary} />
               )}
             </TouchableOpacity>
 
@@ -359,11 +387,11 @@ function DiscountPickerModal({
                           },
                         ]}
                       >
-                        <Ionicons
-                          name={isPercent ? 'pricetag-outline' : 'cash-outline'}
-                          size={18}
-                          color={isPercent ? theme.primary : theme.secondary}
-                        />
+                        {isPercent ? (
+                          <Tag size={18} color={theme.primary} />
+                        ) : (
+                          <Banknote size={18} color={theme.secondary} />
+                        )}
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text
@@ -387,8 +415,7 @@ function DiscountPickerModal({
                         <Text style={[dm.discountSaving, { color: theme.error }]}>-{fmt(discAmt)}</Text>
                       )}
                       {isActive && (
-                        <Ionicons
-                          name="checkmark-circle"
+                        <CheckCircle2
                           size={20}
                           color={theme.primary}
                           style={{ marginLeft: 8 }}
@@ -516,19 +543,19 @@ export default function POSPaymentScreen() {
 
   // 5. Available Payment Method Categories (derived dynamically from database)
   const availableMethodTypes = useMemo(() => {
-    const types: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-      { key: 'cash', label: 'Cash', icon: 'cash-outline' },
+    const types: { key: string; label: string; icon: any }[] = [
+      { key: 'cash', label: 'Cash', icon: Banknote },
     ];
 
     const knownKeys = new Set(['cash']);
     paymentMethods.forEach((m) => {
       if (m.is_active && !knownKeys.has(m.type_key)) {
         knownKeys.add(m.type_key);
-        let icon: keyof typeof Ionicons.glyphMap = 'card-outline';
-        if (m.type_key === 'card') icon = 'card-outline';
-        else if (m.type_key === 'qris') icon = 'qr-code-outline';
-        else if (m.type_key === 'transfer') icon = 'business-outline';
-        else if (m.type_key === 'ewallet') icon = 'wallet-outline';
+        let icon = CreditCard;
+        if (m.type_key === 'card') icon = CreditCard;
+        else if (m.type_key === 'qris') icon = QrCode;
+        else if (m.type_key === 'transfer') icon = Smartphone;
+        else if (m.type_key === 'ewallet') icon = Wallet;
 
         types.push({
           key: m.type_key,
@@ -538,11 +565,6 @@ export default function POSPaymentScreen() {
       }
     });
 
-    // Ensure standard options (card, qris, transfer) exist if user hasn't added customized keys
-    if (!knownKeys.has('card')) types.push({ key: 'card', label: 'Card', icon: 'card-outline' });
-    if (!knownKeys.has('qris')) types.push({ key: 'qris', label: 'QRIS', icon: 'qr-code-outline' });
-    if (!knownKeys.has('transfer')) types.push({ key: 'transfer', label: 'Transfer', icon: 'business-outline' });
-
     return types;
   }, [paymentMethods]);
 
@@ -550,15 +572,7 @@ export default function POSPaymentScreen() {
   const activeProvidersForMethod = useMemo(() => {
     if (method === 'cash') return [];
     const matching = paymentMethods.filter((m) => m.type_key === method && m.is_active);
-    if (matching.length > 0) {
-      return matching.map((m) => m.method_name);
-    }
-    // Fallback defaults
-    if (method === 'card') return ['Debit Card', 'Credit Card', 'Visa', 'Mastercard', 'EDC'];
-    if (method === 'qris') return ['QRIS', 'GoPay', 'DANA', 'OVO', 'ShopeePay'];
-    if (method === 'transfer') return ['BCA', 'Mandiri', 'BRI', 'BNI', 'Bank Transfer'];
-    if (method === 'ewallet') return ['Apple Pay', 'Google Pay', 'PayPal', 'Digital Wallet'];
-    return [method.toUpperCase()];
+    return matching.map((m) => m.method_name);
   }, [method, paymentMethods]);
 
   // Smart Quick Amounts based on total and currency
@@ -645,7 +659,6 @@ export default function POSPaymentScreen() {
         return;
       }
 
-      // Clear temporary cart
       CartProcess.clearCart();
       setCompletedReceipt(result.order);
     } catch (error: any) {
@@ -676,37 +689,49 @@ export default function POSPaymentScreen() {
     <Tag size={20} color={theme.text} />
   );
 
-  const hasExtraBreakdown = Boolean(
-    selectedDiscount || (taxConfigs.length > 0 && (taxAmount > 0 || serviceAmount > 0))
-  );
+  // Dynamic summary items mapping list
+  const summaryItems = useMemo(() => {
+    const items: { label: string; value: string; accent?: boolean; green?: boolean; red?: boolean }[] = [];
+    
+    items.push({ label: 'Subtotal', value: fmt(subtotal) });
 
-  const mobileSummary = hasExtraBreakdown ? (
+    if (discountAmount > 0) {
+      items.push({ label: 'Discount', value: `-${fmt(discountAmount)}`, red: true });
+    }
+    if (serviceAmount > 0) {
+      items.push({ label: `Service (${serviceRate}%)`, value: fmt(serviceAmount) });
+    }
+    if (taxAmount > 0) {
+      items.push({ label: `Tax (${taxRate}%)`, value: fmt(taxAmount) });
+    }
+
+    items.push({ label: 'Total', value: fmt(total), accent: true });
+    items.push({ label: 'Paid', value: fmt(paymentAmount) });
+    items.push({ label: 'Change', value: fmt(change), green: change > 0 });
+
+    return items;
+  }, [subtotal, discountAmount, serviceAmount, serviceRate, taxAmount, taxRate, total, paymentAmount, change]);
+
+  const mobileSummary = (
     <View style={[styles.summaryGrid, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <SummaryCell label="Subtotal" value={fmt(subtotal)} theme={theme} styles={styles} />
-      {discountAmount > 0 ? (
-        <SummaryCell label="Discount" value={`-${fmt(discountAmount)}`} red theme={theme} styles={styles} />
-      ) : null}
-      {serviceAmount > 0 ? (
-        <SummaryCell label={`Service (${serviceRate}%)`} value={fmt(serviceAmount)} theme={theme} styles={styles} />
-      ) : null}
-      {taxAmount > 0 ? (
-        <SummaryCell label={`Tax (${taxRate}%)`} value={fmt(taxAmount)} theme={theme} styles={styles} />
-      ) : null}
-      <SummaryCell label="Total" value={fmt(total)} accent theme={theme} styles={styles} />
-      <SummaryCell label="Paid" value={fmt(paymentAmount)} theme={theme} styles={styles} />
-      <SummaryCell label="Change" value={fmt(change)} green={change > 0} theme={theme} styles={styles} />
-    </View>
-  ) : (
-    <View style={[styles.summaryRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <SummaryCell label="Total" value={fmt(total)} theme={theme} styles={styles} />
-      <SummaryCell label="Paid" value={fmt(paymentAmount)} accent theme={theme} styles={styles} />
-      <SummaryCell label="Change" value={fmt(change)} green={change > 0} theme={theme} styles={styles} />
+      {summaryItems.map((item, index) => (
+        <SummaryCell
+          key={index}
+          label={item.label}
+          value={item.value}
+          accent={item.accent}
+          green={item.green}
+          red={item.red}
+          theme={theme}
+          styles={styles}
+          itemCount={summaryItems.length}
+        />
+      ))}
     </View>
   );
 
   return (
     <View style={[styles.screenContainer, { backgroundColor: theme.background }]}>
-      {/* Header with back button + discount icon */}
       <Header
         title="Payment Checkout"
         leftIcon={<ArrowLeft size={22} color={theme.text} />}
@@ -729,7 +754,6 @@ export default function POSPaymentScreen() {
             {mobileSummary}
 
             <View style={{ flex: 1, flexDirection: isWide ? 'row' : 'column' }}>
-              {/* Payment methods navigation (includes Cash, Card, QRIS, Transfer, Digital Wallet, etc.) */}
               <View
                 style={[
                   styles.methodsCol,
@@ -754,6 +778,7 @@ export default function POSPaymentScreen() {
                 >
                   {availableMethodTypes.map((m) => {
                     const isActive = method === m.key;
+                    const IconComponent = m.icon;
                     return (
                       <TouchableOpacity
                         key={m.key}
@@ -771,8 +796,7 @@ export default function POSPaymentScreen() {
                           setSelectedBank(null);
                         }}
                       >
-                        <Ionicons
-                          name={m.icon}
+                        <IconComponent
                           size={22}
                           color={isActive ? theme.primary : theme.textSecondary}
                         />
@@ -791,7 +815,6 @@ export default function POSPaymentScreen() {
                 </ScrollView>
               </View>
 
-              {/* Contextual input column */}
               <View style={[styles.contextCol, { backgroundColor: theme.background }]}>
                 {method === 'cash' ? (
                   <CashInput
@@ -815,7 +838,6 @@ export default function POSPaymentScreen() {
               </View>
             </View>
 
-            {/* Bottom Bar for Mobile only */}
             {!isWide && (
               <View
                 style={[
@@ -872,7 +894,6 @@ export default function POSPaymentScreen() {
             )}
           </View>
 
-          {/* RIGHT 30% PANEL (Wide only) */}
           {isWide && (
             <View
               style={[
@@ -927,7 +948,7 @@ export default function POSPaymentScreen() {
                   ]}
                 >
                   <View style={styles.wideDiscountLeft}>
-                    <Ionicons name="pricetag-outline" size={14} color={theme.primary} />
+                    <Tag size={14} color={theme.primary} />
                     <Text style={[styles.wideDiscountName, { color: theme.primary }]}>
                       {selectedDiscount?.name || 'Discount'}
                     </Text>
@@ -938,16 +959,14 @@ export default function POSPaymentScreen() {
                 </View>
               )}
 
-              {hasExtraBreakdown && (
-                <View style={styles.rightSummaryLine}>
-                  <Text style={[styles.rightSummaryLabel, { color: theme.textSecondary }]}>
-                    Subtotal
-                  </Text>
-                  <Text style={[styles.rightSummaryValue, { color: theme.text }]}>
-                    {fmt(subtotal)}
-                  </Text>
-                </View>
-              )}
+              <View style={styles.rightSummaryLine}>
+                <Text style={[styles.rightSummaryLabel, { color: theme.textSecondary }]}>
+                  Subtotal
+                </Text>
+                <Text style={[styles.rightSummaryValue, { color: theme.text }]}>
+                  {fmt(subtotal)}
+                </Text>
+              </View>
 
               {serviceAmount > 0 ? (
                 <View style={styles.rightSummaryLine}>
@@ -1009,94 +1028,105 @@ export default function POSPaymentScreen() {
         </View>
       )}
 
-      {/* Cart Modal (Mobile) */}
+      {/* Cart Modal (Mobile) - Redesigned to Sheet UI Style */}
       <Modal
         visible={cartModalVisible}
         transparent
         animationType="slide"
         onRequestClose={() => setCartModalVisible(false)}
       >
-        <View style={[styles.modalOverlay, { backgroundColor: theme.overlay, justifyContent: 'flex-end' }]}>
-          <View
-            style={[
-              styles.cartModalCard,
-              {
-                backgroundColor: theme.card,
-                borderTopColor: theme.border,
-              },
-            ]}
+        <View style={{ flex: 1 }}>
+          <TouchableWithoutFeedback onPress={() => setCartModalVisible(false)}>
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.overlay }]} />
+          </TouchableWithoutFeedback>
+
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, justifyContent: 'flex-end' }}
+            pointerEvents="box-none"
           >
-            <View style={styles.modalHeaderRow}>
-              <Text style={[styles.modalHeaderTitle, { color: theme.text }]}>
-                Order Items ({cart.length})
-              </Text>
-              <TouchableOpacity onPress={() => setCartModalVisible(false)}>
-                <Ionicons name="close" size={24} color={theme.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 350 }}>
-              {cart.map((item) => (
-                <View
-                  key={item.productId}
-                  style={[
-                    styles.cartItem,
-                    {
-                      backgroundColor: theme.card,
-                      borderBottomColor: theme.divider,
-                      borderBottomWidth: 1,
-                    },
-                  ]}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.cartItemName, { color: theme.text }]}>{item.name}</Text>
-                    <Text style={[styles.cartItemPrice, { color: theme.textSecondary }]}>
-                      {fmt(item.price)} each
-                    </Text>
-                    {item.note && (
-                      <Text style={[styles.cartItemNote, { color: theme.warning }]}>
-                        Note: {item.note}
-                      </Text>
-                    )}
-                  </View>
-                  <Text style={[styles.cartItemSubtotal, { color: theme.primary }]}>
-                    {fmt(item.price * item.quantity)}
+            <View
+              style={[
+                dm.sheet,
+                { backgroundColor: theme.card, borderColor: theme.border, borderTopWidth: 1 },
+              ]}
+            >
+              <Pressable style={[dm.sheetHeader, { borderBottomColor: theme.divider }]}>
+                <View style={dm.sheetTitleRow}>
+                  <Tag size={18} color={theme.primary} />
+                  <Text style={[dm.sheetTitle, { color: theme.text }]}>
+                    Order Items ({cart.length})
                   </Text>
-                  <View style={[styles.qtyBadgeStatic, { backgroundColor: theme.input }]}>
-                    <Text style={[styles.qtyTextStatic, { color: theme.text }]}>{item.quantity}x</Text>
-                  </View>
                 </View>
-              ))}
-            </ScrollView>
+                <TouchableOpacity onPress={() => setCartModalVisible(false)} style={dm.closeBtn}>
+                  <X size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </Pressable>
 
-            <View style={[styles.modalFooter, { borderTopColor: theme.divider }]}>
-              <View style={styles.modalTotalRow}>
-                <Text style={[styles.modalTotalLabel, { color: theme.text }]}>Total:</Text>
-                <Text style={[styles.modalTotalVal, { color: theme.primary }]}>{fmt(total)}</Text>
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.confirmBtnMain,
-                  { backgroundColor: theme.primary },
-                  (!canConfirm || confirming) && { backgroundColor: theme.inputBorder },
-                ]}
-                onPress={() => {
-                  setCartModalVisible(false);
-                  handleConfirm();
-                }}
-                disabled={!canConfirm || confirming}
-              >
-                <Text
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 340 }}>
+                {cart.map((item) => (
+                  <View
+                    key={item.productId}
+                    style={[
+                      styles.cartItem,
+                      {
+                        backgroundColor: theme.card,
+                        borderBottomColor: theme.divider,
+                        borderBottomWidth: 1,
+                        paddingHorizontal: 20,
+                      },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.cartItemName, { color: theme.text }]}>{item.name}</Text>
+                      <Text style={[styles.cartItemPrice, { color: theme.textSecondary }]}>
+                        {fmt(item.price)} each
+                      </Text>
+                      {item.note && (
+                        <Text style={[styles.cartItemNote, { color: theme.warning }]}>
+                          Note: {item.note}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={[styles.cartItemSubtotal, { color: theme.primary }]}>
+                      {fmt(item.price * item.quantity)}
+                    </Text>
+                    <View style={[styles.qtyBadgeStatic, { backgroundColor: theme.input }]}>
+                      <Text style={[styles.qtyTextStatic, { color: theme.text }]}>{item.quantity}x</Text>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+
+              <View style={[dm.sheetFooter, { borderTopColor: theme.divider, paddingHorizontal: 20 }]}>
+                <View style={styles.modalTotalRow}>
+                  <Text style={[styles.modalTotalLabel, { color: theme.text }]}>Total:</Text>
+                  <Text style={[styles.modalTotalVal, { color: theme.primary }]}>{fmt(total)}</Text>
+                </View>
+                <TouchableOpacity
                   style={[
-                    styles.confirmBtnText,
-                    (!canConfirm || confirming) && { color: theme.textDisabled },
+                    styles.confirmBtnMain,
+                    { backgroundColor: theme.primary, width: '100%', flex: undefined, height: 48 },
+                    (!canConfirm || confirming) && { backgroundColor: theme.inputBorder },
                   ]}
+                  onPress={() => {
+                    setCartModalVisible(false);
+                    handleConfirm();
+                  }}
+                  disabled={!canConfirm || confirming}
                 >
-                  {confirming ? 'Processing...' : 'Confirm Payment'}
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.confirmBtnText,
+                      (!canConfirm || confirming) && { color: theme.textDisabled },
+                    ]}
+                  >
+                    {confirming ? 'Processing...' : 'Confirm Payment'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -1117,7 +1147,7 @@ export default function POSPaymentScreen() {
         <View style={[styles.modalOverlay, { backgroundColor: theme.overlay }]}>
           <View style={[styles.receiptCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <View style={styles.receiptIconBox}>
-              <Ionicons name="checkmark-circle" size={54} color={theme.success} />
+              <CheckCircle size={54} color={theme.success} />
             </View>
 
             <Text style={[styles.receiptTitle, { color: theme.text }]}>Payment Successful!</Text>
@@ -1181,7 +1211,7 @@ export default function POSPaymentScreen() {
                 router.replace('/');
               }}
             >
-              <Ionicons name="cart-outline" size={18} color="#FFFFFF" />
+              <FileText size={18} color="#FFFFFF" />
               <Text style={styles.finishBtnText}>Start New Sale</Text>
             </TouchableOpacity>
           </View>
@@ -1217,13 +1247,6 @@ const createPaymentStyles = (theme: ColorTheme) =>
       justifyContent: 'center',
       alignItems: 'center',
     },
-    summaryRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      borderBottomWidth: 1,
-      paddingVertical: 10,
-      paddingHorizontal: 8,
-    },
     summaryGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -1235,8 +1258,8 @@ const createPaymentStyles = (theme: ColorTheme) =>
     },
     summaryCell: {
       alignItems: 'center',
-      minWidth: 70,
-      paddingVertical: 2,
+      paddingVertical: 6,
+      paddingHorizontal: 4,
     },
     summaryCellLabel: {
       fontSize: 11,
@@ -1348,6 +1371,7 @@ const createPaymentStyles = (theme: ColorTheme) =>
       borderRadius: 10,
       justifyContent: 'center',
       alignItems: 'center',
+      marginBottom:10,
     },
     confirmBtn: {
       borderRadius: 10,
@@ -1461,14 +1485,6 @@ const createPaymentStyles = (theme: ColorTheme) =>
       justifyContent: 'center',
       alignItems: 'center',
       padding: 16,
-    },
-    cartModalCard: {
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      borderTopWidth: 1,
-      maxHeight: '80%',
-      padding: 16,
-      width: '100%',
     },
     modalHeaderRow: {
       flexDirection: 'row',
@@ -1673,6 +1689,7 @@ const dm = StyleSheet.create({
   doneBtn: {
     borderRadius: 10,
     padding: 14,
+    marginBottom:10,
     alignItems: 'center',
   },
   doneBtnText: {
