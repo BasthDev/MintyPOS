@@ -145,6 +145,10 @@ export interface CompletedOrder {
   change_amount: number;
   items_count: number;
   note?: string;
+  customer_id?: number | null;
+  customer_name?: string | null;
+  is_split?: number;
+  split_parent_id?: number | null;
   created_at: string;
   items?: CompletedOrderItem[];
 }
@@ -158,6 +162,72 @@ export interface CompletedOrderItem {
   quantity: number;
   subtotal: number;
   note?: string;
+}
+
+export interface CustomerItem {
+  id: number;
+  uuid: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  tier: 'regular' | 'bronze' | 'silver' | 'gold';
+  loyalty_points: number;
+  total_spent: number;
+  store_credit_balance: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CRMConfigItem {
+  id: number;
+  loyalty_enabled: number;
+  points_per_currency: number;
+  min_transaction_for_points: number;
+  tier_upgrade_enabled: number;
+  tier_upgrade_period: string;
+  bronze_threshold: number;
+  silver_threshold: number;
+  gold_threshold: number;
+  redemption_enabled: number;
+  points_to_currency_ratio: number;
+  min_points_to_redeem: number;
+  max_redemption_pct: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CustomerLoyaltyTransactionItem {
+  id: number;
+  customer_id: number;
+  order_id?: number;
+  type: 'earn' | 'redeem' | 'adjust';
+  points: number;
+  notes?: string;
+  created_at: string;
+}
+
+export interface CustomerBalanceTransactionItem {
+  id: number;
+  customer_id: number;
+  order_id?: number;
+  type: 'deposit' | 'spend' | 'refund';
+  amount: number;
+  notes?: string;
+  created_at: string;
+}
+
+export interface OrderSplitItem {
+  id: number;
+  parent_order_id: number;
+  split_index: number;
+  total_splits: number;
+  amount: number;
+  payment_method: string;
+  payment_provider?: string;
+  customer_id?: number;
+  status: string;
+  created_at: string;
 }
 
 // Database singleton instance and initialization promise
@@ -696,6 +766,10 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           change_amount REAL NOT NULL DEFAULT 0,
           items_count INTEGER NOT NULL DEFAULT 0,
           note TEXT,
+          customer_id INTEGER,
+          customer_name TEXT,
+          is_split INTEGER DEFAULT 0,
+          split_parent_id INTEGER,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
       `);
@@ -714,25 +788,123 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
         );
       `);
 
-      // Ensure migrations for existing databases that might miss note or columns
-      try {
-        const orderItemCols = await db.getAllAsync('PRAGMA table_info(order_items)');
-        const hasOrderItemNote = orderItemCols.some((col: any) => col.name === 'note');
-        if (!hasOrderItemNote) {
-          await db.execAsync('ALTER TABLE order_items ADD COLUMN note TEXT;');
-        }
-      } catch (err) {
-        console.error('Migration note check error for order_items:', err);
+      // CRM Tables
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS customers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          uuid TEXT UNIQUE,
+          name TEXT NOT NULL,
+          phone TEXT,
+          email TEXT,
+          notes TEXT,
+          tier TEXT DEFAULT 'regular',
+          loyalty_points INTEGER DEFAULT 0,
+          total_spent REAL DEFAULT 0,
+          store_credit_balance REAL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS crm_configs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          loyalty_enabled INTEGER DEFAULT 1,
+          points_per_currency REAL DEFAULT 0.01,
+          min_transaction_for_points REAL DEFAULT 0,
+          tier_upgrade_enabled INTEGER DEFAULT 1,
+          tier_upgrade_period TEXT DEFAULT 'lifetime',
+          bronze_threshold REAL DEFAULT 1000000,
+          silver_threshold REAL DEFAULT 5000000,
+          gold_threshold REAL DEFAULT 10000000,
+          redemption_enabled INTEGER DEFAULT 1,
+          points_to_currency_ratio REAL DEFAULT 0.01,
+          min_points_to_redeem INTEGER DEFAULT 100,
+          max_redemption_pct REAL DEFAULT 50,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS customer_loyalty_transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL,
+          order_id INTEGER,
+          type TEXT NOT NULL,
+          points INTEGER NOT NULL,
+          notes TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (customer_id) REFERENCES customers(id)
+        );
+      `);
+
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS customer_balance_transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL,
+          order_id INTEGER,
+          type TEXT NOT NULL,
+          amount REAL NOT NULL,
+          notes TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (customer_id) REFERENCES customers(id)
+        );
+      `);
+
+      // Order Splits Table
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS order_splits (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          parent_order_id INTEGER NOT NULL,
+          split_index INTEGER NOT NULL,
+          total_splits INTEGER NOT NULL,
+          amount REAL NOT NULL,
+          payment_method TEXT NOT NULL,
+          payment_provider TEXT,
+          customer_id INTEGER,
+          status TEXT DEFAULT 'completed',
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Default CRM Config seeding if missing
+      const existingCrm = await db.getAllAsync<any>('SELECT * FROM crm_configs LIMIT 1');
+      if (existingCrm.length === 0) {
+        await db.execAsync(`
+          INSERT INTO crm_configs (
+            loyalty_enabled, points_per_currency, min_transaction_for_points,
+            tier_upgrade_enabled, bronze_threshold, silver_threshold, gold_threshold,
+            redemption_enabled, points_to_currency_ratio, min_points_to_redeem, max_redemption_pct
+          ) VALUES (
+            1, 0.01, 0,
+            1, 1000000, 5000000, 10000000,
+            1, 0.01, 100, 50
+          );
+        `);
       }
 
+      // Migration check for orders table new columns
       try {
         const orderCols = await db.getAllAsync('PRAGMA table_info(orders)');
         const hasOrderNote = orderCols.some((col: any) => col.name === 'note');
         if (!hasOrderNote) {
           await db.execAsync('ALTER TABLE orders ADD COLUMN note TEXT;');
         }
+        const hasCustomerId = orderCols.some((col: any) => col.name === 'customer_id');
+        if (!hasCustomerId) {
+          await db.execAsync('ALTER TABLE orders ADD COLUMN customer_id INTEGER;');
+        }
+        const hasCustomerName = orderCols.some((col: any) => col.name === 'customer_name');
+        if (!hasCustomerName) {
+          await db.execAsync('ALTER TABLE orders ADD COLUMN customer_name TEXT;');
+        }
+        const hasIsSplit = orderCols.some((col: any) => col.name === 'is_split');
+        if (!hasIsSplit) {
+          await db.execAsync('ALTER TABLE orders ADD COLUMN is_split INTEGER DEFAULT 0;');
+        }
       } catch (err) {
-        console.error('Migration note check error for orders:', err);
+        console.error('Migration check error for orders:', err);
       }
 
       // Seed mock data if enabled
@@ -1369,6 +1541,10 @@ export const dbOperations = {
       amountPaid: number;
       changeAmount: number;
       note?: string;
+      customerId?: number | null;
+      customerName?: string | null;
+      isSplit?: boolean;
+      splitParentId?: number | null;
       items: Array<{
         productId: number;
         productName: string;
@@ -1383,8 +1559,9 @@ export const dbOperations = {
       `INSERT INTO orders (
         order_number, subtotal, discount_amount, discount_name, 
         tax_amount, service_amount, total, payment_type, 
-        payment_method, amount_paid, change_amount, items_count, note
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        payment_method, amount_paid, change_amount, items_count, note,
+        customer_id, customer_name, is_split, split_parent_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderData.orderNumber,
         orderData.subtotal,
@@ -1399,6 +1576,10 @@ export const dbOperations = {
         orderData.changeAmount,
         orderData.items.length,
         orderData.note || null,
+        orderData.customerId || null,
+        orderData.customerName || null,
+        orderData.isSplit ? 1 : 0,
+        orderData.splitParentId || null,
       ]
     );
 
@@ -1424,6 +1605,212 @@ export const dbOperations = {
       totalSales: result?.total || 0,
       orderCount: result?.count || 0,
     };
+  },
+
+  // ─── CRM & CUSTOMER OPERATIONS ───
+  async getCustomers(db: SQLite.SQLiteDatabase): Promise<CustomerItem[]> {
+    return await db.getAllAsync<CustomerItem>('SELECT * FROM customers ORDER BY name ASC');
+  },
+
+  async getCustomerById(db: SQLite.SQLiteDatabase, id: number): Promise<CustomerItem | null> {
+    return await db.getFirstAsync<CustomerItem>('SELECT * FROM customers WHERE id = ?', [id]);
+  },
+
+  async createCustomer(
+    db: SQLite.SQLiteDatabase,
+    data: { name: string; phone?: string; email?: string; notes?: string }
+  ): Promise<number> {
+    const uuid = 'cust_' + Math.random().toString(36).substring(2, 10);
+    const result = await db.runAsync(
+      'INSERT INTO customers (uuid, name, phone, email, notes, tier, loyalty_points, total_spent, store_credit_balance) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0)',
+      [uuid, data.name, data.phone || null, data.email || null, data.notes || null, 'regular']
+    );
+    return result.lastInsertRowId;
+  },
+
+  async updateCustomer(
+    db: SQLite.SQLiteDatabase,
+    id: number,
+    data: { name?: string; phone?: string; email?: string; notes?: string; tier?: 'regular' | 'bronze' | 'silver' | 'gold' }
+  ): Promise<void> {
+    const existing = await db.getFirstAsync<CustomerItem>('SELECT * FROM customers WHERE id = ?', [id]);
+    if (!existing) return;
+    await db.runAsync(
+      `UPDATE customers SET 
+        name = ?, phone = ?, email = ?, notes = ?, tier = ?, updated_at = datetime('now')
+       WHERE id = ?`,
+      [
+        data.name ?? existing.name,
+        data.phone ?? existing.phone ?? null,
+        data.email ?? existing.email ?? null,
+        data.notes ?? existing.notes ?? null,
+        data.tier ?? existing.tier ?? 'regular',
+        id,
+      ]
+    );
+  },
+
+  async deleteCustomer(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
+    await db.runAsync('DELETE FROM customers WHERE id = ?', [id]);
+  },
+
+  async updateCustomerPoints(
+    db: SQLite.SQLiteDatabase,
+    customerId: number,
+    pointsDelta: number,
+    type: 'earn' | 'redeem' | 'adjust',
+    orderId?: number,
+    notes?: string
+  ): Promise<void> {
+    const customer = await db.getFirstAsync<CustomerItem>('SELECT * FROM customers WHERE id = ?', [customerId]);
+    if (!customer) return;
+    const newPoints = Math.max(0, (customer.loyalty_points || 0) + pointsDelta);
+    await db.runAsync('UPDATE customers SET loyalty_points = ?, updated_at = datetime("now") WHERE id = ?', [
+      newPoints,
+      customerId,
+    ]);
+    await db.runAsync(
+      'INSERT INTO customer_loyalty_transactions (customer_id, order_id, type, points, notes) VALUES (?, ?, ?, ?, ?)',
+      [customerId, orderId || null, type, pointsDelta, notes || null]
+    );
+  },
+
+  async depositStoreCredit(
+    db: SQLite.SQLiteDatabase,
+    customerId: number,
+    amount: number,
+    notes?: string
+  ): Promise<void> {
+    const customer = await db.getFirstAsync<CustomerItem>('SELECT * FROM customers WHERE id = ?', [customerId]);
+    if (!customer) return;
+    const newBal = (customer.store_credit_balance || 0) + amount;
+    await db.runAsync('UPDATE customers SET store_credit_balance = ?, updated_at = datetime("now") WHERE id = ?', [
+      newBal,
+      customerId,
+    ]);
+    await db.runAsync(
+      'INSERT INTO customer_balance_transactions (customer_id, type, amount, notes) VALUES (?, ?, ?, ?)',
+      [customerId, 'deposit', amount, notes || 'Deposit store credit']
+    );
+  },
+
+  async spendStoreCredit(
+    db: SQLite.SQLiteDatabase,
+    customerId: number,
+    amount: number,
+    orderId?: number,
+    notes?: string
+  ): Promise<void> {
+    const customer = await db.getFirstAsync<CustomerItem>('SELECT * FROM customers WHERE id = ?', [customerId]);
+    if (!customer || (customer.store_credit_balance || 0) < amount) {
+      throw new Error('Insufficient store credit balance');
+    }
+    const newBal = (customer.store_credit_balance || 0) - amount;
+    await db.runAsync('UPDATE customers SET store_credit_balance = ?, updated_at = datetime("now") WHERE id = ?', [
+      newBal,
+      customerId,
+    ]);
+    await db.runAsync(
+      'INSERT INTO customer_balance_transactions (customer_id, order_id, type, amount, notes) VALUES (?, ?, ?, ?, ?)',
+      [customerId, orderId || null, 'spend', amount, notes || 'Spent store credit']
+    );
+  },
+
+  async getCustomerLoyaltyLogs(db: SQLite.SQLiteDatabase, customerId: number): Promise<CustomerLoyaltyTransactionItem[]> {
+    return await db.getAllAsync<CustomerLoyaltyTransactionItem>(
+      'SELECT * FROM customer_loyalty_transactions WHERE customer_id = ? ORDER BY created_at DESC',
+      [customerId]
+    );
+  },
+
+  async getCustomerBalanceLogs(db: SQLite.SQLiteDatabase, customerId: number): Promise<CustomerBalanceTransactionItem[]> {
+    return await db.getAllAsync<CustomerBalanceTransactionItem>(
+      'SELECT * FROM customer_balance_transactions WHERE customer_id = ? ORDER BY created_at DESC',
+      [customerId]
+    );
+  },
+
+  // ─── CRM CONFIG OPERATIONS ───
+  async getCRMConfig(db: SQLite.SQLiteDatabase): Promise<CRMConfigItem | null> {
+    const res = await db.getFirstAsync<CRMConfigItem>('SELECT * FROM crm_configs ORDER BY id ASC LIMIT 1');
+    return res || null;
+  },
+
+  async updateCRMConfig(
+    db: SQLite.SQLiteDatabase,
+    config: Partial<CRMConfigItem>
+  ): Promise<void> {
+    const existing = await db.getFirstAsync<CRMConfigItem>('SELECT * FROM crm_configs ORDER BY id ASC LIMIT 1');
+    if (!existing) return;
+    await db.runAsync(
+      `UPDATE crm_configs SET
+        loyalty_enabled = ?,
+        points_per_currency = ?,
+        min_transaction_for_points = ?,
+        tier_upgrade_enabled = ?,
+        bronze_threshold = ?,
+        silver_threshold = ?,
+        gold_threshold = ?,
+        redemption_enabled = ?,
+        points_to_currency_ratio = ?,
+        min_points_to_redeem = ?,
+        max_redemption_pct = ?,
+        updated_at = datetime('now')
+       WHERE id = ?`,
+      [
+        config.loyalty_enabled !== undefined ? config.loyalty_enabled : existing.loyalty_enabled,
+        config.points_per_currency !== undefined ? config.points_per_currency : existing.points_per_currency,
+        config.min_transaction_for_points !== undefined ? config.min_transaction_for_points : existing.min_transaction_for_points,
+        config.tier_upgrade_enabled !== undefined ? config.tier_upgrade_enabled : existing.tier_upgrade_enabled,
+        config.bronze_threshold !== undefined ? config.bronze_threshold : existing.bronze_threshold,
+        config.silver_threshold !== undefined ? config.silver_threshold : existing.silver_threshold,
+        config.gold_threshold !== undefined ? config.gold_threshold : existing.gold_threshold,
+        config.redemption_enabled !== undefined ? config.redemption_enabled : existing.redemption_enabled,
+        config.points_to_currency_ratio !== undefined ? config.points_to_currency_ratio : existing.points_to_currency_ratio,
+        config.min_points_to_redeem !== undefined ? config.min_points_to_redeem : existing.min_points_to_redeem,
+        config.max_redemption_pct !== undefined ? config.max_redemption_pct : existing.max_redemption_pct,
+        existing.id,
+      ]
+    );
+  },
+
+  // ─── SPLIT PAYMENT OPERATIONS ───
+  async createOrderSplits(
+    db: SQLite.SQLiteDatabase,
+    parentOrderId: number,
+    splits: Array<{
+      splitIndex: number;
+      totalSplits: number;
+      amount: number;
+      paymentMethod: string;
+      paymentProvider?: string;
+      customerId?: number;
+    }>
+  ): Promise<void> {
+    for (const s of splits) {
+      await db.runAsync(
+        `INSERT INTO order_splits (
+          parent_order_id, split_index, total_splits, amount, 
+          payment_method, payment_provider, customer_id, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'completed')`,
+        [
+          parentOrderId,
+          s.splitIndex,
+          s.totalSplits,
+          s.amount,
+          s.paymentMethod,
+          s.paymentProvider || null,
+          s.customerId || null,
+        ]
+      );
+    }
+  },
+
+  async getOrderSplits(db: SQLite.SQLiteDatabase, parentOrderId: number): Promise<OrderSplitItem[]> {
+    return await db.getAllAsync<OrderSplitItem>(
+      'SELECT * FROM order_splits WHERE parent_order_id = ? ORDER BY split_index ASC',
+      [parentOrderId]
+    );
   },
 };
 

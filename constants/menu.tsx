@@ -13,9 +13,11 @@ import {
   Scale,
   Settings,
   ShoppingCart,
+  Sparkles,
   Store, // Added for catalog grouping
   Tag,
-  Truck
+  Truck,
+  User,
 } from 'lucide-react-native';
 
 export type UserRole = 'Admin' | 'Manager' | 'Staff';
@@ -114,12 +116,27 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
     icon: BarChart3,
     roles: ['Admin', 'Manager'],
   },
-  // {
-  //   title: 'Staff',
-  //   path: '/staff',
-  //   icon: Users,
-  //   roles: ['Admin'],
-  // },
+  // --- GROUP: CUSTOMERS & CRM ---
+  {
+    title: 'Customers & CRM',
+    path: '/customers',
+    icon: User,
+    roles: ['Admin', 'Manager'],
+    children: [
+      {
+        title: 'Customers',
+        path: '/customers',
+        icon: User,
+        roles: ['Admin', 'Manager'],
+      },
+      {
+        title: 'CRM & Loyalty',
+        path: '/crm',
+        icon: Sparkles,
+        roles: ['Admin', 'Manager'],
+      },
+    ],
+  },
   // --- EXISTING GROUP: PAYMENT & TAXES ---
   {
     title: 'Payment & Taxes',

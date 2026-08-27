@@ -27,6 +27,10 @@ export interface ProcessCheckoutInput {
   taxAmount: number;
   serviceAmount: number;
   change: number;
+  customerId?: number | null;
+  customerName?: string | null;
+  isSplit?: boolean;
+  splitParentId?: number | null;
 }
 
 function calcDiscountAmount(discount: DiscountItem | null, subtotal: number): number {
@@ -123,6 +127,10 @@ export class CheckoutProcess {
         paymentMethod: displayMethodName,
         amountPaid: input.paymentMethod === 'cash' ? input.paymentAmount : input.total,
         changeAmount: input.change,
+        customerId: input.customerId,
+        customerName: input.customerName,
+        isSplit: input.isSplit,
+        splitParentId: input.splitParentId,
         items: input.cart.map((c) => ({
           productId: c.productId,
           productName: c.name,

@@ -1,5 +1,7 @@
 # MintyPOS - Point of Sale & Inventory Management System
 
+## EXPO SDK v54 React Native
+
 A comprehensive React Native/Expo POS system with advanced inventory management, recipe tracking, dynamic HPP (Harga Pokok Penjualan) cost calculation, FEFO/FIFO stock control, multi-tax & discount management, customizable payment providers, responsive multi-device layouts (Tablet & Mobile), and real-time activity logging.
 
 ---
@@ -102,6 +104,14 @@ MintyPOS is a production-grade Point of Sale (POS) and inventory control applica
 - **Real-Time Audit Metrics**: Summary bar displaying Total Logs, Restocks, Deductions, and Orders.
 - **Search & Filter Pills**: Filter by activity type (*All, Stock Added, Stock Deducted, Orders, Restocks*) or search by keyword.
 - **Nested Drawer Navigation**: Clean role-based navigation drawer with expandable dropdowns for financial and payment settings.
+
+### 8. Reports & Analytics
+- **Comprehensive Reporting System**: Sales, Inventory, and Profit reports with real-time data from SQLite database.
+- **Time-Based Filtering**: Filter reports by Today, This Week, This Month, or All Time.
+- **Sales Report**: Total revenue, orders, average order value, top selling products, payment method breakdown.
+- **Inventory Report**: Total items, inventory value, low stock alerts, category breakdown, expiring items.
+- **Profit Report**: Revenue, COGS, gross profit, profit margins, product profitability analysis, cost breakdown.
+- **Responsive Detail Views**: Detailed breakdowns with tables, charts placeholders, and key insights.
 
 ---
 
@@ -271,11 +281,37 @@ npx expo start --ios
 npx expo start --web
 ```
 
+### Build for Production
+```bash
+# Bump version (increments patch version and updates versionCode)
+npm run bump-version
+
+# Build app (interactive menu with options)
+npm run build
+```
+
+**Build Options:**
+1. bundleRelease (Production App Bundle - auto version bump)
+2. assembleRelease (Production APK - auto version bump)
+3. assembleDebug (Debug APK)
+4. installRelease (Install Production to device - auto version bump)
+5. installDebug (Install Debug to device)
+
 ---
 
 ## 🔄 Recent Updates & Changelog
 
-### Version 6.0 (Latest)
+### Version 1.0.1 (Latest)
+- 📊 **Reports & Analytics System**: Added comprehensive Sales, Inventory, and Profit reports with real-time data from SQLite database.
+- ⏱ **Time-Based Filtering**: Implemented Today, This Week, This Month, and All Time filters for all reports.
+- 📈 **Sales Report Dashboard**: Total revenue, orders, average order value, top selling products, payment method breakdown.
+- 📦 **Inventory Report Dashboard**: Total items, inventory value, low stock alerts, category breakdown, expiring items tracking.
+- 💰 **Profit Report Dashboard**: Revenue, COGS, gross profit, profit margins, product profitability analysis, cost breakdown.
+- 🏗 **Build Scripts**: Added version bump script (`npm run bump-version`) and build runner (`npm run build`) for Play Console releases.
+- 🔒 **Data Persistence**: Disabled mock data reset to preserve user data between app reloads.
+- 🎨 **UI Enhancements**: Updated drawer dropdown title colors to match single menu items for consistent styling.
+
+### Version 1.0.0
 - 💳 **Dedicated Payment Screen (`/pos/payment`)**: Converted payment flow into a responsive dedicated page with 2-column wide layout, subtotal breakdown, discount modal picker, cash numpad, quick chips, bank grid, and receipt confirmation.
 - 🛡 **Checkout Process & Safety Validator (`checkoutProcess.ts` & `checkoutValidator.ts`)**: Built full checkout orchestration and pre-payment safety validation.
 - 🧾 **Taxes & Service Charge System**: Created multi-tax configuration engine with active rate toggles and full 4-layer architecture.
