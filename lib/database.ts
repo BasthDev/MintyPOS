@@ -512,7 +512,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
       // Get current database version
       const versionResult = await db.getFirstAsync<{ version: number }>('PRAGMA user_version');
       const currentVersion = versionResult?.version || 0;
-      const TARGET_VERSION = 6;
+      const TARGET_VERSION = 8;
 
       // Create all base tables first
       await db.execAsync(`
@@ -690,6 +690,31 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
             }
           } catch (error) {
             console.error('Migration error for version 6:', error);
+          }
+        }
+
+        if (currentVersion < 8) {
+          try {
+            const orderCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(orders)');
+            const colNames = new Set(orderCols.map((col: any) => col.name));
+
+            if (!colNames.has('note')) {
+              await db.execAsync('ALTER TABLE orders ADD COLUMN note TEXT;');
+            }
+            if (!colNames.has('customer_id')) {
+              await db.execAsync('ALTER TABLE orders ADD COLUMN customer_id INTEGER;');
+            }
+            if (!colNames.has('customer_name')) {
+              await db.execAsync('ALTER TABLE orders ADD COLUMN customer_name TEXT;');
+            }
+            if (!colNames.has('is_split')) {
+              await db.execAsync('ALTER TABLE orders ADD COLUMN is_split INTEGER DEFAULT 0;');
+            }
+            if (!colNames.has('split_parent_id')) {
+              await db.execAsync('ALTER TABLE orders ADD COLUMN split_parent_id INTEGER;');
+            }
+          } catch (error) {
+            console.error('Migration error for version 8 (orders columns):', error);
           }
         }
       }
@@ -1555,44 +1580,100 @@ export const dbOperations = {
       }>;
     }
   ): Promise<number> {
-    const result = await db.runAsync(
-      `INSERT INTO orders (
-        order_number, subtotal, discount_amount, discount_name, 
-        tax_amount, service_amount, total, payment_type, 
-        payment_method, amount_paid, change_amount, items_count, note,
-        customer_id, customer_name, is_split, split_parent_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        orderData.orderNumber,
-        orderData.subtotal,
-        orderData.discountAmount,
-        orderData.discountName || null,
-        orderData.taxAmount,
-        orderData.serviceAmount,
-        orderData.total,
-        orderData.paymentType,
-        orderData.paymentMethod,
-        orderData.amountPaid,
-        orderData.changeAmount,
-        orderData.items.length,
-        orderData.note || null,
-        orderData.customerId || null,
-        orderData.customerName || null,
-        orderData.isSplit ? 1 : 0,
-        orderData.splitParentId || null,
-      ]
-    );
-
-    const orderId = result.lastInsertRowId;
-
-    for (const item of orderData.items) {
-      await db.runAsync(
-        'INSERT INTO order_items (order_id, product_id, product_name, price, quantity, subtotal, note) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [orderId, item.productId, item.productName, item.price, item.quantity, item.subtotal, item.note || null]
+    try {
+      const result = await db.runAsync(
+        `INSERT INTO orders (
+          order_number, subtotal, discount_amount, discount_name, 
+          tax_amount, service_amount, total, payment_type, 
+          payment_method, amount_paid, change_amount, items_count, note,
+          customer_id, customer_name, is_split, split_parent_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          orderData.orderNumber,
+          orderData.subtotal,
+          orderData.discountAmount,
+          orderData.discountName || null,
+          orderData.taxAmount,
+          orderData.serviceAmount,
+          orderData.total,
+          orderData.paymentType,
+          orderData.paymentMethod,
+          orderData.amountPaid,
+          orderData.changeAmount,
+          orderData.items.length,
+          orderData.note || null,
+          orderData.customerId || null,
+          orderData.customerName || null,
+          orderData.isSplit ? 1 : 0,
+          orderData.splitParentId || null,
+        ]
       );
-    }
 
-    return orderId;
+      const orderId = result.lastInsertRowId;
+
+      for (const item of orderData.items) {
+        await db.runAsync(
+          'INSERT INTO order_items (order_id, product_id, product_name, price, quantity, subtotal, note) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [orderId, item.productId, item.productName, item.price, item.quantity, item.subtotal, item.note || null]
+        );
+      }
+
+      return orderId;
+    } catch (insertErr: any) {
+      if (insertErr?.message && (insertErr.message.includes('has no column') || insertErr.message.includes('column'))) {
+        try {
+          const orderCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(orders)');
+          const colNames = new Set(orderCols.map((col: any) => col.name));
+          if (!colNames.has('note')) await db.execAsync('ALTER TABLE orders ADD COLUMN note TEXT;');
+          if (!colNames.has('customer_id')) await db.execAsync('ALTER TABLE orders ADD COLUMN customer_id INTEGER;');
+          if (!colNames.has('customer_name')) await db.execAsync('ALTER TABLE orders ADD COLUMN customer_name TEXT;');
+          if (!colNames.has('is_split')) await db.execAsync('ALTER TABLE orders ADD COLUMN is_split INTEGER DEFAULT 0;');
+          if (!colNames.has('split_parent_id')) await db.execAsync('ALTER TABLE orders ADD COLUMN split_parent_id INTEGER;');
+
+          const result = await db.runAsync(
+            `INSERT INTO orders (
+              order_number, subtotal, discount_amount, discount_name, 
+              tax_amount, service_amount, total, payment_type, 
+              payment_method, amount_paid, change_amount, items_count, note,
+              customer_id, customer_name, is_split, split_parent_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              orderData.orderNumber,
+              orderData.subtotal,
+              orderData.discountAmount,
+              orderData.discountName || null,
+              orderData.taxAmount,
+              orderData.serviceAmount,
+              orderData.total,
+              orderData.paymentType,
+              orderData.paymentMethod,
+              orderData.amountPaid,
+              orderData.changeAmount,
+              orderData.items.length,
+              orderData.note || null,
+              orderData.customerId || null,
+              orderData.customerName || null,
+              orderData.isSplit ? 1 : 0,
+              orderData.splitParentId || null,
+            ]
+          );
+
+          const orderId = result.lastInsertRowId;
+
+          for (const item of orderData.items) {
+            await db.runAsync(
+              'INSERT INTO order_items (order_id, product_id, product_name, price, quantity, subtotal, note) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [orderId, item.productId, item.productName, item.price, item.quantity, item.subtotal, item.note || null]
+            );
+          }
+
+          return orderId;
+        } catch (retryErr) {
+          console.error('Failed after retrying order migration:', retryErr);
+        }
+      }
+      throw insertErr;
+    }
   },
 
   async getTodaysSalesStats(db: SQLite.SQLiteDatabase): Promise<{ totalSales: number; orderCount: number }> {

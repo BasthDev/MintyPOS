@@ -4,11 +4,19 @@ import {
   Banknote,
   CheckCircle,
   CheckCircle2,
+  Coins,
   CreditCard,
+  Divide,
   FileText,
+  Minus,
+  Plus,
   QrCode,
+  Search,
   Smartphone,
+  Sparkles,
   Tag,
+  User,
+  Users,
   Wallet,
   X,
   XCircle
@@ -25,7 +33,9 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   useWindowDimensions,
@@ -36,6 +46,8 @@ import { Header } from '@/components/Header';
 import { ColorTheme, useTheme, withOpacity } from '@/constants/colorTheme';
 import {
   CompletedOrder,
+  CRMConfigItem,
+  CustomerItem,
   dbOperations,
   DiscountItem,
   getDatabase,
@@ -45,6 +57,8 @@ import {
 import { formatCurrency as fmt } from '@/lib/utils';
 import { CartProcess } from '@/processes/cartProcess';
 import { CheckoutProcess } from '@/processes/checkoutProcess';
+import { CRMProcess } from '@/processes/crmProcess';
+import { CustomerProcess } from '@/processes/customerProcess';
 import { useStore } from '@/store/useStore';
 
 // ─── Helper: compute discount amount from a Discount preset ─────────────────
@@ -59,6 +73,14 @@ function calcDiscountAmount(discount: DiscountItem | null, subtotal: number): nu
     return raw;
   }
   return Math.min(discount.value, subtotal);
+}
+
+// ─── Helper: convert number to ordinal (1st, 2nd, 3rd, etc.) ─────────────────
+
+function getOrdinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
 // ─── Helper sub-components ────────────────────────────────────────────────────
@@ -242,7 +264,197 @@ function BankGrid({
   );
 }
 
-// ─── Discount Picker Modal ────────────────────────────────────────────────────
+// ─── Customer Selection Modal ────────────────────────────────────────────────
+
+function CustomerPickerModal({
+  visible,
+  customers,
+  loading,
+  selectedCustomer,
+  onCustomerSelect,
+  onClose,
+  theme,
+}: {
+  visible: boolean;
+  customers: CustomerItem[];
+  loading: boolean;
+  selectedCustomer: CustomerItem | null;
+  onCustomerSelect: (customer: CustomerItem | null) => void;
+  onClose: () => void;
+  theme: ColorTheme;
+}) {
+  const [search, setSearch] = useState('');
+
+  const filtered = customers.filter(
+    (c) =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.phone && c.phone.includes(search)) ||
+      (c.email && c.email.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={() => {
+        Keyboard.dismiss();
+        onClose();
+      }}
+    >
+      <View style={{ flex: 1 }}>
+        <TouchableWithoutFeedback
+          onPress={() => {
+            Keyboard.dismiss();
+            onClose();
+          }}
+        >
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.overlay }]} />
+        </TouchableWithoutFeedback>
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1, justifyContent: 'flex-end' }}
+          pointerEvents="box-none"
+        >
+          <View
+            style={[
+              dm.sheet,
+              { backgroundColor: theme.card, borderColor: theme.border, borderTopWidth: 1 },
+            ]}
+          >
+            <Pressable style={[dm.sheetHeader, { borderBottomColor: theme.divider }]} onPress={Keyboard.dismiss}>
+              <View style={dm.sheetTitleRow}>
+                <User size={18} color={theme.primary} />
+                <Text style={[dm.sheetTitle, { color: theme.text }]}>Select Customer (CRM)</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  Keyboard.dismiss();
+                  onClose();
+                }}
+                style={dm.closeBtn}
+              >
+                <X size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </Pressable>
+
+            {/* Search input */}
+            <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 6 }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  height: 40,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  backgroundColor: theme.input,
+                  paddingHorizontal: 12,
+                }}
+              >
+                <Search size={16} color={theme.textSecondary} />
+                <TextInput
+                  style={{ flex: 1, fontSize: 13, color: theme.text }}
+                  placeholder="Search customer by name or phone..."
+                  placeholderTextColor={theme.textTertiary}
+                  value={search}
+                  onChangeText={setSearch}
+                />
+              </View>
+            </View>
+
+            {/* Walk-in (No customer) */}
+            <TouchableOpacity
+              style={[
+                dm.discountRow,
+                !selectedCustomer && { backgroundColor: withOpacity(theme.primary, 0.1) },
+              ]}
+              onPress={() => {
+                Keyboard.dismiss();
+                onCustomerSelect(null);
+              }}
+              activeOpacity={0.75}
+            >
+              <View style={[dm.discountIcon, { backgroundColor: theme.input }]}>
+                <XCircle size={18} color={theme.textSecondary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[dm.discountName, { color: theme.text }]}>Walk-in Customer</Text>
+                <Text style={[dm.discountSub, { color: theme.textSecondary }]}>No customer attached</Text>
+              </View>
+              {!selectedCustomer && <CheckCircle2 size={20} color={theme.primary} />}
+            </TouchableOpacity>
+
+            <View style={[dm.divider, { backgroundColor: theme.divider }]} />
+
+            {loading ? (
+              <View style={dm.centered}>
+                <ActivityIndicator color={theme.primary} />
+              </View>
+            ) : filtered.length === 0 ? (
+              <View style={dm.centered}>
+                <Text style={[dm.emptyText, { color: theme.textSecondary }]}>No customers found.</Text>
+              </View>
+            ) : (
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                style={{ maxHeight: 260 }}
+              >
+                {filtered.map((c) => {
+                  const isActive = selectedCustomer?.id === c.id;
+                  return (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[
+                        dm.discountRow,
+                        isActive && { backgroundColor: withOpacity(theme.primary, 0.12) },
+                      ]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        onCustomerSelect(c);
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <View style={[dm.discountIcon, { backgroundColor: withOpacity(theme.primary, 0.15) }]}>
+                        <User size={18} color={theme.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[dm.discountName, { color: theme.text }]}>{c.name}</Text>
+                        <Text style={[dm.discountSub, { color: theme.textSecondary }]}>
+                          {c.phone || c.email || 'No contact'} • Pts: {c.loyalty_points || 0}
+                        </Text>
+                      </View>
+                      {isActive && (
+                        <CheckCircle2 size={20} color={theme.primary} style={{ marginLeft: 8 }} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            <View style={[dm.sheetFooter, { borderTopColor: theme.divider }]}>
+              <TouchableOpacity
+                style={[dm.doneBtn, { backgroundColor: theme.primary }]}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  onClose();
+                }}
+              >
+                <Text style={dm.doneBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── Discount Picker Modal (with Loyalty Point Redemption) ────────────────────
 
 function DiscountPickerModal({
   visible,
@@ -253,6 +465,12 @@ function DiscountPickerModal({
   onDiscountSelect,
   onClose,
   theme,
+  crmConfig,
+  customer,
+  pointsToRedeem,
+  onPointsRedeemChange,
+  pointRedemptionEnabled,
+  onPointRedemptionToggle,
 }: {
   visible: boolean;
   discounts: DiscountItem[];
@@ -262,7 +480,34 @@ function DiscountPickerModal({
   onDiscountSelect: (discount: DiscountItem | null) => void;
   onClose: () => void;
   theme: ColorTheme;
+  crmConfig: CRMConfigItem | null;
+  customer: CustomerItem | null;
+  pointsToRedeem: number;
+  onPointsRedeemChange: (points: number) => void;
+  pointRedemptionEnabled: boolean;
+  onPointRedemptionToggle: (enabled: boolean) => void;
 }) {
+  const maxPointsToRedeem =
+    crmConfig && customer
+      ? Math.min(
+          customer.loyalty_points || 0,
+          crmConfig.max_redemption_pct > 0
+            ? Math.floor(((subtotal * crmConfig.max_redemption_pct) / 100) / crmConfig.points_to_currency_ratio)
+            : customer.loyalty_points || 0
+        )
+      : 0;
+
+  const pointDiscountValue =
+    pointRedemptionEnabled && crmConfig
+      ? Math.floor(pointsToRedeem * crmConfig.points_to_currency_ratio)
+      : 0;
+
+  const canRedeemPoints =
+    crmConfig &&
+    crmConfig.redemption_enabled === 1 &&
+    customer &&
+    (customer.loyalty_points || 0) >= (crmConfig.min_points_to_redeem || 0);
+
   return (
     <Modal
       visible={visible}
@@ -353,7 +598,7 @@ function DiscountPickerModal({
               <ScrollView
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
-                style={{ maxHeight: 320 }}
+                style={{ maxHeight: 240 }}
               >
                 {discounts.map((d) => {
                   const isActive = selectedDiscount?.id === d.id;
@@ -427,6 +672,121 @@ function DiscountPickerModal({
               </ScrollView>
             )}
 
+            {/* Point Redemption Section */}
+            {canRedeemPoints && (
+              <>
+                <View style={[dm.divider, { backgroundColor: theme.divider }]} />
+                <Pressable
+                  style={{
+                    padding: 16,
+                    backgroundColor: withOpacity(theme.primary, 0.08),
+                    borderTopWidth: 1,
+                    borderColor: theme.divider,
+                  }}
+                  onPress={Keyboard.dismiss}
+                >
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: 10,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Sparkles size={18} color={theme.primary} />
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>
+                        Redeem Points (Discount)
+                      </Text>
+                    </View>
+                    <Switch
+                      value={pointRedemptionEnabled}
+                      onValueChange={(val) => {
+                        Keyboard.dismiss();
+                        onPointRedemptionToggle(val);
+                      }}
+                      trackColor={{ false: '#D1D5DB', true: theme.primary }}
+                      thumbColor={pointRedemptionEnabled ? theme.primary : '#9CA3AF'}
+                    />
+                  </View>
+
+                  {pointRedemptionEnabled && (
+                    <View style={{ gap: 8 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 12, color: theme.textSecondary }}>
+                          Available:{' '}
+                          <Text style={{ fontWeight: '700', color: theme.primary }}>
+                            {customer?.loyalty_points || 0} pts
+                          </Text>
+                        </Text>
+                        <Text style={{ fontSize: 12, color: theme.textSecondary }}>
+                          Max:{' '}
+                          <Text style={{ fontWeight: '700', color: theme.primary }}>
+                            {maxPointsToRedeem} pts
+                          </Text>
+                        </Text>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <TextInput
+                          style={{
+                            flex: 1,
+                            height: 38,
+                            backgroundColor: theme.card,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: theme.border,
+                            paddingHorizontal: 12,
+                            fontSize: 14,
+                            fontWeight: '700',
+                            color: theme.text,
+                          }}
+                          keyboardType="number-pad"
+                          value={pointsToRedeem > 0 ? String(pointsToRedeem) : ''}
+                          onChangeText={(text) => {
+                            const val = parseInt(text) || 0;
+                            onPointsRedeemChange(Math.min(val, maxPointsToRedeem));
+                          }}
+                          placeholder="Enter points"
+                          placeholderTextColor={theme.textTertiary}
+                        />
+                        <TouchableOpacity
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            backgroundColor: theme.primary,
+                            borderRadius: 8,
+                          }}
+                          onPress={() => {
+                            Keyboard.dismiss();
+                            onPointsRedeemChange(maxPointsToRedeem);
+                          }}
+                        >
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFF' }}>MAX</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {pointDiscountValue > 0 && (
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            paddingTop: 4,
+                          }}
+                        >
+                          <Text style={{ fontSize: 12, color: theme.textSecondary }}>Discount value:</Text>
+                          <Text style={{ fontSize: 14, fontWeight: '700', color: theme.success }}>
+                            -{fmt(pointDiscountValue)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </Pressable>
+              </>
+            )}
+
             <View style={[dm.sheetFooter, { borderTopColor: theme.divider }]}>
               <TouchableOpacity
                 style={[dm.doneBtn, { backgroundColor: theme.primary }]}
@@ -470,6 +830,31 @@ export default function POSPaymentScreen() {
   const [discountPickerVisible, setDiscountPickerVisible] = useState(false);
   const [selectedDiscount, setSelectedDiscount] = useState<DiscountItem | null>(null);
 
+  // CRM / Customer state
+  const [customers, setCustomers] = useState<CustomerItem[]>([]);
+  const [crmConfig, setCrmConfig] = useState<CRMConfigItem | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerItem | null>(null);
+  const [customerPickerVisible, setCustomerPickerVisible] = useState(false);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [pointRedemptionEnabled, setPointRedemptionEnabled] = useState(false);
+
+  // Split payment state
+  const [splitConfig, setSplitConfig] = useState<{
+    splitCount: number;
+    splitType: 'equal' | 'custom';
+    customAmounts: number[];
+  } | null>(null);
+  const [currentSplitIndex, setCurrentSplitIndex] = useState(0);
+  const [paidSplits, setPaidSplits] = useState<
+    Array<{ splitIndex: number; amount: number; paymentMethod: string; provider?: string }>
+  >([]);
+  const [allSplitsCollected, setAllSplitsCollected] = useState(false);
+
+  // Split configuration inputs
+  const [splitCount, setSplitCount] = useState(2);
+  const [splitType, setSplitType] = useState<'equal' | 'custom'>('equal');
+  const [customAmounts, setCustomAmounts] = useState<number[]>([]);
+
   // Cart modal state (mobile)
   const [cartModalVisible, setCartModalVisible] = useState(false);
 
@@ -485,14 +870,18 @@ export default function POSPaymentScreen() {
     setLoadingConfigs(true);
     try {
       const db = await getDatabase();
-      const [methods, taxes, discList] = await Promise.all([
+      const [methods, taxes, discList, crmRes, custRes] = await Promise.all([
         dbOperations.getActivePaymentMethods(db),
         dbOperations.getActiveTaxConfigs(db),
         dbOperations.getActiveDiscounts(db),
+        CRMProcess.getConfig(db),
+        CustomerProcess.getAll(db),
       ]);
       setPaymentMethods(methods);
       setTaxConfigs(taxes);
       setDiscounts(discList);
+      if (crmRes.success && crmRes.data) setCrmConfig(crmRes.data);
+      if (custRes.success && custRes.data) setCustomers(custRes.data);
     } catch (error) {
       console.error('Failed to load payment settings:', error);
     } finally {
@@ -505,9 +894,14 @@ export default function POSPaymentScreen() {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cart]);
 
-  // 2. Discount Amount
+  // 2. Discount Amount (Preset + Loyalty Point Redemption)
   const discountAmount = calcDiscountAmount(selectedDiscount, subtotal);
-  const afterDiscount = Math.max(0, subtotal - discountAmount);
+  const pointDiscountAmount =
+    pointRedemptionEnabled && crmConfig && pointsToRedeem > 0
+      ? Math.floor(pointsToRedeem * (crmConfig.points_to_currency_ratio || 0.01))
+      : 0;
+  const totalDiscount = discountAmount + pointDiscountAmount;
+  const afterDiscount = Math.max(0, subtotal - totalDiscount);
 
   // 3. Tax & Service Charge
   const { taxAmount, serviceAmount, taxRate, serviceRate } = useMemo(() => {
@@ -538,10 +932,11 @@ export default function POSPaymentScreen() {
 
   // 4. Net Total
   const total = Math.max(0, afterDiscount + taxAmount + serviceAmount);
-  const paymentAmount = method === 'cash' ? parseFloat(numpadStr) || 0 : total;
-  const change = method === 'cash' ? Math.max(0, paymentAmount - total) : 0;
+  const currentSplitAmount = splitConfig ? splitConfig.customAmounts[currentSplitIndex] || 0 : total;
+  const paymentAmount = method === 'cash' ? parseFloat(numpadStr) || 0 : currentSplitAmount;
+  const change = method === 'cash' ? Math.max(0, paymentAmount - currentSplitAmount) : 0;
 
-  // 5. Available Payment Method Categories (derived dynamically from database)
+  // 5. Available Payment Method Categories (derived dynamically from database + Split)
   const availableMethodTypes = useMemo(() => {
     const types: { key: string; label: string; icon: any }[] = [
       { key: 'cash', label: 'Cash', icon: Banknote },
@@ -565,59 +960,74 @@ export default function POSPaymentScreen() {
       }
     });
 
+    // Add Split Pay option to top/left methods
+    types.push({ key: 'split', label: 'Split', icon: Divide });
+
     return types;
   }, [paymentMethods]);
 
   // Providers list for current non-cash method
   const activeProvidersForMethod = useMemo(() => {
-    if (method === 'cash') return [];
+    if (method === 'cash' || method === 'split') return [];
     const matching = paymentMethods.filter((m) => m.type_key === method && m.is_active);
     return matching.map((m) => m.method_name);
   }, [method, paymentMethods]);
 
   // Smart Quick Amounts based on total and currency
   const quickAmounts = useMemo(() => {
+    const targetAmt = splitConfig ? currentSplitAmount : total;
     const list = new Set<number>();
-    if (total > 0) list.add(total);
+    if (targetAmt > 0) list.add(targetAmt);
 
     if (currency?.code === 'IDR' || currency?.decimals === 0) {
       const base = [10000, 20000, 50000, 100000, 200000, 500000];
-      if (total > 0) {
-        const round10k = Math.ceil(total / 10000) * 10000;
-        const round50k = Math.ceil(total / 50000) * 50000;
-        const round100k = Math.ceil(total / 100000) * 100000;
-        if (round10k > total) list.add(round10k);
-        if (round50k > total) list.add(round50k);
-        if (round100k > total) list.add(round100k);
+      if (targetAmt > 0) {
+        const round10k = Math.ceil(targetAmt / 10000) * 10000;
+        const round50k = Math.ceil(targetAmt / 50000) * 50000;
+        const round100k = Math.ceil(targetAmt / 100000) * 100000;
+        if (round10k > targetAmt) list.add(round10k);
+        if (round50k > targetAmt) list.add(round50k);
+        if (round100k > targetAmt) list.add(round100k);
       }
       base.forEach((b) => {
-        if (b >= total) list.add(b);
+        if (b >= targetAmt) list.add(b);
       });
     } else {
       const base = [5, 10, 20, 50, 100, 200];
-      if (total > 0) {
-        const round1 = Math.ceil(total);
-        const round5 = Math.ceil(total / 5) * 5;
-        const round10 = Math.ceil(total / 10) * 10;
-        const round20 = Math.ceil(total / 20) * 20;
-        if (round1 > total) list.add(round1);
-        if (round5 > total) list.add(round5);
-        if (round10 > total) list.add(round10);
-        if (round20 > total) list.add(round20);
+      if (targetAmt > 0) {
+        const round1 = Math.ceil(targetAmt);
+        const round5 = Math.ceil(targetAmt / 5) * 5;
+        const round10 = Math.ceil(targetAmt / 10) * 10;
+        const round20 = Math.ceil(targetAmt / 20) * 20;
+        if (round1 > targetAmt) list.add(round1);
+        if (round5 > targetAmt) list.add(round5);
+        if (round10 > targetAmt) list.add(round10);
+        if (round20 > targetAmt) list.add(round20);
       }
       base.forEach((b) => {
-        if (b >= total) list.add(b);
+        if (b >= targetAmt) list.add(b);
       });
     }
     return Array.from(list).sort((a, b) => a - b).slice(0, 8);
-  }, [total, currency]);
+  }, [total, currentSplitAmount, splitConfig, currency]);
 
-  const isNonCash = method !== 'cash';
+  const isNonCash = method !== 'cash' && method !== 'split';
+  const isBankMethod = method === 'qris' || method === 'transfer' || method === 'card';
+
   const canConfirm =
-    subtotal > 0 &&
-    (method === 'cash' ? paymentAmount >= total : selectedBank !== null);
+    (method === 'split' && !splitConfig) ||
+    (allSplitsCollected && splitConfig) ||
+    (splitConfig &&
+      !allSplitsCollected &&
+      paymentAmount >= currentSplitAmount &&
+      method !== 'split' &&
+      (!isBankMethod || selectedBank !== null)) ||
+    (!splitConfig &&
+      subtotal > 0 &&
+      paymentAmount >= currentSplitAmount &&
+      (method === 'cash' ? paymentAmount >= total : selectedBank !== null));
 
-  const shortfall = total - paymentAmount;
+  const shortfall = currentSplitAmount - paymentAmount;
 
   const handleNumpad = (key: string) => {
     if (key === '⌫') setNumpadStr((prev) => prev.slice(0, -1));
@@ -638,25 +1048,144 @@ export default function POSPaymentScreen() {
       return;
     }
 
+    // A. Start split payment configuration
+    if (method === 'split' && !splitConfig) {
+      let amounts: number[] = [];
+      if (splitType === 'equal') {
+        const perPerson = Math.round((total / splitCount) * 100) / 100;
+        amounts = Array(splitCount).fill(perPerson);
+        const sum = amounts.reduce((a, b) => a + b, 0);
+        amounts[splitCount - 1] = Math.round((amounts[splitCount - 1] + (total - sum)) * 100) / 100;
+      } else {
+        amounts = customAmounts.length === splitCount ? [...customAmounts] : Array(splitCount).fill(0);
+        const sum = amounts.reduce((a, b) => a + b, 0);
+        if (Math.abs(sum - total) > 1) {
+          Alert.alert(
+            'Invalid Split Total',
+            `Sum of custom amounts (${fmt(sum)}) must equal total order (${fmt(total)}).`
+          );
+          return;
+        }
+      }
+
+      setSplitConfig({
+        splitCount,
+        splitType,
+        customAmounts: amounts,
+      });
+      setCurrentSplitIndex(0);
+      setPaidSplits([]);
+      setAllSplitsCollected(false);
+      setMethod('cash');
+      setNumpadStr('');
+      setSelectedBank(null);
+      return;
+    }
+
+    // B. Collect individual split payment
+    if (splitConfig && !allSplitsCollected) {
+      const thisSplitPayment = {
+        splitIndex: currentSplitIndex,
+        amount: currentSplitAmount,
+        paymentMethod: method,
+        provider: selectedBank || undefined,
+      };
+
+      const updatedPaidSplits = [...paidSplits, thisSplitPayment];
+      setPaidSplits(updatedPaidSplits);
+
+      if (updatedPaidSplits.length === splitConfig.splitCount) {
+        setAllSplitsCollected(true);
+        Alert.alert(
+          'All Splits Collected',
+          'All split payments have been collected. Tap "Confirm Payment" to finish the order.'
+        );
+      } else {
+        const nextIndex = currentSplitIndex + 1;
+        setCurrentSplitIndex(nextIndex);
+        setMethod('cash');
+        setNumpadStr('');
+        setSelectedBank(null);
+      }
+      return;
+    }
+
+    // C. Final order checkout confirmation
     setConfirming(true);
     try {
+      const db = await getDatabase();
+      const displayMethodName = splitConfig
+        ? 'SPLIT PAYMENT'
+        : (method === 'qris' || method === 'transfer' || method === 'card') && selectedBank
+        ? `${method.toUpperCase()} | ${selectedBank}`
+        : method.toUpperCase();
+
       const result = await CheckoutProcess.processCheckout({
         cart,
         subtotal,
         total,
-        paymentMethod: method,
-        paymentAmount: method === 'cash' ? paymentAmount : total,
+        paymentMethod: displayMethodName,
+        paymentAmount: method === 'cash' && !splitConfig ? paymentAmount : total,
         selectedBank: isNonCash ? selectedBank : null,
         selectedDiscount,
-        discountAmount,
+        discountAmount: totalDiscount,
         taxAmount,
         serviceAmount,
-        change,
+        change: splitConfig ? 0 : change,
+        customerId: selectedCustomer?.id,
+        customerName: selectedCustomer?.name,
+        isSplit: !!splitConfig,
       });
 
       if (!result.success || !result.order) {
         Alert.alert('Payment Error', (result.errors || ['Validation failed']).join('\n'));
         return;
+      }
+
+      // Record split payment details if split
+      if (splitConfig && paidSplits.length > 0) {
+        await dbOperations.createOrderSplits(
+          db,
+          result.order.id,
+          paidSplits.map((s) => ({
+            splitIndex: s.splitIndex,
+            totalSplits: splitConfig.splitCount,
+            amount: s.amount,
+            paymentMethod: s.paymentMethod,
+            paymentProvider: s.provider,
+            customerId: selectedCustomer?.id,
+          }))
+        );
+      }
+
+      // Handle CRM Loyalty Points Earning & Redemption
+      if (selectedCustomer && crmConfig) {
+        if (crmConfig.loyalty_enabled === 1 && total >= (crmConfig.min_transaction_for_points || 0)) {
+          const earnedPts = Math.floor(total * (crmConfig.points_per_currency || 0.01));
+          if (earnedPts > 0) {
+            const dbRef = await getDatabase();
+            await dbOperations.updateCustomerPoints(
+              dbRef,
+              selectedCustomer.id,
+              earnedPts,
+              'earn',
+              result.order.id,
+              'Earned points from order'
+            );
+          }
+        }
+
+        if (pointRedemptionEnabled && pointsToRedeem > 0) {
+          const dbRef = await getDatabase();
+          await dbOperations.updateCustomerPoints(
+            dbRef,
+            selectedCustomer.id,
+            -pointsToRedeem,
+            'redeem',
+            result.order.id,
+            'Redeemed points for discount'
+          );
+        }
       }
 
       CartProcess.clearCart();
@@ -681,22 +1210,49 @@ export default function POSPaymentScreen() {
     setDiscountPickerVisible(false);
   };
 
-  const discountRightIcon = selectedDiscount ? (
-    <View style={[styles.discountHeaderBadge, { backgroundColor: theme.primary }]}>
-      <Tag size={16} color="#FFFFFF" />
+  // Header Right Buttons (Customer + Discount)
+  const headerRight = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      {/* Customer Header Button */}
+      <TouchableOpacity
+        style={[
+          styles.discountHeaderBadge,
+          {
+            backgroundColor: selectedCustomer ? theme.primary : theme.card,
+            borderWidth: 1,
+            borderColor: theme.border,
+          },
+        ]}
+        onPress={() => setCustomerPickerVisible(true)}
+      >
+        <User size={16} color={selectedCustomer ? '#FFFFFF' : theme.text} />
+      </TouchableOpacity>
+
+      {/* Discount Header Button */}
+      <TouchableOpacity
+        style={[
+          styles.discountHeaderBadge,
+          {
+            backgroundColor: selectedDiscount || (pointRedemptionEnabled && pointsToRedeem > 0) ? theme.primary : theme.card,
+            borderWidth: 1,
+            borderColor: theme.border,
+          },
+        ]}
+        onPress={() => setDiscountPickerVisible(true)}
+      >
+        <Tag size={16} color={selectedDiscount || (pointRedemptionEnabled && pointsToRedeem > 0) ? '#FFFFFF' : theme.text} />
+      </TouchableOpacity>
     </View>
-  ) : (
-    <Tag size={20} color={theme.text} />
   );
 
-  // Dynamic summary items mapping list
+  // Dynamic summary items mapping list (Exact original structure)
   const summaryItems = useMemo(() => {
     const items: { label: string; value: string; accent?: boolean; green?: boolean; red?: boolean }[] = [];
     
     items.push({ label: 'Subtotal', value: fmt(subtotal) });
 
-    if (discountAmount > 0) {
-      items.push({ label: 'Discount', value: `-${fmt(discountAmount)}`, red: true });
+    if (totalDiscount > 0) {
+      items.push({ label: 'Discount', value: `-${fmt(totalDiscount)}`, red: true });
     }
     if (serviceAmount > 0) {
       items.push({ label: `Service (${serviceRate}%)`, value: fmt(serviceAmount) });
@@ -705,12 +1261,16 @@ export default function POSPaymentScreen() {
       items.push({ label: `Tax (${taxRate}%)`, value: fmt(taxAmount) });
     }
 
-    items.push({ label: 'Total', value: fmt(total), accent: true });
+    items.push({
+      label: splitConfig ? `${getOrdinal(currentSplitIndex + 1)} Split` : 'Total',
+      value: fmt(splitConfig ? currentSplitAmount : total),
+      accent: true,
+    });
     items.push({ label: 'Paid', value: fmt(paymentAmount) });
     items.push({ label: 'Change', value: fmt(change), green: change > 0 });
 
     return items;
-  }, [subtotal, discountAmount, serviceAmount, serviceRate, taxAmount, taxRate, total, paymentAmount, change]);
+  }, [subtotal, totalDiscount, serviceAmount, serviceRate, taxAmount, taxRate, total, splitConfig, currentSplitIndex, currentSplitAmount, paymentAmount, change]);
 
   const mobileSummary = (
     <View style={[styles.summaryGrid, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -736,8 +1296,7 @@ export default function POSPaymentScreen() {
         title="Payment Checkout"
         leftIcon={<ArrowLeft size={22} color={theme.text} />}
         onLeftPress={() => router.back()}
-        rightIcon={discountRightIcon}
-        onRightPress={() => setDiscountPickerVisible(true)}
+        rightIcon={headerRight}
       />
 
       {loadingConfigs ? (
@@ -752,6 +1311,49 @@ export default function POSPaymentScreen() {
           {/* LEFT PANEL */}
           <View style={{ flex: isWide ? 2 : 1 }}>
             {mobileSummary}
+
+            {/* Split Progress Banner if Split Active */}
+            {splitConfig && (
+              <View
+                style={{
+                  marginHorizontal: 12,
+                  marginBottom: 10,
+                  padding: 12,
+                  borderRadius: 10,
+                  backgroundColor: withOpacity(theme.primary, 0.1),
+                  borderWidth: 1,
+                  borderColor: theme.primary,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <View>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: theme.primary }}>
+                    Split {currentSplitIndex + 1} of {splitConfig.splitCount} ({fmt(currentSplitAmount)})
+                  </Text>
+                  <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
+                    {paidSplits.length}/{splitConfig.splitCount} splits collected
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    borderRadius: 6,
+                    backgroundColor: theme.input,
+                  }}
+                  onPress={() => {
+                    setSplitConfig(null);
+                    setPaidSplits([]);
+                    setAllSplitsCollected(false);
+                    setMethod('cash');
+                  }}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: theme.error }}>Reset Split</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={{ flex: 1, flexDirection: isWide ? 'row' : 'column' }}>
               <View
@@ -788,13 +1390,16 @@ export default function POSPaymentScreen() {
                             minWidth: isWide ? undefined : 84,
                             backgroundColor: isActive ? withOpacity(theme.primary, 0.15) : theme.input,
                             borderColor: isActive ? theme.primary : theme.inputBorder,
+                            opacity: splitConfig && m.key === 'split' ? 0.5 : 1,
                           },
                         ]}
                         onPress={() => {
+                          if (splitConfig && m.key === 'split') return;
                           setMethod(m.key);
                           setNumpadStr('');
                           setSelectedBank(null);
                         }}
+                        disabled={!!(splitConfig && m.key === 'split')}
                       >
                         <IconComponent
                           size={22}
@@ -816,7 +1421,153 @@ export default function POSPaymentScreen() {
               </View>
 
               <View style={[styles.contextCol, { backgroundColor: theme.background }]}>
-                {method === 'cash' ? (
+                {method === 'split' && !splitConfig ? (
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14, padding: 8 }}>
+                    <View>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text, marginBottom: 8 }}>
+                        How to Split?
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <TouchableOpacity
+                          style={{
+                            flex: 1,
+                            padding: 12,
+                            borderRadius: 10,
+                            borderWidth: 2,
+                            borderColor: splitType === 'equal' ? theme.primary : theme.border,
+                            backgroundColor: splitType === 'equal' ? withOpacity(theme.primary, 0.1) : theme.card,
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                          onPress={() => setSplitType('equal')}
+                        >
+                          <Users size={18} color={splitType === 'equal' ? theme.primary : theme.textSecondary} />
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: splitType === 'equal' ? theme.primary : theme.text }}>
+                            Equal
+                          </Text>
+                          <Text style={{ fontSize: 11, color: theme.textSecondary }}>Same amount</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={{
+                            flex: 1,
+                            padding: 12,
+                            borderRadius: 10,
+                            borderWidth: 2,
+                            borderColor: splitType === 'custom' ? theme.primary : theme.border,
+                            backgroundColor: splitType === 'custom' ? withOpacity(theme.primary, 0.1) : theme.card,
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                          onPress={() => setSplitType('custom')}
+                        >
+                          <Coins size={18} color={splitType === 'custom' ? theme.primary : theme.textSecondary} />
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: splitType === 'custom' ? theme.primary : theme.text }}>
+                            Custom
+                          </Text>
+                          <Text style={{ fontSize: 11, color: theme.textSecondary }}>Set amounts</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* Number of People Counter */}
+                    <View style={{ backgroundColor: theme.card, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: theme.border }}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text, marginBottom: 8 }}>
+                        Number of People
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+                        <TouchableOpacity
+                          style={{
+                            width: 42,
+                            height: 42,
+                            borderRadius: 10,
+                            backgroundColor: theme.input,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                          }}
+                          onPress={() => setSplitCount(Math.max(2, splitCount - 1))}
+                        >
+                          <Minus size={20} color={theme.primary} />
+                        </TouchableOpacity>
+                        <View style={{ alignItems: 'center', minWidth: 70 }}>
+                          <Text style={{ fontSize: 28, fontWeight: '800', color: theme.text }}>{splitCount}</Text>
+                          <Text style={{ fontSize: 12, color: theme.textSecondary }}>people</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={{
+                            width: 42,
+                            height: 42,
+                            borderRadius: 10,
+                            backgroundColor: theme.primary,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                          }}
+                          onPress={() => setSplitCount(Math.min(10, splitCount + 1))}
+                        >
+                          <Plus size={20} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* Amount Breakdown Preview */}
+                    <View
+                      style={{
+                        backgroundColor: withOpacity(theme.primary, 0.08),
+                        padding: 14,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: theme.primary,
+                      }}
+                    >
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: theme.primary, marginBottom: 6 }}>
+                        {splitType === 'equal' ? 'Per Person Amount' : 'Custom Amounts'}
+                      </Text>
+                      {splitType === 'equal' ? (
+                        <View>
+                          <Text style={{ fontSize: 28, fontWeight: '800', color: theme.primary }}>
+                            {fmt(total / splitCount)}
+                          </Text>
+                          <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                            Total: {fmt(total)}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={{ gap: 8 }}>
+                          {Array.from({ length: splitCount }).map((_, i) => (
+                            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <View style={{ width: 75, backgroundColor: theme.card, padding: 8, borderRadius: 6, alignItems: 'center' }}>
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: theme.textSecondary }}>Person {i + 1}</Text>
+                              </View>
+                              <TextInput
+                                style={{
+                                  flex: 1,
+                                  height: 38,
+                                  borderWidth: 1,
+                                  borderColor: theme.primary,
+                                  borderRadius: 6,
+                                  paddingHorizontal: 10,
+                                  fontSize: 14,
+                                  backgroundColor: theme.card,
+                                  color: theme.text,
+                                  fontWeight: '600',
+                                }}
+                                placeholder="0"
+                                placeholderTextColor={theme.textTertiary}
+                                keyboardType="numeric"
+                                value={customAmounts[i]?.toString() || ''}
+                                onChangeText={(text) => {
+                                  const newAmounts = [...customAmounts];
+                                  newAmounts[i] = parseFloat(text) || 0;
+                                  setCustomAmounts(newAmounts);
+                                }}
+                              />
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  </ScrollView>
+                ) : method === 'cash' ? (
                   <CashInput
                     numpadStr={numpadStr}
                     onKey={handleNumpad}
@@ -886,7 +1637,13 @@ export default function POSPaymentScreen() {
                         (!canConfirm || confirming) && { color: theme.textDisabled },
                       ]}
                     >
-                      {confirming ? 'Processing...' : 'Confirm Payment'}
+                      {confirming
+                        ? 'Processing...'
+                        : method === 'split' && !splitConfig
+                        ? 'Start Split Payment'
+                        : splitConfig && !allSplitsCollected
+                        ? `Collect Split #${currentSplitIndex + 1}`
+                        : 'Confirm Payment'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -1130,7 +1887,21 @@ export default function POSPaymentScreen() {
         </View>
       </Modal>
 
-      {/* Discount Picker Modal */}
+      {/* Customer Picker Modal */}
+      <CustomerPickerModal
+        visible={customerPickerVisible}
+        customers={customers}
+        loading={false}
+        selectedCustomer={selectedCustomer}
+        onCustomerSelect={(c) => {
+          setSelectedCustomer(c);
+          setCustomerPickerVisible(false);
+        }}
+        onClose={() => setCustomerPickerVisible(false)}
+        theme={theme}
+      />
+
+      {/* Discount Picker Modal (with Loyalty Point Redemption) */}
       <DiscountPickerModal
         visible={discountPickerVisible}
         discounts={discounts}
@@ -1140,6 +1911,12 @@ export default function POSPaymentScreen() {
         onDiscountSelect={handleSelectDiscount}
         onClose={() => setDiscountPickerVisible(false)}
         theme={theme}
+        crmConfig={crmConfig}
+        customer={selectedCustomer}
+        pointsToRedeem={pointsToRedeem}
+        onPointsRedeemChange={setPointsToRedeem}
+        pointRedemptionEnabled={pointRedemptionEnabled}
+        onPointRedemptionToggle={setPointRedemptionEnabled}
       />
 
       {/* Receipt Success Dialog */}
@@ -1356,6 +2133,7 @@ const createPaymentStyles = (theme: ColorTheme) =>
       gap: 10,
       padding: 12,
       borderTopWidth: 1,
+      marginBottom:10,
     },
     seeCartBtn: {
       flex: 1,
@@ -1371,7 +2149,7 @@ const createPaymentStyles = (theme: ColorTheme) =>
       borderRadius: 10,
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom:10,
+      // marginBottom:10,
     },
     confirmBtn: {
       borderRadius: 10,

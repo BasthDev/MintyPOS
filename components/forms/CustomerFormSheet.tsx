@@ -1,6 +1,6 @@
 import { useTheme } from '@/constants/colorTheme';
 import { CustomerInput } from '@/validators/customerValidator';
-import { User, Mail, Phone, FileText } from 'lucide-react-native';
+import { FileText, Mail, Phone, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { DripButton } from '../Button';
