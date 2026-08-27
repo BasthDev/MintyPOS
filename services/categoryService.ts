@@ -63,17 +63,19 @@ export class CategoryService {
    * Delete category
    */
   static async delete(db: SQLite.SQLiteDatabase, id: number) {
-    // First check if category is used by any products
-    const products = await db.getAllAsync<{ count: number }>(
-      'SELECT COUNT(*) as count FROM products WHERE category_id = ?',
-      [id]
-    );
+    // Temporarily disable foreign keys to allow cleanup
+    await db.execAsync('PRAGMA foreign_keys = OFF;');
 
-    if (products[0].count > 0) {
-      throw new Error('Cannot delete category that is in use by products');
+    try {
+      // Preserve historical product records - set category_id to NULL to keep records
+      await db.runAsync('UPDATE products SET category_id = NULL WHERE category_id = ?', [id]);
+
+      // Finally delete the category
+      await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
+    } finally {
+      // Re-enable foreign keys
+      await db.execAsync('PRAGMA foreign_keys = ON;');
     }
-
-    await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
   }
 
   /**

@@ -141,6 +141,14 @@ export class CheckoutProcess {
         })),
       });
 
+      // 2c. Update customer total_spent if customer is attached
+      if (input.customerId) {
+        await db.runAsync(
+          'UPDATE customers SET total_spent = total_spent + ?, updated_at = datetime("now") WHERE id = ?',
+          [input.total, input.customerId]
+        );
+      }
+
       // 3. Build receipt
       const receiptOrder: CompletedOrder = {
         id: orderId,

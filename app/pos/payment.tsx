@@ -1170,6 +1170,7 @@ export default function POSPaymentScreen() {
               earnedPts,
               'earn',
               result.order.id,
+              result.order.order_number,
               'Earned points from order'
             );
           }
@@ -1183,6 +1184,7 @@ export default function POSPaymentScreen() {
             -pointsToRedeem,
             'redeem',
             result.order.id,
+            result.order.order_number,
             'Redeemed points for discount'
           );
         }
@@ -1316,10 +1318,10 @@ export default function POSPaymentScreen() {
             {splitConfig && (
               <View
                 style={{
-                  marginHorizontal: 12,
-                  marginBottom: 10,
+                  // marginHorizontal: 12,
+                  // marginBottom: 10,
                   padding: 12,
-                  borderRadius: 10,
+                  // borderRadius: 10,
                   backgroundColor: withOpacity(theme.primary, 0.1),
                   borderWidth: 1,
                   borderColor: theme.primary,

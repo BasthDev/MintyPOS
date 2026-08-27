@@ -30,6 +30,16 @@ export interface ProfitReportData {
   costBreakdown: Array<{ category: string; cost: number; percentage: number }>;
 }
 
+export interface CRMReportData {
+  totalCustomers: number;
+  totalPointsIssued: number;
+  totalPointsRedeemed: number;
+  totalStoreCredit: number;
+  tierBreakdown: Array<{ tier: string; count: number; percentage: number }>;
+  topCustomers: Array<{ name: string; tier: string; totalSpent: number; loyaltyPoints: number }>;
+  recentLoyaltyActivity: Array<{ customerName: string; type: string; points: number; date: string }>;
+}
+
 export class ReportService {
   /**
    * Generate sales report for a date range
@@ -350,5 +360,92 @@ export class ReportService {
       dailyProfit,
       costBreakdown,
     };
+  }
+
+  /**
+   * Generate CRM & Loyalty report
+   */
+  static async getCRMReport(
+    db: SQLite.SQLiteDatabase
+  ): Promise<CRMReportData> {
+    try {
+      const customers = await db.getAllAsync<any>(
+        'SELECT * FROM customers ORDER BY total_spent DESC'
+      );
+
+      const totalCustomers = customers.length;
+      const totalStoreCredit = customers.reduce((sum, c) => sum + (c.store_credit_balance || 0), 0);
+
+      // Tier Breakdown
+      const tierCounts: Record<string, number> = {
+        regular: 0,
+        bronze: 0,
+        silver: 0,
+        gold: 0,
+      };
+      customers.forEach((c) => {
+        const t = c.tier || 'regular';
+        tierCounts[t] = (tierCounts[t] || 0) + 1;
+      });
+
+      const tierBreakdown = Object.entries(tierCounts).map(([tier, count]) => ({
+        tier: tier.toUpperCase(),
+        count,
+        percentage: totalCustomers > 0 ? (count / totalCustomers) * 100 : 0,
+      }));
+
+      // Top Customers
+      const topCustomers = customers.slice(0, 10).map((c) => ({
+        name: c.name,
+        tier: (c.tier || 'regular').toUpperCase(),
+        totalSpent: c.total_spent || 0,
+        loyaltyPoints: c.loyalty_points || 0,
+      }));
+
+      // Loyalty Transactions summary
+      const loyaltyLogs = await db.getAllAsync<any>(
+        `SELECT l.*, c.name as customer_name 
+         FROM customer_loyalty_transactions l
+         JOIN customers c ON l.customer_id = c.id
+         ORDER BY l.created_at DESC LIMIT 20`
+      );
+
+      let totalPointsIssued = 0;
+      let totalPointsRedeemed = 0;
+
+      const allLoyalty = await db.getAllAsync<any>('SELECT type, points FROM customer_loyalty_transactions');
+      allLoyalty.forEach((tx) => {
+        if (tx.type === 'earn') totalPointsIssued += Math.abs(tx.points || 0);
+        if (tx.type === 'redeem') totalPointsRedeemed += Math.abs(tx.points || 0);
+      });
+
+      const recentLoyaltyActivity = loyaltyLogs.map((l) => ({
+        customerName: l.customer_name || 'Unknown',
+        type: l.type === 'earn' ? 'Earned' : l.type === 'redeem' ? 'Redeemed' : 'Adjustment',
+        points: l.points || 0,
+        date: l.created_at ? new Date(l.created_at).toLocaleDateString() : '',
+      }));
+
+      return {
+        totalCustomers,
+        totalPointsIssued,
+        totalPointsRedeemed,
+        totalStoreCredit,
+        tierBreakdown,
+        topCustomers,
+        recentLoyaltyActivity,
+      };
+    } catch (error) {
+      console.error('Error generating CRM report:', error);
+      return {
+        totalCustomers: 0,
+        totalPointsIssued: 0,
+        totalPointsRedeemed: 0,
+        totalStoreCredit: 0,
+        tierBreakdown: [],
+        topCustomers: [],
+        recentLoyaltyActivity: [],
+      };
+    }
   }
 }

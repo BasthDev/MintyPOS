@@ -83,14 +83,25 @@ export class IngredientService {
    * Delete ingredient
    */
   static async delete(db: SQLite.SQLiteDatabase, id: number) {
-    // First delete related ingredient units
-    await db.runAsync('DELETE FROM ingredient_units WHERE ingredient_id = ?', [id]);
-    // Delete related inventory batches
-    await db.runAsync('DELETE FROM inventory_batches WHERE ingredient_id = ?', [id]);
-    // Delete related recipes
-    await db.runAsync('DELETE FROM recipes WHERE ingredient_id = ?', [id]);
-    // Then delete the ingredient
-    await db.runAsync('DELETE FROM ingredients WHERE id = ?', [id]);
+    // Temporarily disable foreign keys to allow cleanup
+    await db.execAsync('PRAGMA foreign_keys = OFF;');
+
+    try {
+      // Delete related ingredient units
+      await db.runAsync('DELETE FROM ingredient_units WHERE ingredient_id = ?', [id]);
+
+      // Preserve historical inventory batches - set ingredient_id to NULL to keep records
+      await db.runAsync('UPDATE inventory_batches SET ingredient_id = NULL WHERE ingredient_id = ?', [id]);
+
+      // Delete recipe_ingredients that reference this ingredient (recipes remain, just remove ingredient)
+      await db.runAsync('DELETE FROM recipe_ingredients WHERE ingredient_id = ?', [id]);
+
+      // Finally delete the ingredient
+      await db.runAsync('DELETE FROM ingredients WHERE id = ?', [id]);
+    } finally {
+      // Re-enable foreign keys
+      await db.execAsync('PRAGMA foreign_keys = ON;');
+    }
   }
 
   /**

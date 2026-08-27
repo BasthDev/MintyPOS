@@ -12,13 +12,10 @@ import {
   ChevronRight,
   CreditCard,
   Edit,
-  Mail,
-  Phone,
   Plus,
-  Search,
   Trash2,
   User,
-  Wallet,
+  Wallet
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
@@ -212,31 +209,32 @@ export default function CustomersScreen() {
   const leftPanel = (
     <View style={styles.leftPanelContainer}>
       <DripSearchBar
-        placeholder="Search customer by name, phone, or email..."
+        placeholder="Search customers..."
         value={search}
         onChangeText={setSearch}
+        onClear={() => setSearch('')}
+        style={styles.searchBar}
       />
 
       {loading ? (
-        <View style={styles.centered}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
         </View>
       ) : filteredCustomers.length === 0 ? (
-        <View style={styles.emptyState}>
+        <View style={styles.emptyListContainer}>
           <User size={48} color={theme.textTertiary || '#888'} />
-          <Text style={[styles.emptyTitle, { color: theme.text }]}>No Customers Found</Text>
-          <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-            {search ? 'No customer matches your search.' : 'Add your first customer to start tracking loyalty.'}
+          <Text style={[styles.emptyListText, { color: theme.textSecondary }]}>
+            {search ? 'No customers match search' : 'No customers found'}
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.scrollList} showsVerticalScrollIndicator={false}>
-          {filteredCustomers.map((item) => {
-            const isSelected = selectedCustomer?.id === item.id;
-            const tierColor = TIER_COLORS[item.tier || 'regular'] || theme.primary;
+        <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
+          {filteredCustomers.map((c) => {
+            const isSelected = selectedCustomer?.id === c.id;
+
             return (
               <TouchableOpacity
-                key={item.id}
+                key={c.id}
                 activeOpacity={0.7}
                 style={[
                   styles.customerCard,
@@ -245,90 +243,35 @@ export default function CustomersScreen() {
                     borderColor: isSelected ? theme.primary : theme.border,
                   },
                 ]}
-                onPress={() => handleSelectCustomer(item)}
+                onPress={() => handleSelectCustomer(c)}
               >
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardTitleRow}>
-                    <View
+                <View style={styles.cardMain}>
+                  <View style={styles.cardHeaderInfo}>
+                    <Text
                       style={[
-                        styles.avatarBadge,
-                        { backgroundColor: isSelected ? '#FFFFFF20' : theme.input },
+                        styles.cardName,
+                        { color: isSelected ? '#FFFFFF' : theme.text },
                       ]}
+                      numberOfLines={1}
                     >
-                      <User size={20} color={isSelected ? '#FFFFFF' : theme.primary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          styles.cardName,
-                          { color: isSelected ? '#FFFFFF' : theme.text },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {item.name}
-                      </Text>
-                      {item.phone ? (
-                        <Text
-                          style={[
-                            styles.cardMetaText,
-                            { color: isSelected ? '#CBD5E1' : theme.textSecondary },
-                          ]}
-                        >
-                          {item.phone}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  <View style={styles.cardRightCol}>
-                    <View
-                      style={[
-                        styles.tierBadge,
-                        { backgroundColor: isSelected ? '#FFFFFF30' : tierColor + '20' },
-                      ]}
-                    >
-                      <Award size={12} color={isSelected ? '#FFFFFF' : tierColor} />
-                      <Text
-                        style={[
-                          styles.tierBadgeText,
-                          { color: isSelected ? '#FFFFFF' : tierColor },
-                        ]}
-                      >
-                        {item.tier ? item.tier.toUpperCase() : 'REGULAR'}
-                      </Text>
-                    </View>
-                    <ChevronRight
-                      size={18}
-                      color={isSelected ? '#FFFFFF' : theme.textTertiary || '#888'}
-                    />
-                  </View>
-                </View>
-
-                <View
-                  style={[
-                    styles.cardMetricsRow,
-                    { borderTopColor: isSelected ? '#FFFFFF20' : theme.divider },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.metricText,
-                      { color: isSelected ? '#E0F2FE' : theme.textSecondary },
-                    ]}
-                  >
-                    Pts: <Text style={{ fontWeight: '700' }}>{item.loyalty_points || 0}</Text>
-                  </Text>
-                  <Text
-                    style={[
-                      styles.metricText,
-                      { color: isSelected ? '#E0F2FE' : theme.textSecondary },
-                    ]}
-                  >
-                    Credit:{' '}
-                    <Text style={{ fontWeight: '700' }}>
-                      {formatCurrency(item.store_credit_balance || 0)}
+                      {c.name}
                     </Text>
-                  </Text>
+                    {c.phone && (
+                      <Text
+                        style={[
+                          styles.cardMetaText,
+                          { color: isSelected ? '#CBD5E1' : theme.textSecondary },
+                        ]}
+                      >
+                        {c.phone}
+                      </Text>
+                    )}
+                  </View>
+
+                  <ChevronRight
+                    size={20}
+                    color={isSelected ? '#FFFFFF' : theme.textTertiary || '#888'}
+                  />
                 </View>
               </TouchableOpacity>
             );
@@ -353,59 +296,28 @@ export default function CustomersScreen() {
     <View style={styles.detailsContainer}>
       <View style={[styles.detailsHeader, { borderBottomColor: theme.border }]}>
         <View style={styles.detailsTitleRow}>
-          <View style={[styles.detailsAvatarBadge, { backgroundColor: theme.input }]}>
+          <View style={[styles.detailsIconBadge, { backgroundColor: theme.input }]}>
             <User size={28} color={theme.primary} />
           </View>
           <View style={styles.detailsHeaderMeta}>
             <Text style={[styles.detailsTitle, { color: theme.text }]} numberOfLines={1}>
               {selectedCustomer.name}
             </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-              <View
-                style={[
-                  styles.tierBadge,
-                  {
-                    backgroundColor:
-                      (TIER_COLORS[selectedCustomer.tier || 'regular'] || theme.primary) + '20',
-                  },
-                ]}
-              >
-                <Award
-                  size={12}
-                  color={TIER_COLORS[selectedCustomer.tier || 'regular'] || theme.primary}
-                />
-                <Text
-                  style={[
-                    styles.tierBadgeText,
-                    {
-                      color:
-                        TIER_COLORS[selectedCustomer.tier || 'regular'] || theme.primary,
-                    },
-                  ]}
-                >
-                  {selectedCustomer.tier ? selectedCustomer.tier.toUpperCase() : 'REGULAR'}
-                </Text>
-              </View>
-            </View>
           </View>
         </View>
 
-        <View style={styles.headerActions}>
+        <View style={styles.detailsHeaderActions}>
           <TouchableOpacity
-            style={[
-              styles.editBtn,
-              { backgroundColor: theme.primary + '15', borderColor: theme.primary },
-            ]}
+            style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
             onPress={() => handleStartEdit(selectedCustomer)}
           >
             <Edit size={18} color={theme.primary} />
           </TouchableOpacity>
-
           <TouchableOpacity
-            style={[styles.deleteBtn, { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}
+            style={[styles.headerActionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
             onPress={() => handleDelete(selectedCustomer.id)}
           >
-            <Trash2 size={18} color="#EF4444" />
+            <Trash2 size={18} color={theme.error} />
           </TouchableOpacity>
         </View>
       </View>
@@ -440,30 +352,46 @@ export default function CustomersScreen() {
           <Text style={styles.depositBtnText}>Deposit Store Credit</Text>
         </TouchableOpacity>
 
-        {/* Customer Contact Info */}
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Contact & Notes</Text>
+          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Customer Details</Text>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Name:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{selectedCustomer.name}</Text>
+          </View>
 
           {selectedCustomer.phone && (
             <View style={styles.infoRow}>
-              <Phone size={16} color={theme.textSecondary} />
-              <Text style={[styles.infoText, { color: theme.text }]}>{selectedCustomer.phone}</Text>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Phone:</Text>
+              <Text style={[styles.infoValue, { color: theme.text }]}>{selectedCustomer.phone}</Text>
             </View>
           )}
 
           {selectedCustomer.email && (
             <View style={styles.infoRow}>
-              <Mail size={16} color={theme.textSecondary} />
-              <Text style={[styles.infoText, { color: theme.text }]}>{selectedCustomer.email}</Text>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Email:</Text>
+              <Text style={[styles.infoValue, { color: theme.text }]}>{selectedCustomer.email}</Text>
             </View>
           )}
 
           {selectedCustomer.notes && (
             <View style={styles.infoRow}>
               <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Notes:</Text>
-              <Text style={[styles.infoText, { color: theme.text }]}>{selectedCustomer.notes}</Text>
+              <Text style={[styles.infoValue, { color: theme.text }]}>{selectedCustomer.notes}</Text>
             </View>
           )}
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Tier:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>
+              {selectedCustomer.tier ? selectedCustomer.tier.toUpperCase() : 'REGULAR'}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Total Spent:</Text>
+            <Text style={[styles.infoValue, { color: theme.text }]}>{formatCurrency(selectedCustomer.total_spent || 0)}</Text>
+          </View>
         </View>
 
         {/* Recent Activity / Loyalty Logs */}
@@ -478,7 +406,10 @@ export default function CustomersScreen() {
                   <Text style={[styles.logType, { color: theme.text }]}>
                     {log.type === 'earn' ? 'Earned Points' : log.type === 'redeem' ? 'Redeemed Points' : 'Adjustment'}
                   </Text>
-                  <Text style={[styles.logDate, { color: theme.textSecondary }]}>{log.created_at}</Text>
+                  <Text style={[styles.logDate, { color: theme.textSecondary }]}>
+                    {log.created_at}
+                    {log.order_number && ` • ${log.order_number}`}
+                  </Text>
                 </View>
                 <Text
                   style={[
@@ -499,15 +430,22 @@ export default function CustomersScreen() {
       <User size={64} color={theme.textTertiary || '#888'} />
       <Text style={[styles.emptyDetailsTitle, { color: theme.text }]}>No Customer Selected</Text>
       <Text style={[styles.emptyDetailsSubtext, { color: theme.textSecondary }]}>
-        Select a customer from the list to view spending, loyalty points, and credit balance.
+        Select a customer from the list to view its details.
       </Text>
     </View>
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <>
       <Header title="Customers & CRM" />
-      <Section leftPanel={leftPanel} rightPanel={rightPanel} />
+      <Section
+        leftPanel={leftPanel}
+        rightPanel={rightPanel}
+        showNextScreen={!!selectedCustomer}
+        onBack={() => setSelectedCustomer(null)}
+        backButtonTitle="Back to Customers"
+        childrenPadding={16}
+      />
 
       {/* Form Sheet for Create / Edit */}
       <CustomerFormSheet
@@ -599,118 +537,75 @@ export default function CustomersScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   leftPanelContainer: {
     flex: 1,
-    padding: 12,
+    position: 'relative',
   },
-  centered: {
+  searchBar: {
+    marginBottom: 12,
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    paddingVertical: 40,
   },
-  emptyState: {
+  emptyListContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    paddingVertical: 40,
   },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+  emptyListText: {
     marginTop: 12,
+    fontSize: 14,
   },
-  emptySubtext: {
-    fontSize: 13,
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  scrollList: {
+  listScroll: {
     flex: 1,
-    marginTop: 12,
   },
   customerCard: {
     borderRadius: 12,
     borderWidth: 1,
-    padding: 12,
+    padding: 14,
     marginBottom: 10,
   },
-  cardHeader: {
+  cardMain: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  cardTitleRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+  },
+  cardHeaderInfo: {
     flex: 1,
-  },
-  avatarBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginRight: 12,
   },
   cardName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
   },
   cardMetaText: {
     fontSize: 12,
     marginTop: 2,
   },
-  cardRightCol: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  tierBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  tierBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  cardMetricsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-  },
-  metricText: {
-    fontSize: 12,
-  },
   fabButton: {
     position: 'absolute',
-    bottom: 20,
-    right: 20,
+    bottom: 16,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 30,
+    borderRadius: 28,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
+    gap: 8,
   },
   fabText: {
     color: '#FFFFFF',
@@ -719,12 +614,11 @@ const styles = StyleSheet.create({
   },
   detailsContainer: {
     flex: 1,
-    padding: 16,
   },
   detailsHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingBottom: 16,
     borderBottomWidth: 1,
   },
@@ -734,39 +628,28 @@ const styles = StyleSheet.create({
     gap: 12,
     flex: 1,
   },
-  detailsAvatarBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
+  detailsIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   detailsHeaderMeta: {
     flex: 1,
   },
   detailsTitle: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '700',
   },
-  headerActions: {
+  detailsHeaderActions: {
     flexDirection: 'row',
     gap: 8,
   },
-  editBtn: {
-    width: 36,
-    height: 36,
+  headerActionBtn: {
+    padding: 10,
     borderRadius: 8,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   detailsScroll: {
     flex: 1,
@@ -793,6 +676,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  infoCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  infoCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  infoLabel: {
+    fontSize: 14,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   depositBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -806,28 +712,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 14,
-  },
-  infoCard: {
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 8,
-  },
-  infoCardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  infoLabel: {
-    fontSize: 13,
-  },
-  infoText: {
-    fontSize: 13,
   },
   emptyLogText: {
     fontSize: 13,
@@ -862,12 +746,12 @@ const styles = StyleSheet.create({
   emptyDetailsTitle: {
     fontSize: 18,
     fontWeight: '700',
-    marginTop: 12,
+    marginTop: 16,
+    marginBottom: 6,
   },
   emptyDetailsSubtext: {
-    fontSize: 13,
+    fontSize: 14,
     textAlign: 'center',
-    marginTop: 4,
   },
   modalOverlay: {
     flex: 1,

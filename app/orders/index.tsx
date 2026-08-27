@@ -2,12 +2,14 @@ import { Header } from '@/components/Header';
 import { DripSearchBar } from '@/components/SearchBar';
 import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
-import { CompletedOrder, dbOperations, getDatabase } from '@/lib/database';
+import { CompletedOrder, OrderSplitItem, dbOperations, getDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import {
   ChevronRight,
   ClipboardList,
-  Receipt
+  Receipt,
+  User,
+  Users
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
@@ -25,6 +27,8 @@ export default function OrdersScreen() {
   const [orders, setOrders] = useState<CompletedOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<CompletedOrder | null>(null);
+  const [selectedOrderSplits, setSelectedOrderSplits] = useState<OrderSplitItem[]>([]);
+  const [loadingSplits, setLoadingSplits] = useState(false);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -41,6 +45,9 @@ export default function OrdersScreen() {
       if (selectedOrder) {
         const updated = orderList.find((o) => o.id === selectedOrder.id);
         setSelectedOrder(updated || null);
+        if (updated?.is_split) {
+          loadSplits(updated.id);
+        }
       }
     } catch (error) {
       console.error('Failed to load orders:', error);
@@ -49,10 +56,34 @@ export default function OrdersScreen() {
     }
   };
 
+  const loadSplits = async (orderId: number) => {
+    setLoadingSplits(true);
+    try {
+      const db = await getDatabase();
+      const splits = await dbOperations.getOrderSplits(db, orderId);
+      setSelectedOrderSplits(splits);
+    } catch (err) {
+      console.error('Failed to load order splits:', err);
+      setSelectedOrderSplits([]);
+    } finally {
+      setLoadingSplits(false);
+    }
+  };
+
+  const handleSelectOrder = (order: CompletedOrder) => {
+    setSelectedOrder(order);
+    if (order.is_split) {
+      loadSplits(order.id);
+    } else {
+      setSelectedOrderSplits([]);
+    }
+  };
+
   const filteredOrders = orders.filter(
     (o) =>
       o.order_number?.toLowerCase().includes(search.toLowerCase()) ||
       o.payment_method?.toLowerCase().includes(search.toLowerCase()) ||
+      (o.customer_name && o.customer_name.toLowerCase().includes(search.toLowerCase())) ||
       o.id?.toString().includes(search)
   );
 
@@ -60,7 +91,7 @@ export default function OrdersScreen() {
   const leftPanel = (
     <View style={styles.leftPanelContainer}>
       <DripSearchBar
-        placeholder="Search by order #, payment method..."
+        placeholder="Search by order #, customer, payment..."
         value={search}
         onChangeText={setSearch}
         onClear={() => setSearch('')}
@@ -95,18 +126,60 @@ export default function OrdersScreen() {
                     borderColor: isSelected ? theme.primary : theme.border,
                   },
                 ]}
-                onPress={() => setSelectedOrder(o)}
+                onPress={() => handleSelectOrder(o)}
               >
                 <View style={styles.cardMain}>
                   <View style={styles.cardHeaderInfo}>
-                    <Text
-                      style={[
-                        styles.cardName,
-                        { color: isSelected ? '#FFFFFF' : theme.text },
-                      ]}
-                    >
-                      Order #{o.order_number || o.id}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text
+                        style={[
+                          styles.cardName,
+                          { color: isSelected ? '#FFFFFF' : theme.text },
+                        ]}
+                      >
+                        Order #{o.order_number || o.id}
+                      </Text>
+                      {!!o.is_split && (
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 3,
+                            backgroundColor: isSelected ? '#FFFFFF30' : theme.primary + '20',
+                            paddingHorizontal: 6,
+                            paddingVertical: 2,
+                            borderRadius: 4,
+                          }}
+                        >
+                          <Users size={10} color={isSelected ? '#FFFFFF' : theme.primary} />
+                          <Text
+                            style={{
+                              fontSize: 9,
+                              fontWeight: '800',
+                              color: isSelected ? '#FFFFFF' : theme.primary,
+                            }}
+                          >
+                            SPLIT
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {o.customer_name ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                        <User size={12} color={isSelected ? '#E0F2FE' : theme.primary} />
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '600',
+                            color: isSelected ? '#E0F2FE' : theme.primary,
+                          }}
+                        >
+                          {o.customer_name}
+                        </Text>
+                      </View>
+                    ) : null}
+
                     <Text
                       style={[
                         styles.cardSubText,
@@ -122,7 +195,7 @@ export default function OrdersScreen() {
                         { color: isSelected ? '#CBD5E1' : theme.textTertiary || '#888' },
                       ]}
                     >
-                      {o.created_at ? new Date(o.created_at).toLocaleTimeString() : ''}
+                      {o.created_at ? new Date(o.created_at).toLocaleString() : ''}
                     </Text>
                   </View>
 
@@ -170,6 +243,41 @@ export default function OrdersScreen() {
       </View>
 
       <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
+        {/* Customer Info Card (CRM) */}
+        {selectedOrder.customer_name ? (
+          <View
+            style={[
+              styles.infoCard,
+              {
+                backgroundColor: theme.primary + '10',
+                borderColor: theme.primary + '30',
+                marginBottom: 12,
+              },
+            ]}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <User size={18} color={theme.primary} />
+              <Text style={[styles.infoCardTitle, { color: theme.primary, marginBottom: 0 }]}>
+                Customer Information
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Customer Name:</Text>
+              <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
+                {selectedOrder.customer_name}
+              </Text>
+            </View>
+            {/* {selectedOrder.customer_id && (
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Customer ID:</Text>
+                <Text style={[styles.infoValue, { color: theme.textSecondary }]}>
+                  #{selectedOrder.customer_id}
+                </Text>
+              </View>
+            )} */}
+          </View>
+        ) : null}
+
         {/* Receipt Header Info */}
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border, marginBottom: 12 }]}>
           <Text style={[styles.infoCardTitle, { color: theme.text }]}>Transaction Details</Text>
@@ -195,6 +303,53 @@ export default function OrdersScreen() {
             </Text>
           </View>
         </View>
+
+        {/* Split Payments Breakdown if Split */}
+        {!!selectedOrder.is_split && (
+          <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border, marginBottom: 12 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              <Users size={16} color={theme.primary} />
+              <Text style={[styles.infoCardTitle, { color: theme.text, marginBottom: 0 }]}>
+                Split Payments Breakdown
+              </Text>
+            </View>
+
+            {loadingSplits ? (
+              <ActivityIndicator size="small" color={theme.primary} />
+            ) : selectedOrderSplits.length === 0 ? (
+              <Text style={{ fontSize: 12, color: theme.textSecondary }}>
+                Split payment details recorded for this order.
+              </Text>
+            ) : (
+              selectedOrderSplits.map((sp, sIdx) => (
+                <View
+                  key={sIdx}
+                  style={[
+                    styles.infoRow,
+                    {
+                      paddingVertical: 6,
+                      borderBottomWidth: sIdx < selectedOrderSplits.length - 1 ? 1 : 0,
+                      borderBottomColor: theme.divider,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>
+                      Person {sp.split_index + 1} of {sp.total_splits}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: theme.textSecondary }}>
+                      {sp.payment_method?.toUpperCase()}
+                      {sp.payment_provider ? ` (${sp.payment_provider})` : ''}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: theme.primary }}>
+                    {formatCurrency(sp.amount)}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+        )}
 
         {/* Ordered Items List */}
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border, marginBottom: 12 }]}>
@@ -295,14 +450,14 @@ export default function OrdersScreen() {
       <ClipboardList size={64} color={theme.textTertiary || '#888'} />
       <Text style={[styles.emptyDetailsTitle, { color: theme.text }]}>No Order Selected</Text>
       <Text style={[styles.emptyDetailsSubtext, { color: theme.textSecondary }]}>
-        Select an order from the list to view its complete receipt and items breakdown.
+        Select an order from the list to view its complete receipt, customer details, and split breakdown.
       </Text>
     </View>
   );
 
   return (
-    <>
-      <Header title="Orders" />
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <Header title="Orders & Receipts" />
       <Section
         leftPanel={leftPanel}
         rightPanel={rightPanel}
@@ -311,7 +466,7 @@ export default function OrdersScreen() {
         backButtonTitle="Back to Orders"
         childrenPadding={16}
       />
-    </>
+    </View>
   );
 }
 

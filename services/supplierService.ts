@@ -69,17 +69,19 @@ export class SupplierService {
    * Delete supplier
    */
   static async delete(db: SQLite.SQLiteDatabase, id: number) {
-    // Check if supplier is used by any inventory batches
-    const batches = await db.getAllAsync<{ count: number }>(
-      'SELECT COUNT(*) as count FROM inventory_batches WHERE supplier_id = ?',
-      [id]
-    );
+    // Temporarily disable foreign keys to allow cleanup
+    await db.execAsync('PRAGMA foreign_keys = OFF;');
 
-    if (batches[0] && batches[0].count > 0) {
-      throw new Error('Cannot delete supplier that is in use by inventory records');
+    try {
+      // Preserve historical inventory batches - set supplier_id to NULL to keep records
+      await db.runAsync('UPDATE inventory_batches SET supplier_id = NULL WHERE supplier_id = ?', [id]);
+
+      // Finally delete the supplier
+      await db.runAsync('DELETE FROM suppliers WHERE id = ?', [id]);
+    } finally {
+      // Re-enable foreign keys
+      await db.execAsync('PRAGMA foreign_keys = ON;');
     }
-
-    await db.runAsync('DELETE FROM suppliers WHERE id = ?', [id]);
   }
 
   /**

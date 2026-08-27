@@ -9,7 +9,7 @@ const DB_NAME = 'mintypos.db';
 // ==========================================
 // Set to true to seed/reset mock data on app restart.
 // Set to false for production or to preserve user data.
-const ENABLE_MOCK_DATA = false;
+const ENABLE_MOCK_DATA = true;
 
 // Types
 export interface Category {
@@ -201,6 +201,7 @@ export interface CustomerLoyaltyTransactionItem {
   id: number;
   customer_id: number;
   order_id?: number;
+  order_number?: string;
   type: 'earn' | 'redeem' | 'adjust';
   points: number;
   notes?: string;
@@ -713,6 +714,13 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
             if (!colNames.has('split_parent_id')) {
               await db.execAsync('ALTER TABLE orders ADD COLUMN split_parent_id INTEGER;');
             }
+
+            // Add order_number column to customer_loyalty_transactions
+            const loyaltyCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(customer_loyalty_transactions)');
+            const loyaltyColNames = new Set(loyaltyCols.map((col: any) => col.name));
+            if (!loyaltyColNames.has('order_number')) {
+              await db.execAsync('ALTER TABLE customer_loyalty_transactions ADD COLUMN order_number TEXT;');
+            }
           } catch (error) {
             console.error('Migration error for version 8 (orders columns):', error);
           }
@@ -856,6 +864,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           customer_id INTEGER NOT NULL,
           order_id INTEGER,
+          order_number TEXT,
           type TEXT NOT NULL,
           points INTEGER NOT NULL,
           notes TEXT,
@@ -1029,8 +1038,22 @@ export const dbOperations = {
   },
 
   async deleteRecipeDefinition(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
-    await db.runAsync('DELETE FROM recipe_ingredients WHERE recipe_id = ?', [id]);
-    await db.runAsync('DELETE FROM recipe_definitions WHERE id = ?', [id]);
+    // Temporarily disable foreign keys to allow cleanup
+    await db.execAsync('PRAGMA foreign_keys = OFF;');
+
+    try {
+      // Set recipe_definition_id to NULL in products that use this recipe (unselect recipe)
+      await db.runAsync('UPDATE products SET recipe_definition_id = NULL, has_recipe = 0 WHERE recipe_definition_id = ?', [id]);
+
+      // Delete recipe ingredients
+      await db.runAsync('DELETE FROM recipe_ingredients WHERE recipe_id = ?', [id]);
+
+      // Finally delete the recipe definition
+      await db.runAsync('DELETE FROM recipe_definitions WHERE id = ?', [id]);
+    } finally {
+      // Re-enable foreign keys
+      await db.execAsync('PRAGMA foreign_keys = ON;');
+    }
   },
 
   async getRecipeIngredients(db: SQLite.SQLiteDatabase, recipeId: number): Promise<RecipeIngredient[]> {
@@ -1732,7 +1755,28 @@ export const dbOperations = {
   },
 
   async deleteCustomer(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
-    await db.runAsync('DELETE FROM customers WHERE id = ?', [id]);
+    // Temporarily disable foreign keys to allow cascade cleanup
+    await db.execAsync('PRAGMA foreign_keys = OFF;');
+
+    try {
+      // Set customer_id to NULL in orders (keep historical order data)
+      await db.runAsync('UPDATE orders SET customer_id = NULL, customer_name = NULL WHERE customer_id = ?', [id]);
+
+      // Set customer_id to NULL in order_splits
+      await db.runAsync('UPDATE order_splits SET customer_id = NULL WHERE customer_id = ?', [id]);
+
+      // Delete customer loyalty transactions
+      await db.runAsync('DELETE FROM customer_loyalty_transactions WHERE customer_id = ?', [id]);
+
+      // Delete customer balance transactions
+      await db.runAsync('DELETE FROM customer_balance_transactions WHERE customer_id = ?', [id]);
+
+      // Finally delete the customer
+      await db.runAsync('DELETE FROM customers WHERE id = ?', [id]);
+    } finally {
+      // Re-enable foreign keys
+      await db.execAsync('PRAGMA foreign_keys = ON;');
+    }
   },
 
   async updateCustomerPoints(
@@ -1741,6 +1785,7 @@ export const dbOperations = {
     pointsDelta: number,
     type: 'earn' | 'redeem' | 'adjust',
     orderId?: number,
+    orderNumber?: string,
     notes?: string
   ): Promise<void> {
     const customer = await db.getFirstAsync<CustomerItem>('SELECT * FROM customers WHERE id = ?', [customerId]);
@@ -1751,8 +1796,8 @@ export const dbOperations = {
       customerId,
     ]);
     await db.runAsync(
-      'INSERT INTO customer_loyalty_transactions (customer_id, order_id, type, points, notes) VALUES (?, ?, ?, ?, ?)',
-      [customerId, orderId || null, type, pointsDelta, notes || null]
+      'INSERT INTO customer_loyalty_transactions (customer_id, order_id, order_number, type, points, notes) VALUES (?, ?, ?, ?, ?, ?)',
+      [customerId, orderId || null, orderNumber || null, type, pointsDelta, notes || null]
     );
   },
 
