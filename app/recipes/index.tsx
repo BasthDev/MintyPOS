@@ -4,6 +4,7 @@ import { DripSearchBar } from '@/components/SearchBar';
 import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
 import { dbOperations, getDatabase } from '@/lib/database';
+import { formatCurrency } from '@/lib/utils';
 import { RecipeProcess } from '@/processes/recipeProcess';
 import { ChefHat, ChevronRight, Edit, Plus, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
@@ -240,8 +241,8 @@ export default function RecipesScreen() {
                         { color: isSelected ? '#CBD5E1' : theme.textTertiary },
                       ]}
                     >
-                      {r.ingredient_count} ingredient{r.ingredient_count !== 1 ? 's' : ''} • Cost: Rp{' '}
-                      {r.total_cost ? r.total_cost.toFixed(2) : '0.00'}
+                      {r.ingredient_count} ingredient{r.ingredient_count !== 1 ? 's' : ''} • Cost:{' '}
+                      {formatCurrency(r.total_cost || 0)}
                     </Text>
                   </View>
 
@@ -281,7 +282,7 @@ export default function RecipesScreen() {
               {selectedRecipe.name}
             </Text>
             <Text style={[styles.detailsCost, { color: theme.primary }]}>
-              Estimated Cost: Rp {selectedRecipe.total_cost ? selectedRecipe.total_cost.toFixed(2) : '0.00'}
+              Estimated Cost: {formatCurrency(selectedRecipe.total_cost || 0)}
             </Text>
           </View>
         </View>
@@ -323,7 +324,7 @@ export default function RecipesScreen() {
                 </Text>
               </View>
               <Text style={[styles.ingredientCost, { color: theme.primary }]}>
-                Rp {ing.ingredient_cost ? ing.ingredient_cost.toFixed(2) : '0.00'}
+                {formatCurrency(ing.ingredient_cost || 0)}
               </Text>
             </View>
           ))}

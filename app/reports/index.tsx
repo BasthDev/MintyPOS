@@ -1,6 +1,7 @@
 import { Header } from '@/components/Header';
 import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
+import { formatCurrency } from '@/lib/utils';
 import { BarChart3 } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -25,7 +26,7 @@ export default function ReportsScreen() {
 
       <View style={styles.statsContainer}>
         <View style={[styles.statCard, { borderColor: theme.border, backgroundColor: theme.card }]}>
-          <Text style={[styles.statNumber, { color: theme.primary }]}>Rp 0</Text>
+          <Text style={[styles.statNumber, { color: theme.primary }]}>{formatCurrency(0)}</Text>
           <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Revenue</Text>
         </View>
         <View style={[styles.statCard, { borderColor: theme.border, backgroundColor: theme.card }]}>

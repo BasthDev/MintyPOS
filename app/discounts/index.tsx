@@ -6,6 +6,7 @@ import { useTheme } from '@/constants/colorTheme';
 import { DiscountItem, getDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import { DiscountProcess } from '@/processes/discountProcess';
+import { useStore } from '@/store/useStore';
 import {
   BadgePercent,
   ChevronRight,
@@ -28,6 +29,7 @@ import {
 
 export default function DiscountsScreen() {
   const { theme } = useTheme();
+  const currency = useStore((state) => state.currency);
 
   const [discounts, setDiscounts] = useState<DiscountItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -333,7 +335,7 @@ export default function DiscountsScreen() {
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Type:</Text>
             <Text style={[styles.infoValue, { color: theme.text }]}>
-              {selectedDiscount.type === 'percentage' ? 'Percentage (%)' : 'Flat Amount (Rp)'}
+              {selectedDiscount.type === 'percentage' ? 'Percentage (%)' : `Flat Amount (${currency?.symbol || '$'})`}
             </Text>
           </View>
 

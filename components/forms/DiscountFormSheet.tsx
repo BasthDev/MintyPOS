@@ -1,4 +1,5 @@
 import { useTheme } from '@/constants/colorTheme';
+import { useStore } from '@/store/useStore';
 import { Tag } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -38,6 +39,7 @@ export const DiscountFormSheet: React.FC<DiscountFormSheetProps> = ({
   loading = false,
 }) => {
   const { theme } = useTheme();
+  const currency = useStore((state) => state.currency);
 
   const [name, setName] = useState('');
   const [type, setType] = useState<'percentage' | 'flat'>('percentage');
@@ -168,13 +170,13 @@ export const DiscountFormSheet: React.FC<DiscountFormSheetProps> = ({
                 type === 'flat' && { color: '#FFFFFF', fontWeight: '700' },
               ]}
             >
-              Flat Amount (Rp)
+              Flat Amount ({currency?.symbol || '$'})
             </Text>
           </TouchableOpacity>
         </View>
 
         <DripInput
-          label={type === 'percentage' ? 'Percentage Value (%)' : 'Discount Amount (Rp)'}
+          label={type === 'percentage' ? 'Percentage Value (%)' : `Discount Amount (${currency?.symbol || '$'})`}
           placeholder={type === 'percentage' ? '10' : '15000'}
           keyboardType="decimal-pad"
           value={value}
@@ -186,7 +188,7 @@ export const DiscountFormSheet: React.FC<DiscountFormSheetProps> = ({
         />
 
         <DripInput
-          label="Minimum Order Spend (Rp) (Optional)"
+          label={`Minimum Order Spend (${currency?.symbol || '$'}) (Optional)`}
           placeholder="0"
           keyboardType="decimal-pad"
           value={minOrder}
@@ -195,7 +197,7 @@ export const DiscountFormSheet: React.FC<DiscountFormSheetProps> = ({
 
         {type === 'percentage' && (
           <DripInput
-            label="Max Discount Cap (Rp) (Optional)"
+            label={`Max Discount Cap (${currency?.symbol || '$'}) (Optional)`}
             placeholder="e.g. 25000 (leave blank for no cap)"
             keyboardType="decimal-pad"
             value={maxDiscount}

@@ -4,7 +4,9 @@ import { Section } from '@/components/Section';
 import { TaxFormData, TaxFormSheet } from '@/components/forms/TaxFormSheet';
 import { useTheme } from '@/constants/colorTheme';
 import { getDatabase, TaxConfigItem } from '@/lib/database';
+import { formatCurrency } from '@/lib/utils';
 import { TaxProcess } from '@/processes/taxProcess';
+import { useStore } from '@/store/useStore';
 import {
   ChevronRight,
   Edit,
@@ -28,6 +30,7 @@ import {
 
 export default function TaxServiceScreen() {
   const { theme } = useTheme();
+  const currency = useStore((state) => state.currency);
 
   const [taxes, setTaxes] = useState<TaxConfigItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -240,8 +243,7 @@ export default function TaxServiceScreen() {
                         { color: isSelected ? '#E0F2FE' : theme.textSecondary },
                       ]}
                     >
-                      Rate: {item.rate}
-                      {item.type === 'percentage' ? '%' : ' Rp (Flat)'} •{' '}
+                      Rate: {item.type === 'percentage' ? `${item.rate}%` : formatCurrency(item.rate)} •{' '}
                       {isActive ? 'Active' : 'Disabled'}
                     </Text>
                   </View>
@@ -290,7 +292,7 @@ export default function TaxServiceScreen() {
               {selectedTax.name}
             </Text>
             <Text style={[styles.detailsSubtitle, { color: theme.textSecondary }]}>
-              Rate: {selectedTax.rate}{selectedTax.type === 'percentage' ? '%' : ' Rp (Flat)'}
+              Rate: {selectedTax.type === 'percentage' ? `${selectedTax.rate}%` : formatCurrency(selectedTax.rate)}
             </Text>
           </View>
         </View>
@@ -326,14 +328,14 @@ export default function TaxServiceScreen() {
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Type:</Text>
             <Text style={[styles.infoValue, { color: theme.text }]}>
-              {selectedTax.type === 'percentage' ? 'Percentage (%)' : 'Flat Amount (Rp)'}
+              {selectedTax.type === 'percentage' ? 'Percentage (%)' : `Flat Amount (${currency?.symbol || '$'})`}
             </Text>
           </View>
 
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Rate / Value:</Text>
             <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>
-              {selectedTax.rate}{selectedTax.type === 'percentage' ? '%' : ' Rp'}
+              {selectedTax.type === 'percentage' ? `${selectedTax.rate}%` : formatCurrency(selectedTax.rate)}
             </Text>
           </View>
 

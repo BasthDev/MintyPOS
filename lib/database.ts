@@ -144,6 +144,7 @@ export interface CompletedOrder {
   amount_paid: number;
   change_amount: number;
   items_count: number;
+  note?: string;
   created_at: string;
   items?: CompletedOrderItem[];
 }
@@ -625,6 +626,23 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
 
       await db.execAsync(`PRAGMA user_version = ${TARGET_VERSION};`);
 
+      // Create activity_logs table
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS activity_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          type TEXT NOT NULL,
+          entity_type TEXT NOT NULL,
+          entity_id INTEGER NOT NULL,
+          entity_name TEXT NOT NULL,
+          quantity REAL,
+          unit TEXT,
+          description TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      await db.execAsync('CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);');
+      await db.execAsync('CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(type);');
+
       // Create configuration & operational tables
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS payment_methods (
@@ -677,6 +695,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           amount_paid REAL NOT NULL,
           change_amount REAL NOT NULL DEFAULT 0,
           items_count INTEGER NOT NULL DEFAULT 0,
+          note TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
       `);
@@ -690,9 +709,31 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           price REAL NOT NULL,
           quantity REAL NOT NULL,
           subtotal REAL NOT NULL,
+          note TEXT,
           FOREIGN KEY (order_id) REFERENCES orders(id)
         );
       `);
+
+      // Ensure migrations for existing databases that might miss note or columns
+      try {
+        const orderItemCols = await db.getAllAsync('PRAGMA table_info(order_items)');
+        const hasOrderItemNote = orderItemCols.some((col: any) => col.name === 'note');
+        if (!hasOrderItemNote) {
+          await db.execAsync('ALTER TABLE order_items ADD COLUMN note TEXT;');
+        }
+      } catch (err) {
+        console.error('Migration note check error for order_items:', err);
+      }
+
+      try {
+        const orderCols = await db.getAllAsync('PRAGMA table_info(orders)');
+        const hasOrderNote = orderCols.some((col: any) => col.name === 'note');
+        if (!hasOrderNote) {
+          await db.execAsync('ALTER TABLE orders ADD COLUMN note TEXT;');
+        }
+      } catch (err) {
+        console.error('Migration note check error for orders:', err);
+      }
 
       // Seed mock data if enabled
       if (ENABLE_MOCK_DATA) {
@@ -1327,6 +1368,7 @@ export const dbOperations = {
       paymentMethod: string;
       amountPaid: number;
       changeAmount: number;
+      note?: string;
       items: Array<{
         productId: number;
         productName: string;
@@ -1341,8 +1383,8 @@ export const dbOperations = {
       `INSERT INTO orders (
         order_number, subtotal, discount_amount, discount_name, 
         tax_amount, service_amount, total, payment_type, 
-        payment_method, amount_paid, change_amount, items_count
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        payment_method, amount_paid, change_amount, items_count, note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderData.orderNumber,
         orderData.subtotal,
@@ -1356,6 +1398,7 @@ export const dbOperations = {
         orderData.amountPaid,
         orderData.changeAmount,
         orderData.items.length,
+        orderData.note || null,
       ]
     );
 

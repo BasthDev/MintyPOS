@@ -19,7 +19,7 @@ export interface ProcessCheckoutInput {
   cart: CartItem[];
   subtotal: number;
   total: number;
-  paymentMethod: 'cash' | 'qris' | 'transfer' | 'split';
+  paymentMethod: 'cash' | 'card' | 'qris' | 'transfer' | 'ewallet' | 'split' | string;
   paymentAmount: number;
   selectedBank: string | null;
   selectedDiscount: DiscountItem | null;

@@ -10,7 +10,7 @@ export interface CheckoutInput {
   cart: CartItem[];
   subtotal: number;
   total: number;
-  paymentMethod: 'cash' | 'qris' | 'transfer' | 'split';
+  paymentMethod: 'cash' | 'card' | 'qris' | 'transfer' | 'ewallet' | 'split' | string;
   paymentAmount: number;
   selectedBank: string | null;
   selectedDiscount: DiscountItem | null;
@@ -64,11 +64,20 @@ export class CheckoutValidator {
           `Insufficient cash payment. Required: ${input.total}, Received: ${input.paymentAmount}`
         );
       }
-    } else if (input.paymentMethod === 'qris' || input.paymentMethod === 'transfer') {
+    } else {
+      // Non-cash methods (card, qris, transfer, ewallet, etc.)
       if (!input.selectedBank || input.selectedBank.trim().length === 0) {
-        errors.push(
-          `Please select a ${input.paymentMethod === 'qris' ? 'QRIS' : 'Bank Transfer'} provider`
-        );
+        const methodLabel =
+          input.paymentMethod === 'card'
+            ? 'Card (Debit/Credit)'
+            : input.paymentMethod === 'qris'
+            ? 'QRIS'
+            : input.paymentMethod === 'transfer'
+            ? 'Bank Transfer'
+            : input.paymentMethod === 'ewallet'
+            ? 'Digital Wallet'
+            : input.paymentMethod;
+        errors.push(`Please select a ${methodLabel} provider`);
       }
     }
 

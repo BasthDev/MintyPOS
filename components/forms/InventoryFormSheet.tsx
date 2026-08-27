@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../constants/colorTheme';
 import { dbOperations, getDatabase } from '../../lib/database';
+import { useStore } from '../../store/useStore';
 import { DripButton } from '../Button';
 import { DripDatePicker } from '../DatePicker';
 import { DripDropdown } from '../Dropdown';
@@ -44,6 +45,7 @@ export const InventoryFormSheet: React.FC<InventoryFormSheetProps> = ({
   mode,
 }) => {
   const { theme } = useTheme();
+  const currency = useStore((state) => state.currency);
   const [items, setItems] = useState<RestockItem[]>([
     { id: '1', ingredientId: '', supplierId: '', quantityBought: '', boughtUnit: '', unitMultiplier: '', totalCostPaid: '' },
   ]);
@@ -303,7 +305,7 @@ export const InventoryFormSheet: React.FC<InventoryFormSheetProps> = ({
             />
 
             <DripInput
-              label="Total Cost (Rp)"
+              label={`Total Cost (${currency?.symbol || '$'})`}
               value={item.totalCostPaid}
               onChangeText={(text) => updateItem(item.id, 'totalCostPaid', text)}
               error={errors[item.id]?.totalCostPaid}

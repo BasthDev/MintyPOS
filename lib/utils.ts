@@ -1,12 +1,48 @@
 import { Decimal } from 'decimal.js';
+import { CurrencyConfig, DEFAULT_CURRENCY } from '../constants/currencies';
+import { useStore } from '../store/useStore';
 
 /**
- * Format currency with proper decimal handling
+ * Format currency with dynamic store configuration or custom override
  */
-export const formatCurrency = (amount: number, currencySymbol: string = 'Rp'): string => {
-  const decimalAmount = new Decimal(amount);
-  const formatted = decimalAmount.toFixed(2);
-  return `${currencySymbol} ${formatted}`;
+export const formatCurrency = (
+  amount: number | string | Decimal | undefined | null,
+  override?: CurrencyConfig | string
+): string => {
+  if (amount === undefined || amount === null || isNaN(Number(amount))) {
+    amount = 0;
+  }
+
+  let curr: CurrencyConfig;
+  if (typeof override === 'object' && override !== null) {
+    curr = override;
+  } else if (typeof override === 'string') {
+    const active = useStore.getState().currency || DEFAULT_CURRENCY;
+    curr = { ...active, symbol: override };
+  } else {
+    curr = useStore.getState().currency || DEFAULT_CURRENCY;
+  }
+
+  try {
+    const num = new Decimal(amount);
+    const fixedStr = num.toFixed(curr.decimals);
+    const parts = fixedStr.split('.');
+    
+    // Format integer part with thousands separator
+    const intFormatted = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, curr.thousandsSeparator);
+    
+    let result = intFormatted;
+    if (curr.decimals > 0 && parts[1]) {
+      result += curr.decimalSeparator + parts[1];
+    }
+
+    if (curr.position === 'suffix') {
+      return `${result} ${curr.symbol}`;
+    }
+    return `${curr.symbol} ${result}`;
+  } catch {
+    return `${curr.symbol} 0`;
+  }
 };
 
 /**

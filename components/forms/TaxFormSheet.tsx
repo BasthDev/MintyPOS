@@ -1,4 +1,5 @@
 import { useTheme } from '@/constants/colorTheme';
+import { useStore } from '@/store/useStore';
 import { Percent, Receipt } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -34,6 +35,7 @@ export const TaxFormSheet: React.FC<TaxFormSheetProps> = ({
   loading = false,
 }) => {
   const { theme } = useTheme();
+  const currency = useStore((state) => state.currency);
 
   const [name, setName] = useState('');
   const [rate, setRate] = useState('');
@@ -156,13 +158,13 @@ export const TaxFormSheet: React.FC<TaxFormSheetProps> = ({
                 type === 'flat' && { color: '#FFFFFF', fontWeight: '700' },
               ]}
             >
-              Flat Amount (Rp)
+              Flat Amount ({currency?.symbol || '$'})
             </Text>
           </TouchableOpacity>
         </View>
 
         <DripInput
-          label={type === 'percentage' ? 'Rate Percentage (%)' : 'Flat Amount (Rp)'}
+          label={type === 'percentage' ? 'Rate Percentage (%)' : `Flat Amount (${currency?.symbol || '$'})`}
           placeholder={type === 'percentage' ? '10' : '5000'}
           keyboardType="decimal-pad"
           value={rate}

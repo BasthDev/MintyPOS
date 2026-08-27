@@ -1,4 +1,6 @@
 import { calculateRecipeCost } from '@/lib/businessLogic';
+import { formatCurrency } from '@/lib/utils';
+import { useStore } from '@/store/useStore';
 import * as ImagePicker from 'expo-image-picker';
 import { Barcode, Package, Scan, Upload, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
@@ -51,6 +53,7 @@ export const ProductFormSheet: React.FC<ProductFormSheetProps> = ({
   onScannerOpen,
 }) => {
   const { theme } = useTheme();
+  const currency = useStore((state) => state.currency);
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
@@ -414,7 +417,7 @@ export const ProductFormSheet: React.FC<ProductFormSheetProps> = ({
               <DripDropdown
                 label="Recipe"
                 options={recipes.map(r => ({ 
-                  label: `${r.name} (Cost: Rp ${r.total_cost?.toFixed(2) || '0.00'})`, 
+                  label: `${r.name} (Cost: ${formatCurrency(r.total_cost || 0)})`, 
                   value: r.id.toString() 
                 }))}
                 value={formData.recipeDefinitionId}
@@ -425,7 +428,7 @@ export const ProductFormSheet: React.FC<ProductFormSheetProps> = ({
               {calculatedHPP > 0 && (
                 <View style={[styles.hppInfo, { backgroundColor: theme.primary + '10', borderColor: theme.primary }]}>
                   <Text style={[styles.hppLabel, { color: theme.primary }]}>Calculated HPP:</Text>
-                  <Text style={[styles.hppValue, { color: theme.primary }]}>Rp {calculatedHPP.toFixed(2)}</Text>
+                  <Text style={[styles.hppValue, { color: theme.primary }]}>{formatCurrency(calculatedHPP)}</Text>
                   <Text style={[styles.hppNote, { color: theme.textSecondary }]}>
                     Based on current inventory stock prices (FEFO)
                   </Text>
@@ -433,7 +436,7 @@ export const ProductFormSheet: React.FC<ProductFormSheetProps> = ({
               )}
               
               <DripInput
-                label="Selling Price (Rp)"
+                label={`Selling Price (${currency?.symbol || '$'})`}
                 value={formData.sellingPrice}
                 onChangeText={(text) => setFormData({ ...formData, sellingPrice: text })}
                 error={errors.sellingPrice}
@@ -463,7 +466,7 @@ export const ProductFormSheet: React.FC<ProductFormSheetProps> = ({
           ) : (
             <>
               <DripInput
-                label="Buy Price (Rp)"
+                label={`Buy Price (${currency?.symbol || '$'})`}
                 value={formData.buyPrice}
                 onChangeText={(text) => setFormData({ ...formData, buyPrice: text })}
                 error={errors.buyPrice}
@@ -471,7 +474,7 @@ export const ProductFormSheet: React.FC<ProductFormSheetProps> = ({
                 keyboardType="numeric"
               />
               <DripInput
-                label="Selling Price (Rp)"
+                label={`Selling Price (${currency?.symbol || '$'})`}
                 value={formData.sellingPrice}
                 onChangeText={(text) => setFormData({ ...formData, sellingPrice: text })}
                 error={errors.sellingPrice}

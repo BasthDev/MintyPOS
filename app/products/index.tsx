@@ -5,6 +5,7 @@ import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
 import { calculateRecipeCost } from '@/lib/businessLogic';
 import { getDatabase } from '@/lib/database';
+import { formatCurrency } from '@/lib/utils';
 import { ProductProcess } from '@/processes/productProcess';
 import { AlertTriangle, ChevronRight, Edit, Package, Plus, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
@@ -251,7 +252,7 @@ export default function ProductsScreen() {
                         { color: isSelected ? '#E0F2FE' : theme.primary },
                       ]}
                     >
-                      Rp {p.selling_price?.toLocaleString()}
+                      {formatCurrency(p.selling_price || 0)}
                     </Text>
 
                     {/* Dynamic HPP Cost */}
@@ -262,7 +263,7 @@ export default function ProductsScreen() {
                           { color: isSelected ? '#CBD5E1' : theme.textSecondary },
                         ]}
                       >
-                        HPP: Rp {p.hpp ? Math.round(p.hpp).toLocaleString() : '0'}
+                        HPP: {formatCurrency(p.hpp ? Math.round(p.hpp) : 0)}
                       </Text>
                       {p.margin > 0 && (
                         <Text
@@ -365,7 +366,7 @@ export default function ProductsScreen() {
               {selectedProduct.name}
             </Text>
             <Text style={[styles.detailsPrice, { color: theme.primary }]}>
-              Rp {selectedProduct.selling_price?.toLocaleString()}
+              {formatCurrency(selectedProduct.selling_price || 0)}
             </Text>
           </View>
         </View>
@@ -393,21 +394,21 @@ export default function ProductsScreen() {
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Selling Price:</Text>
             <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
-              Rp {selectedProduct.selling_price ? selectedProduct.selling_price.toLocaleString() : '0'}
+              {formatCurrency(selectedProduct.selling_price || 0)}
             </Text>
           </View>
 
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Dynamic HPP / COGS:</Text>
             <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>
-              Rp {selectedProduct.hpp ? Math.round(selectedProduct.hpp).toLocaleString() : '0'}
+              {formatCurrency(selectedProduct.hpp ? Math.round(selectedProduct.hpp) : 0)}
             </Text>
           </View>
 
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Profit Margin:</Text>
             <Text style={[styles.infoValue, { color: theme.success, fontWeight: '700' }]}>
-              Rp {selectedProduct.margin ? Math.round(selectedProduct.margin).toLocaleString() : '0'} (
+              {formatCurrency(selectedProduct.margin ? Math.round(selectedProduct.margin) : 0)} (
               {Math.round(selectedProduct.marginPercentage || 0)}%)
             </Text>
           </View>

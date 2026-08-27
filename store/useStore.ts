@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { CurrencyConfig, DEFAULT_CURRENCY } from '../constants/currencies';
 
 // Types
 export interface CartItem {
@@ -106,6 +107,10 @@ interface StoreState {
   isDrawerOpen: boolean;
   setDrawerOpen: (isOpen: boolean) => void;
   toggleDrawer: () => void;
+
+  // Currency settings
+  currency: CurrencyConfig;
+  setCurrency: (currency: CurrencyConfig) => void;
 }
 
 export const useStore = create<StoreState>()(
@@ -211,14 +216,19 @@ export const useStore = create<StoreState>()(
       isDrawerOpen: false,
       setDrawerOpen: (isOpen) => set({ isDrawerOpen: isOpen }),
       toggleDrawer: () => set((state) => ({ isDrawerOpen: !state.isDrawerOpen })),
+
+      // Currency settings
+      currency: DEFAULT_CURRENCY,
+      setCurrency: (currency) => set({ currency }),
     }),
     {
       name: 'mintypos-storage',
       storage: createJSONStorage(() => AsyncStorage),
-      // Only persist cart and UI state, exclude database-loaded data
+      // Persist cart, UI state, and user currency configuration
       partialize: (state) => ({
         cart: state.cart,
         isDrawerOpen: state.isDrawerOpen,
+        currency: state.currency,
       }),
     }
   )
