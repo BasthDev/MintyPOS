@@ -260,6 +260,7 @@ Raw material definitions with base units and minimum stock alerts.
 - `name`: Ingredient name
 - `base_unit_id`: Foreign key to units
 - `minimum_stock`: Minimum stock threshold for alerts
+- `is_active`: Soft-delete flag (1 = active, 0 = deleted)
 - `created_at`, `updated_at`: Timestamps
 
 #### 5. **`ingredient_units`**
@@ -450,7 +451,7 @@ System audit trail of all inventory and order events.
 
 ### Schema Migrations
 
-The database uses automatic schema migrations based on `PRAGMA user_version`. Current target version is 8.
+The database uses automatic schema migrations based on `PRAGMA user_version`. Current target version is 9.
 
 **Migration History:**
 - **Version 1**: Initial schema with units, suppliers, ingredients, products, recipes, inventory
@@ -461,6 +462,10 @@ The database uses automatic schema migrations based on `PRAGMA user_version`. Cu
 - **Version 6**: Added activity_logs table
 - **Version 7**: Added CRM tables (customers, customer_loyalty_transactions, customer_balance_transactions, crm_config, order_splits)
 - **Version 8**: Added order_number column to customer_loyalty_transactions
+- **Version 9**: Added foreign key actions (ON DELETE SET NULL/CASCADE) and soft-delete for ingredients:
+  - Added is_active, created_at, updated_at columns to ingredients table
+  - Recreated all tables with foreign key actions for automatic referential integrity
+  - Removed need for PRAGMA foreign_keys toggling in delete operations
 
 ---
 
@@ -594,68 +599,79 @@ export class [Entity]Service {
 
 ## 🛡 Delete Function & Historical Data Preservation
 
-All delete operations in MintyPOS are designed to preserve historical data by setting foreign key IDs to NULL instead of deleting related records. This ensures that:
+All delete operations in MintyPOS use **native SQLite foreign key actions** (ON DELETE SET NULL/CASCADE) to preserve historical data automatically. This ensures that:
 
 1. **Orders remain intact** even if products, customers, or categories are deleted
 2. **Inventory history is preserved** even if ingredients or suppliers are deleted
 3. **Recipes remain available** even if products are deleted
 4. **Audit trails are complete** for compliance and analytics
+5. **No PRAGMA toggling required** - works correctly within transactions
+
+### Foreign Key Actions Implementation
+
+The database schema defines foreign key actions at the table level:
+
+```sql
+-- Example: Products table
+FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+FOREIGN KEY (recipe_definition_id) REFERENCES recipe_definitions(id) ON DELETE SET NULL
+
+-- Example: Order items table
+FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+```
 
 ### Delete Function Implementation Pattern
 
 ```typescript
 static async delete(db: SQLite.SQLiteDatabase, id: number) {
-  // Temporarily disable foreign keys to allow cleanup
-  await db.execAsync('PRAGMA foreign_keys = OFF;');
-
-  try {
-    // Preserve historical data - set foreign key IDs to NULL
-    await db.runAsync('UPDATE related_table SET foreign_key_id = NULL WHERE foreign_key_id = ?', [id]);
-
-    // Delete dependent records that don't need preservation
-    await db.runAsync('DELETE FROM dependent_table WHERE foreign_key_id = ?', [id]);
-
-    // Finally delete the entity
-    await db.runAsync('DELETE FROM main_table WHERE id = ?', [id]);
-  } finally {
-    // Re-enable foreign keys
-    await db.execAsync('PRAGMA foreign_keys = ON;');
-  }
+  // Native foreign key actions handle cleanup automatically
+  // No PRAGMA toggling needed - works within transactions
+  await db.runAsync('DELETE FROM main_table WHERE id = ?', [id]);
 }
 ```
 
 ### Delete Function Details
 
 #### **Customer Delete** (`lib/database.ts`)
-- Sets `customer_id` to NULL in `orders` (preserves historical order data)
-- Sets `customer_id` to NULL in `order_splits` (preserves split payment records)
-- Deletes `customer_loyalty_transactions` (customer-specific data)
-- Deletes `customer_balance_transactions` (customer-specific data)
-- Deletes customer record
+- **Native Actions**: 
+  - `customer_loyalty_transactions`: ON DELETE CASCADE (deletes customer-specific transactions)
+  - `customer_balance_transactions`: ON DELETE CASCADE (deletes customer-specific transactions)
+  - `orders.customer_id`: ON DELETE SET NULL (preserves historical order data)
+  - `order_splits.customer_id`: ON DELETE SET NULL (preserves split payment records)
+- **Implementation**: Simple DELETE statement - foreign key actions handle cleanup
 
 #### **Product Delete** (`services/productService.ts`)
-- Sets `recipe_definition_id` to NULL in `products` (unselects recipe, keeps recipe in database)
-- Sets `product_id` to NULL in `order_items` (preserves历史 order records)
-- Deletes product record
+- **Native Actions**:
+  - `order_items.product_id`: ON DELETE SET NULL (preserves historical order records)
+  - `products.recipe_definition_id`: ON DELETE SET NULL (unselects recipe, keeps recipe in database)
+- **Implementation**: Simple DELETE statement - foreign key actions handle cleanup
 
 #### **Ingredient Delete** (`services/ingredientService.ts`)
-- Deletes `ingredient_units` (conversion data)
-- Sets `ingredient_id` to NULL in `inventory_batches` (preserves historical inventory data)
-- Deletes `recipe_ingredients` (removes ingredient from recipes, recipes remain)
-- Deletes ingredient record
+- **Soft-Delete Mechanism**:
+  - Uses `is_active` flag instead of hard delete
+  - Preserves FEFO/FIFO tracking, low-stock alerts, and inventory valuation
+  - All queries filter by `is_active = 1`
+- **Native Actions** (if hard delete):
+  - `ingredient_units`: ON DELETE CASCADE (deletes conversion data)
+  - `inventory_batches.ingredient_id`: ON DELETE SET NULL (preserves historical inventory data)
+  - `recipe_ingredients.ingredient_id`: ON DELETE CASCADE (removes ingredient from recipes, recipes remain)
 
 #### **Supplier Delete** (`services/supplierService.ts`)
-- Sets `supplier_id` to NULL in `inventory_batches` (preserves historical inventory data)
-- Deletes supplier record
+- **Native Actions**:
+  - `inventory_batches.supplier_id`: ON DELETE SET NULL (preserves historical inventory data)
+- **Implementation**: Simple DELETE statement - foreign key actions handle cleanup
 
 #### **Category Delete** (`services/categoryService.ts`)
-- Sets `category_id` to NULL in `products` (preserves historical product data)
-- Deletes category record
+- **Native Actions**:
+  - `products.category_id`: ON DELETE SET NULL (preserves historical product data)
+- **Implementation**: Simple DELETE statement - foreign key actions handle cleanup
 
 #### **Recipe Definition Delete** (`lib/database.ts`)
-- Sets `recipe_definition_id` to NULL in `products` (unselects recipe from products)
-- Deletes `recipe_ingredients` (recipe composition)
-- Deletes recipe definition record
+- **Native Actions**:
+  - `products.recipe_definition_id`: ON DELETE SET NULL (unselects recipe from products)
+  - `recipe_ingredients.recipe_id`: ON DELETE CASCADE (deletes recipe composition)
+- **Implementation**: Simple DELETE statement - foreign key actions handle cleanup
 
 ---
 
@@ -824,8 +840,33 @@ npm run build
 
 ## 🔄 Recent Updates & Changelog
 
-### Version 1.0.2 (Latest)
-- 👥 **Customer Relationship Management (CRM)**: Full customer management system with loyalty points, store credit, and tier tracking.
+### Version 1.0.3 (Latest)
+- 🔗 **Native Foreign Key Actions**: Implemented ON DELETE SET NULL/CASCADE in database schema for automatic referential integrity:
+  - ingredient_units: ON DELETE CASCADE (deletes units when ingredient deleted)
+  - inventory_batches: ON DELETE SET NULL for ingredient_id and supplier_id (preserves historical inventory data)
+  - recipe_ingredients: ON DELETE CASCADE for both recipe_id and ingredient_id
+  - products: ON DELETE SET NULL for category_id and recipe_definition_id
+  - orders: ON DELETE SET NULL for customer_id
+  - order_items: ON DELETE CASCADE for order_id, ON DELETE SET NULL for product_id
+  - customer_loyalty_transactions: ON DELETE CASCADE for customer_id
+  - customer_balance_transactions: ON DELETE CASCADE for customer_id
+  - order_splits: ON DELETE CASCADE for parent_order_id, ON DELETE SET NULL for customer_id
+- 🔄 **Migration Version 9**: Added migration to recreate tables with foreign key actions for existing databases
+- 🗑️ **Soft-Delete for Ingredients**: Implemented soft-delete mechanism using is_active flag:
+  - Ingredients are marked inactive instead of being deleted
+  - Preserves FEFO/FIFO tracking, low-stock alerts, and inventory valuation
+  - All ingredient queries filter by is_active = 1
+- 🎯 **Automatic Tier Evaluation**: Added synchronous tier evaluation in checkout completion transaction:
+  - Customer tier evaluated immediately after total_spent update
+  - Based on CRM config thresholds (bronze, silver, gold)
+  - No need for background cron jobs
+- � **Simplified Delete Functions**: Removed PRAGMA foreign_keys toggling from all delete operations:
+  - Native foreign key actions handle cleanup automatically
+  - Cleaner, more reliable delete operations
+  - Works correctly within transactions
+
+### Version 1.0.2
+- �👥 **Customer Relationship Management (CRM)**: Full customer management system with loyalty points, store credit, and tier tracking.
 - 🎯 **Loyalty Points System**: Earn points from purchases, redeem for discounts, with complete transaction history and order number references.
 - 💳 **Store Credit Management**: Deposit store credit to customer accounts, track balance, and view transaction history.
 - 📊 **Customer KPI Dashboard**: Visual cards displaying loyalty points and store credit balance in customer details panel.
@@ -834,8 +875,8 @@ npm run build
 - 🛡 **Delete Function Fixes**: Fixed all delete operations to preserve historical data:
   - Customer delete: Nullifies customer_id in orders/splits, preserves historical order data
   - Product delete: Nullifies product_id in order_items, preserves historical order records
-  - Ingredient delete: Nullifies ingredient_id in inventory batches, preserves historical inventory data
-  - Supplier delete: Nullifies supplier_id in inventory batches, preserves historical inventory data
+  - Ingredient delete: Nullifies ingredient_id in inventory_batches, preserves historical inventory data
+  - Supplier delete: Nullifies supplier_id in inventory_batches, preserves historical inventory data
   - Category delete: Nullifies category_id in products, preserves historical product data
   - Recipe delete: Nullifies recipe_definition_id in products, preserves recipes
 - 🏗 **4-Layer CRM Architecture**: Implemented customerService, customerValidator, customerProcess, and CustomerFormSheet.

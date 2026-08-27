@@ -1,10 +1,10 @@
 import { validateSaleStock } from '../lib/businessLogic';
 import {
-    CompletedOrder,
-    dbOperations,
-    DiscountItem,
-    getDatabase,
-    handleCheckoutOrder
+  CompletedOrder,
+  dbOperations,
+  DiscountItem,
+  getDatabase,
+  handleCheckoutOrder
 } from '../lib/database';
 import { CartItem } from '../store/useStore';
 import { CheckoutValidator } from '../validators/checkoutValidator';
@@ -147,6 +147,27 @@ export class CheckoutProcess {
           'UPDATE customers SET total_spent = total_spent + ?, updated_at = datetime("now") WHERE id = ?',
           [input.total, input.customerId]
         );
+
+        // 2d. Evaluate and update customer tier based on total_spent
+        const crmConfig = await db.getFirstAsync<any>('SELECT * FROM crm_configs LIMIT 1');
+        if (crmConfig && crmConfig.tier_upgrade_enabled === 1) {
+          const customer = await db.getFirstAsync<any>('SELECT total_spent FROM customers WHERE id = ?', [input.customerId]);
+          if (customer) {
+            let newTier = 'regular';
+            if (customer.total_spent >= crmConfig.gold_threshold) {
+              newTier = 'gold';
+            } else if (customer.total_spent >= crmConfig.silver_threshold) {
+              newTier = 'silver';
+            } else if (customer.total_spent >= crmConfig.bronze_threshold) {
+              newTier = 'bronze';
+            }
+
+            await db.runAsync(
+              'UPDATE customers SET tier = ?, updated_at = datetime("now") WHERE id = ?',
+              [newTier, input.customerId]
+            );
+          }
+        }
       }
 
       // 3. Build receipt

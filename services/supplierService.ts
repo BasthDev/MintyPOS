@@ -69,19 +69,9 @@ export class SupplierService {
    * Delete supplier
    */
   static async delete(db: SQLite.SQLiteDatabase, id: number) {
-    // Temporarily disable foreign keys to allow cleanup
-    await db.execAsync('PRAGMA foreign_keys = OFF;');
-
-    try {
-      // Preserve historical inventory batches - set supplier_id to NULL to keep records
-      await db.runAsync('UPDATE inventory_batches SET supplier_id = NULL WHERE supplier_id = ?', [id]);
-
-      // Finally delete the supplier
-      await db.runAsync('DELETE FROM suppliers WHERE id = ?', [id]);
-    } finally {
-      // Re-enable foreign keys
-      await db.execAsync('PRAGMA foreign_keys = ON;');
-    }
+    // Foreign key actions (ON DELETE SET NULL) handle cleanup automatically
+    // inventory_batches.supplier_id will SET NULL automatically
+    await db.runAsync('DELETE FROM suppliers WHERE id = ?', [id]);
   }
 
   /**

@@ -89,22 +89,11 @@ export class ProductService {
    * Delete product
    */
   static async delete(db: SQLite.SQLiteDatabase, id: number) {
-    // Temporarily disable foreign keys to allow cleanup
-    await db.execAsync('PRAGMA foreign_keys = OFF;');
-
-    try {
-      // Set recipe_definition_id to NULL in products (unselect recipe, keep recipe in database)
-      await db.runAsync('UPDATE products SET recipe_definition_id = NULL, has_recipe = 0 WHERE id = ?', [id]);
-
-      // Preserve historical order items - set product_id to NULL to keep order records
-      await db.runAsync('UPDATE order_items SET product_id = NULL WHERE product_id = ?', [id]);
-
-      // Finally delete the product
-      await db.runAsync('DELETE FROM products WHERE id = ?', [id]);
-    } finally {
-      // Re-enable foreign keys
-      await db.execAsync('PRAGMA foreign_keys = ON;');
-    }
+    // Foreign key actions (ON DELETE SET NULL/CASCADE) handle cleanup automatically
+    // order_items will CASCADE delete when order is deleted
+    // products.recipe_definition_id will SET NULL automatically
+    // order_items.product_id will SET NULL automatically
+    await db.runAsync('DELETE FROM products WHERE id = ?', [id]);
   }
 
   /**

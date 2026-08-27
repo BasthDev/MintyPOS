@@ -538,6 +538,9 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           name TEXT NOT NULL,
           base_unit_id INTEGER NOT NULL,
           minimum_stock REAL NOT NULL DEFAULT 0,
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
           FOREIGN KEY (base_unit_id) REFERENCES units(id)
         );
       `);
@@ -548,7 +551,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           ingredient_id INTEGER NOT NULL,
           unit_name TEXT NOT NULL,
           multiplier_to_base REAL NOT NULL,
-          FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
+          FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
         );
       `);
 
@@ -562,8 +565,8 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           cost_per_base_unit REAL NOT NULL,
           received_date TEXT NOT NULL,
           expiration_date TEXT,
-          FOREIGN KEY (ingredient_id) REFERENCES ingredients(id),
-          FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+          FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL,
+          FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
         );
       `);
 
@@ -589,8 +592,8 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           recipe_id INTEGER NOT NULL,
           ingredient_id INTEGER NOT NULL,
           quantity_needed_base REAL NOT NULL,
-          FOREIGN KEY (recipe_id) REFERENCES recipe_definitions(id),
-          FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
+          FOREIGN KEY (recipe_id) REFERENCES recipe_definitions(id) ON DELETE CASCADE,
+          FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
         );
       `);
 
@@ -606,8 +609,8 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           current_stock REAL DEFAULT 0,
           stock_deduction_method TEXT NOT NULL DEFAULT 'none',
           image_uri TEXT,
-          FOREIGN KEY (category_id) REFERENCES categories(id),
-          FOREIGN KEY (recipe_definition_id) REFERENCES recipe_definitions(id)
+          FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+          FOREIGN KEY (recipe_definition_id) REFERENCES recipe_definitions(id) ON DELETE SET NULL
         );
       `);
 
@@ -725,6 +728,214 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
             console.error('Migration error for version 8 (orders columns):', error);
           }
         }
+
+        if (currentVersion < 9) {
+          try {
+            // Add is_active column to ingredients for soft-delete
+            const ingredientCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(ingredients)');
+            const ingredientColNames = new Set(ingredientCols.map((col: any) => col.name));
+            if (!ingredientColNames.has('is_active')) {
+              await db.execAsync('ALTER TABLE ingredients ADD COLUMN is_active INTEGER DEFAULT 1;');
+            }
+            if (!ingredientColNames.has('created_at')) {
+              await db.execAsync('ALTER TABLE ingredients ADD COLUMN created_at TEXT;');
+              await db.execAsync('UPDATE ingredients SET created_at = datetime("now") WHERE created_at IS NULL;');
+            }
+            if (!ingredientColNames.has('updated_at')) {
+              await db.execAsync('ALTER TABLE ingredients ADD COLUMN updated_at TEXT;');
+              await db.execAsync('UPDATE ingredients SET updated_at = datetime("now") WHERE updated_at IS NULL;');
+            }
+
+            // Migration to add foreign key actions (ON DELETE SET NULL/CASCADE)
+            // SQLite doesn't support ALTER TABLE to modify foreign key constraints
+            // We need to recreate tables with new foreign key actions
+            await db.execAsync('PRAGMA foreign_keys = OFF;');
+
+            // Recreate ingredient_units with ON DELETE CASCADE
+            await db.execAsync(`
+              CREATE TABLE IF NOT EXISTS ingredient_units_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ingredient_id INTEGER NOT NULL,
+                unit_name TEXT NOT NULL,
+                multiplier_to_base REAL NOT NULL,
+                FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
+              );
+            `);
+            await db.execAsync('INSERT INTO ingredient_units_new (id, ingredient_id, unit_name, multiplier_to_base) SELECT id, ingredient_id, unit_name, multiplier_to_base FROM ingredient_units;');
+            await db.execAsync('DROP TABLE ingredient_units;');
+            await db.execAsync('ALTER TABLE ingredient_units_new RENAME TO ingredient_units;');
+
+            // Recreate inventory_batches with ON DELETE SET NULL
+            await db.execAsync(`
+              CREATE TABLE IF NOT EXISTS inventory_batches_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ingredient_id INTEGER NOT NULL,
+                supplier_id INTEGER NOT NULL,
+                initial_quantity_base REAL NOT NULL,
+                remaining_quantity_base REAL NOT NULL,
+                cost_per_base_unit REAL NOT NULL,
+                received_date TEXT NOT NULL,
+                expiration_date TEXT,
+                FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL,
+                FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
+              );
+            `);
+            await db.execAsync('INSERT INTO inventory_batches_new (id, ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date, expiration_date) SELECT id, ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date, expiration_date FROM inventory_batches;');
+            await db.execAsync('DROP TABLE inventory_batches;');
+            await db.execAsync('ALTER TABLE inventory_batches_new RENAME TO inventory_batches;');
+
+            // Recreate recipe_ingredients with ON DELETE CASCADE
+            await db.execAsync(`
+              CREATE TABLE IF NOT EXISTS recipe_ingredients_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                recipe_id INTEGER NOT NULL,
+                ingredient_id INTEGER NOT NULL,
+                quantity_needed_base REAL NOT NULL,
+                FOREIGN KEY (recipe_id) REFERENCES recipe_definitions(id) ON DELETE CASCADE,
+                FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
+              );
+            `);
+            await db.execAsync('INSERT INTO recipe_ingredients_new (id, recipe_id, ingredient_id, quantity_needed_base) SELECT id, recipe_id, ingredient_id, quantity_needed_base FROM recipe_ingredients;');
+            await db.execAsync('DROP TABLE recipe_ingredients;');
+            await db.execAsync('ALTER TABLE recipe_ingredients_new RENAME TO recipe_ingredients;');
+
+            // Recreate products with ON DELETE SET NULL
+            await db.execAsync(`
+              CREATE TABLE IF NOT EXISTS products_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                sku TEXT,
+                category_id INTEGER,
+                buy_price REAL,
+                selling_price REAL NOT NULL,
+                recipe_definition_id INTEGER,
+                current_stock REAL DEFAULT 0,
+                stock_deduction_method TEXT NOT NULL DEFAULT 'none',
+                image_uri TEXT,
+                FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+                FOREIGN KEY (recipe_definition_id) REFERENCES recipe_definitions(id) ON DELETE SET NULL
+              );
+            `);
+            await db.execAsync('INSERT INTO products_new (id, name, sku, category_id, buy_price, selling_price, recipe_definition_id, current_stock, stock_deduction_method, image_uri) SELECT id, name, sku, category_id, buy_price, selling_price, recipe_definition_id, current_stock, stock_deduction_method, image_uri FROM products;');
+            await db.execAsync('DROP TABLE products;');
+            await db.execAsync('ALTER TABLE products_new RENAME TO products;');
+
+            // Recreate orders with ON DELETE SET NULL
+            await db.execAsync(`
+              CREATE TABLE IF NOT EXISTS orders_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_number TEXT NOT NULL,
+                subtotal REAL NOT NULL,
+                discount_amount REAL NOT NULL DEFAULT 0,
+                discount_name TEXT,
+                tax_amount REAL NOT NULL DEFAULT 0,
+                service_amount REAL NOT NULL DEFAULT 0,
+                total REAL NOT NULL,
+                payment_type TEXT NOT NULL,
+                payment_method TEXT NOT NULL,
+                amount_paid REAL NOT NULL,
+                change_amount REAL NOT NULL DEFAULT 0,
+                items_count INTEGER NOT NULL DEFAULT 0,
+                note TEXT,
+                customer_id INTEGER,
+                customer_name TEXT,
+                is_split INTEGER DEFAULT 0,
+                split_parent_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+              );
+            `);
+            await db.execAsync('INSERT INTO orders_new (id, order_number, subtotal, discount_amount, discount_name, tax_amount, service_amount, total, payment_type, payment_method, amount_paid, change_amount, items_count, note, customer_id, customer_name, is_split, split_parent_id, created_at) SELECT id, order_number, subtotal, discount_amount, discount_name, tax_amount, service_amount, total, payment_type, payment_method, amount_paid, change_amount, items_count, note, customer_id, customer_name, is_split, split_parent_id, created_at FROM orders;');
+            await db.execAsync('DROP TABLE orders;');
+            await db.execAsync('ALTER TABLE orders_new RENAME TO orders;');
+
+            // Recreate order_items with ON DELETE CASCADE/SET NULL
+            await db.execAsync(`
+              CREATE TABLE IF NOT EXISTS order_items_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                product_name TEXT NOT NULL,
+                price REAL NOT NULL,
+                quantity REAL NOT NULL,
+                subtotal REAL NOT NULL,
+                note TEXT,
+                FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+              );
+            `);
+            await db.execAsync('INSERT INTO order_items_new (id, order_id, product_id, product_name, price, quantity, subtotal, note) SELECT id, order_id, product_id, product_name, price, quantity, subtotal, note FROM order_items;');
+            await db.execAsync('DROP TABLE order_items;');
+            await db.execAsync('ALTER TABLE order_items_new RENAME TO order_items;');
+
+            // Recreate customer_loyalty_transactions with ON DELETE CASCADE
+            await db.execAsync(`
+              CREATE TABLE IF NOT EXISTS customer_loyalty_transactions_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER NOT NULL,
+                order_id INTEGER,
+                order_number TEXT,
+                type TEXT NOT NULL,
+                points INTEGER NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+              );
+            `);
+            await db.execAsync('INSERT INTO customer_loyalty_transactions_new (id, customer_id, order_id, order_number, type, points, notes, created_at) SELECT id, customer_id, order_id, order_number, type, points, notes, created_at FROM customer_loyalty_transactions;');
+            await db.execAsync('DROP TABLE customer_loyalty_transactions;');
+            await db.execAsync('ALTER TABLE customer_loyalty_transactions_new RENAME TO customer_loyalty_transactions;');
+
+            // Recreate customer_balance_transactions with ON DELETE CASCADE
+            await db.execAsync(`
+              CREATE TABLE IF NOT EXISTS customer_balance_transactions_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER NOT NULL,
+                order_id INTEGER,
+                type TEXT NOT NULL,
+                amount REAL NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+              );
+            `);
+            await db.execAsync('INSERT INTO customer_balance_transactions_new (id, customer_id, order_id, type, amount, notes, created_at) SELECT id, customer_id, order_id, type, amount, notes, created_at FROM customer_balance_transactions;');
+            await db.execAsync('DROP TABLE customer_balance_transactions;');
+            await db.execAsync('ALTER TABLE customer_balance_transactions_new RENAME TO customer_balance_transactions;');
+
+            // Recreate order_splits with ON DELETE CASCADE/SET NULL
+            await db.execAsync(`
+              CREATE TABLE IF NOT EXISTS order_splits_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                parent_order_id INTEGER NOT NULL,
+                split_index INTEGER NOT NULL,
+                total_splits INTEGER NOT NULL,
+                amount REAL NOT NULL,
+                payment_method TEXT NOT NULL,
+                payment_provider TEXT,
+                customer_id INTEGER,
+                status TEXT DEFAULT 'completed',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (parent_order_id) REFERENCES orders(id) ON DELETE CASCADE,
+                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+              );
+            `);
+            await db.execAsync('INSERT INTO order_splits_new (id, parent_order_id, split_index, total_splits, amount, payment_method, payment_provider, customer_id, status, created_at) SELECT id, parent_order_id, split_index, total_splits, amount, payment_method, payment_provider, customer_id, status, created_at FROM order_splits;');
+            await db.execAsync('DROP TABLE order_splits;');
+            await db.execAsync('ALTER TABLE order_splits_new RENAME TO order_splits;');
+
+            await db.execAsync('PRAGMA foreign_keys = ON;');
+
+            // Recreate indexes
+            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_inventory_batches_ingredient ON inventory_batches(ingredient_id);');
+            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_inventory_batches_date ON inventory_batches(received_date);');
+            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe ON recipe_ingredients(recipe_id);');
+            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient ON recipe_ingredients(ingredient_id);');
+            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_products_recipe ON products(recipe_definition_id);');
+          } catch (error) {
+            console.error('Migration error for version 9 (foreign key actions):', error);
+          }
+        }
       }
 
       await db.execAsync(`PRAGMA user_version = ${TARGET_VERSION};`);
@@ -803,7 +1014,8 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           customer_name TEXT,
           is_split INTEGER DEFAULT 0,
           split_parent_id INTEGER,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
         );
       `);
 
@@ -817,7 +1029,8 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           quantity REAL NOT NULL,
           subtotal REAL NOT NULL,
           note TEXT,
-          FOREIGN KEY (order_id) REFERENCES orders(id)
+          FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+          FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
         );
       `);
 
@@ -869,7 +1082,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           points INTEGER NOT NULL,
           notes TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (customer_id) REFERENCES customers(id)
+          FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
         );
       `);
 
@@ -882,7 +1095,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           amount REAL NOT NULL,
           notes TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (customer_id) REFERENCES customers(id)
+          FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
         );
       `);
 
@@ -898,7 +1111,9 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           payment_provider TEXT,
           customer_id INTEGER,
           status TEXT DEFAULT 'completed',
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (parent_order_id) REFERENCES orders(id) ON DELETE CASCADE,
+          FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
         );
       `);
 
@@ -1038,22 +1253,10 @@ export const dbOperations = {
   },
 
   async deleteRecipeDefinition(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
-    // Temporarily disable foreign keys to allow cleanup
-    await db.execAsync('PRAGMA foreign_keys = OFF;');
-
-    try {
-      // Set recipe_definition_id to NULL in products that use this recipe (unselect recipe)
-      await db.runAsync('UPDATE products SET recipe_definition_id = NULL, has_recipe = 0 WHERE recipe_definition_id = ?', [id]);
-
-      // Delete recipe ingredients
-      await db.runAsync('DELETE FROM recipe_ingredients WHERE recipe_id = ?', [id]);
-
-      // Finally delete the recipe definition
-      await db.runAsync('DELETE FROM recipe_definitions WHERE id = ?', [id]);
-    } finally {
-      // Re-enable foreign keys
-      await db.execAsync('PRAGMA foreign_keys = ON;');
-    }
+    // Foreign key actions (ON DELETE SET NULL/CASCADE) handle cleanup automatically
+    // products.recipe_definition_id will SET NULL automatically
+    // recipe_ingredients will CASCADE delete automatically
+    await db.runAsync('DELETE FROM recipe_definitions WHERE id = ?', [id]);
   },
 
   async getRecipeIngredients(db: SQLite.SQLiteDatabase, recipeId: number): Promise<RecipeIngredient[]> {
@@ -1109,6 +1312,7 @@ export const dbOperations = {
       SELECT i.*, u.name as unit_name, u.symbol as unit_symbol 
       FROM ingredients i 
       JOIN units u ON i.base_unit_id = u.id 
+      WHERE i.is_active = 1
       ORDER BY i.name
     `);
   },
@@ -1755,28 +1959,10 @@ export const dbOperations = {
   },
 
   async deleteCustomer(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
-    // Temporarily disable foreign keys to allow cascade cleanup
-    await db.execAsync('PRAGMA foreign_keys = OFF;');
-
-    try {
-      // Set customer_id to NULL in orders (keep historical order data)
-      await db.runAsync('UPDATE orders SET customer_id = NULL, customer_name = NULL WHERE customer_id = ?', [id]);
-
-      // Set customer_id to NULL in order_splits
-      await db.runAsync('UPDATE order_splits SET customer_id = NULL WHERE customer_id = ?', [id]);
-
-      // Delete customer loyalty transactions
-      await db.runAsync('DELETE FROM customer_loyalty_transactions WHERE customer_id = ?', [id]);
-
-      // Delete customer balance transactions
-      await db.runAsync('DELETE FROM customer_balance_transactions WHERE customer_id = ?', [id]);
-
-      // Finally delete the customer
-      await db.runAsync('DELETE FROM customers WHERE id = ?', [id]);
-    } finally {
-      // Re-enable foreign keys
-      await db.execAsync('PRAGMA foreign_keys = ON;');
-    }
+    // Foreign key actions (ON DELETE SET NULL/CASCADE) handle cleanup automatically
+    // customer_loyalty_transactions and customer_balance_transactions will CASCADE delete
+    // orders.customer_id and order_splits.customer_id will SET NULL automatically
+    await db.runAsync('DELETE FROM customers WHERE id = ?', [id]);
   },
 
   async updateCustomerPoints(

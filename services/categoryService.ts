@@ -63,19 +63,9 @@ export class CategoryService {
    * Delete category
    */
   static async delete(db: SQLite.SQLiteDatabase, id: number) {
-    // Temporarily disable foreign keys to allow cleanup
-    await db.execAsync('PRAGMA foreign_keys = OFF;');
-
-    try {
-      // Preserve historical product records - set category_id to NULL to keep records
-      await db.runAsync('UPDATE products SET category_id = NULL WHERE category_id = ?', [id]);
-
-      // Finally delete the category
-      await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
-    } finally {
-      // Re-enable foreign keys
-      await db.execAsync('PRAGMA foreign_keys = ON;');
-    }
+    // Foreign key actions (ON DELETE SET NULL) handle cleanup automatically
+    // products.category_id will SET NULL automatically
+    await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
   }
 
   /**

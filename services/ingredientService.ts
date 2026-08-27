@@ -80,28 +80,15 @@ export class IngredientService {
   }
 
   /**
-   * Delete ingredient
+   * Delete ingredient (soft-delete - sets is_active to 0)
    */
   static async delete(db: SQLite.SQLiteDatabase, id: number) {
-    // Temporarily disable foreign keys to allow cleanup
-    await db.execAsync('PRAGMA foreign_keys = OFF;');
-
-    try {
-      // Delete related ingredient units
-      await db.runAsync('DELETE FROM ingredient_units WHERE ingredient_id = ?', [id]);
-
-      // Preserve historical inventory batches - set ingredient_id to NULL to keep records
-      await db.runAsync('UPDATE inventory_batches SET ingredient_id = NULL WHERE ingredient_id = ?', [id]);
-
-      // Delete recipe_ingredients that reference this ingredient (recipes remain, just remove ingredient)
-      await db.runAsync('DELETE FROM recipe_ingredients WHERE ingredient_id = ?', [id]);
-
-      // Finally delete the ingredient
-      await db.runAsync('DELETE FROM ingredients WHERE id = ?', [id]);
-    } finally {
-      // Re-enable foreign keys
-      await db.execAsync('PRAGMA foreign_keys = ON;');
-    }
+    // Soft-delete: set is_active to 0 instead of deleting
+    // This preserves FEFO/FIFO tracking, low-stock alerts, and inventory valuation
+    await db.runAsync(
+      'UPDATE ingredients SET is_active = 0, updated_at = datetime("now") WHERE id = ?',
+      [id]
+    );
   }
 
   /**
@@ -112,7 +99,7 @@ export class IngredientService {
       `SELECT i.*, u.name as unit_name, u.symbol as unit_symbol 
        FROM ingredients i 
        JOIN units u ON i.base_unit_id = u.id 
-       WHERE i.name LIKE ? 
+       WHERE i.name LIKE ? AND i.is_active = 1
        ORDER BY i.name`,
       [`%${query}%`]
     );
@@ -128,6 +115,7 @@ export class IngredientService {
        FROM ingredients i 
        JOIN units u ON i.base_unit_id = u.id
        LEFT JOIN inventory_batches ib ON i.id = ib.ingredient_id AND ib.remaining_quantity_base > 0
+       WHERE i.is_active = 1
        GROUP BY i.id
        HAVING current_stock < i.minimum_stock
        ORDER BY i.name`
