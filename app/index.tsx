@@ -578,14 +578,14 @@ const styles = StyleSheet.create({
     gap: 9, // Smaller gap for 4-column layout on tablet
   },
   productCard: {
-    width: '48.5%', // 2 cards per row (mobile default)
+    width: '48%', // 2 cards per row (mobile default)
     borderRadius: 14,
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
   },
   productCardTablet: {
-    width: '24%', // 4 cards per row on tablet
+    width: '23.5%', // 4 cards per row on tablet
   },
   productThumbnail: {
     width: '100%',
