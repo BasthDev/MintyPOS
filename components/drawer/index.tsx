@@ -4,25 +4,25 @@ import { useDrawer } from '@/constants/drawerContext';
 import { DRAWER_MENU_ITEMS, MenuItem } from '@/constants/menu';
 import { router, usePathname } from 'expo-router';
 import {
-  ChevronDown,
-  ChevronUp,
-  LogOut,
-  Moon,
-  Store,
-  Sun
+    ChevronDown,
+    ChevronUp,
+    LogOut,
+    Moon,
+    Store,
+    Sun
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Dimensions,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-  ViewStyle,
+    Animated,
+    Dimensions,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
+    ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -276,7 +276,7 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
                           <Text
                             style={[
                               styles.groupTitle,
-                              { color: hasActiveChild ? PRIMARY : theme.text },
+                              { color: hasActiveChild ? PRIMARY : theme.textSecondary },
                             ]}
                           >
                             {item.title}

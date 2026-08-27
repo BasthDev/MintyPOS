@@ -9,7 +9,7 @@ const DB_NAME = 'mintypos.db';
 // ==========================================
 // Set to true to seed/reset mock data on app restart.
 // Set to false for production or to preserve user data.
-const ENABLE_MOCK_DATA = true;
+const ENABLE_MOCK_DATA = false;
 
 // Types
 export interface Category {

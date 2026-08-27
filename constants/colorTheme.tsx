@@ -157,7 +157,7 @@ export const themes: Record<ColorMode, ColorTheme> = {
   light: lightTheme,
 };
 
-export const defaultTheme: ColorMode = 'dark';
+export const defaultTheme: ColorMode = 'light';
 
 export const getTheme = (
   mode: ColorMode = defaultTheme
