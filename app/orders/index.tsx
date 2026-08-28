@@ -22,13 +22,36 @@ import {
 } from 'react-native';
 
 // Helper function to normalize payment method names
-function normalizePaymentMethod(method: string | null | undefined): string {
+function normalizePaymentMethod(
+  method: string | null | undefined,
+  typeKey?: string | null,
+  provider?: string | null
+): string {
   if (!method) return '';
-  return method
+
+  const normalized = method
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())
     .replace(/\s+/g, ' ')
     .trim();
+
+  // Show TYPE | provider format for QRIS and E-Wallet
+  if (typeKey && provider && (typeKey === 'qris' || typeKey === 'ewallet')) {
+    const typeLabel = typeKey === 'qris' ? 'QRIS' : 'E-Wallet';
+    return `${typeLabel} | ${provider}`;
+  }
+
+  // For QRIS/E-Wallet without explicit provider, try to extract from method name
+  if (typeKey && (typeKey === 'qris' || typeKey === 'ewallet')) {
+    const typeLabel = typeKey === 'qris' ? 'QRIS' : 'E-Wallet';
+    // If method already contains the provider, use it
+    if (method !== typeLabel.toLowerCase() && method !== typeLabel) {
+      return `${typeLabel} | ${normalized}`;
+    }
+    return typeLabel;
+  }
+
+  return normalized;
 }
 
 export default function OrdersScreen() {
@@ -197,7 +220,7 @@ export default function OrdersScreen() {
                       ]}
                     >
                       {o.items_count || o.items?.length || 0} items •{' '}
-                      {normalizePaymentMethod(o.payment_method)}
+                      {normalizePaymentMethod(o.payment_method, o.payment_type)}
                     </Text>
                     <Text
                       style={[
@@ -302,7 +325,7 @@ export default function OrdersScreen() {
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Payment Method:</Text>
             <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
-              {normalizePaymentMethod(selectedOrder.payment_method)}
+              {normalizePaymentMethod(selectedOrder.payment_method, selectedOrder.payment_type)}
             </Text>
           </View>
 
@@ -348,8 +371,7 @@ export default function OrdersScreen() {
                       Person {sp.split_index + 1} of {sp.total_splits}
                     </Text>
                     <Text style={{ fontSize: 11, color: theme.textSecondary }}>
-                      {normalizePaymentMethod(sp.payment_method)}
-                      {sp.payment_provider ? ` (${sp.payment_provider})` : ''}
+                      {normalizePaymentMethod(sp.payment_method, sp.payment_method, sp.payment_provider)}
                     </Text>
                   </View>
                   <Text style={{ fontSize: 13, fontWeight: '700', color: theme.primary }}>

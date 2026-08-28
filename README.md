@@ -656,6 +656,7 @@ static async delete(db: SQLite.SQLiteDatabase, id: number) {
   - `ingredient_units`: ON DELETE CASCADE (deletes conversion data)
   - `inventory_batches.ingredient_id`: ON DELETE SET NULL (preserves historical inventory data)
   - `recipe_ingredients.ingredient_id`: ON DELETE CASCADE (removes ingredient from recipes, recipes remain)
+- **Note**: Ingredients primarily use a soft-delete (is_active flag) mechanism in application logic, while schema-level ON DELETE SET NULL actions serve as a robust database-level safety fallback.
 
 #### **Supplier Delete** (`services/supplierService.ts`)
 - **Native Actions**:

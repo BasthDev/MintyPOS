@@ -7,7 +7,7 @@ import { calculateRecipeCost } from '@/lib/businessLogic';
 import { getDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import { ProductProcess } from '@/processes/productProcess';
-import { AlertTriangle, ChevronRight, Edit, Package, Plus, Trash2 } from 'lucide-react-native';
+import { AlertTriangle, ChevronRight, CircleCheck, Edit, Package, Plus, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -301,10 +301,16 @@ export default function ProductsScreen() {
                           },
                         ]}
                       >
-                        {isLowStock && (
+                        {isLowStock ? (
                           <AlertTriangle
                             size={12}
                             color={isSelected ? '#FFFFFF' : theme.error}
+                            style={styles.stockAlertIcon}
+                          />
+                        ) : (
+                          <CircleCheck
+                            size={12}
+                            color={isSelected ? '#FFFFFF' : theme.success}
                             style={styles.stockAlertIcon}
                           />
                         )}
@@ -580,10 +586,16 @@ const styles = StyleSheet.create({
   },
   stockBadge: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    position: 'absolute',
+    minWidth: 60,
+    top: -25,
+    right: 0,
+    // borderWidth: 1,
+    // borderColor: 'rgba(214, 16, 16, 0.7)',
   },
   stockAlertIcon: {
     marginRight: 4,
