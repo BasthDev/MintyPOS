@@ -1,4 +1,4 @@
-import { CustomerItem, CustomerLoyaltyTransactionItem, CustomerBalanceTransactionItem } from '@/lib/database';
+import { CustomerBalanceTransactionItem, CustomerItem, CustomerLoyaltyTransactionItem } from '@/lib/database';
 import { CustomerService } from '@/services/customerService';
 import { CustomerInput, CustomerValidator } from '@/validators/customerValidator';
 import * as SQLite from 'expo-sqlite';
@@ -79,6 +79,22 @@ export class CustomerProcess {
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || 'Failed to deposit store credit' };
+    }
+  }
+
+  static async spendCredit(
+    db: SQLite.SQLiteDatabase,
+    customerId: number,
+    amount: number,
+    orderId?: number,
+    notes?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (amount <= 0) return { success: false, error: 'Spend amount must be greater than 0' };
+    try {
+      await CustomerService.spendCredit(db, customerId, amount, orderId, notes);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to spend store credit' };
     }
   }
 

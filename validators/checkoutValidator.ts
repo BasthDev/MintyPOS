@@ -1,5 +1,5 @@
-import { CartItem } from '../store/useStore';
 import { DiscountItem } from '../lib/database';
+import { CartItem } from '../store/useStore';
 
 export interface ValidationResult {
   isValid: boolean;
@@ -64,6 +64,9 @@ export class CheckoutValidator {
           `Insufficient cash payment. Required: ${input.total}, Received: ${input.paymentAmount}`
         );
       }
+    } else if (input.paymentMethod === 'STORE CREDIT') {
+      // Store credit doesn't require a provider, it uses customer balance
+      // Validation is done in the payment screen before calling checkout
     } else {
       // Non-cash methods (card, qris, transfer, ewallet, etc.)
       if (!input.selectedBank || input.selectedBank.trim().length === 0) {

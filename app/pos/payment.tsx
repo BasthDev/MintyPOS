@@ -950,28 +950,27 @@ export default function POSPaymentScreen() {
       if (m.is_active && !knownKeys.has(m.type_key)) {
         knownKeys.add(m.type_key);
         let icon = CreditCard;
-        if (m.type_key === 'card') icon = CreditCard;
-        else if (m.type_key === 'qris') icon = QrCode;
-        else if (m.type_key === 'transfer') icon = Smartphone;
-        else if (m.type_key === 'ewallet') icon = Wallet;
-
-        types.push({
-          key: m.type_key,
-          label: m.type_label || (m.type_key === 'card' ? 'Card' : m.type_key.toUpperCase()),
-          icon,
-        });
+        if (m.type_key === 'ewallet') icon = Smartphone;
+        if (m.type_key === 'bank_transfer') icon = Banknote;
+        if (m.type_key === 'qr') icon = QrCode;
+        types.push({ key: m.type_key, label: m.method_name, icon });
       }
     });
+
+    // Add Store Credit payment method if customer has credit balance
+    if (selectedCustomer && selectedCustomer.store_credit_balance > 0) {
+      types.push({ key: 'store_credit', label: 'Store Credit', icon: Wallet });
+    }
 
     // Add Split Pay option to top/left methods
     types.push({ key: 'split', label: 'Split', icon: Divide });
 
     return types;
-  }, [paymentMethods]);
+  }, [paymentMethods, selectedCustomer]);
 
   // Providers list for current non-cash method
   const activeProvidersForMethod = useMemo(() => {
-    if (method === 'cash' || method === 'split') return [];
+    if (method === 'cash' || method === 'split' || method === 'store_credit') return [];
     const matching = paymentMethods.filter((m) => m.type_key === method && m.is_active);
     return matching.map((m) => m.method_name);
   }, [method, paymentMethods]);
@@ -1014,8 +1013,9 @@ export default function POSPaymentScreen() {
     return Array.from(list).sort((a, b) => a - b).slice(0, 8);
   }, [total, currentSplitAmount, splitConfig, currency]);
 
-  const isNonCash = method !== 'cash' && method !== 'split';
+  const isNonCash = method !== 'cash' && method !== 'split' && method !== 'store_credit';
   const isBankMethod = method === 'qris' || method === 'transfer' || method === 'card';
+  const isStoreCredit = method === 'store_credit';
 
   const canConfirm =
     (method === 'split' && !splitConfig) ||
@@ -1027,8 +1027,10 @@ export default function POSPaymentScreen() {
       (!isBankMethod || selectedBank !== null)) ||
     (!splitConfig &&
       subtotal > 0 &&
-      paymentAmount >= currentSplitAmount &&
-      (method === 'cash' ? paymentAmount >= total : selectedBank !== null));
+      (isStoreCredit
+        ? selectedCustomer && selectedCustomer.store_credit_balance >= currentSplitAmount
+        : paymentAmount >= currentSplitAmount) &&
+      (method === 'cash' ? paymentAmount >= total : isStoreCredit ? true : selectedBank !== null));
 
   const shortfall = currentSplitAmount - paymentAmount;
 
@@ -1046,6 +1048,8 @@ export default function POSPaymentScreen() {
         'Cannot Confirm',
         method === 'cash' && shortfall > 0
           ? `Insufficient payment. Need ${fmt(shortfall)} more.`
+          : method === 'store_credit' && (!selectedCustomer || selectedCustomer.store_credit_balance < currentSplitAmount)
+          ? `Insufficient store credit balance. Need ${fmt(currentSplitAmount - (selectedCustomer?.store_credit_balance || 0))} more.`
           : 'Please select a payment provider or check details.'
       );
       return;
@@ -1117,7 +1121,7 @@ export default function POSPaymentScreen() {
     setConfirming(true);
     try {
       const db = await getDatabase();
-      const displayMethodName = splitConfig
+      let displayMethodName = splitConfig
         ? 'SPLIT PAYMENT'
         : (method === 'qris' || method === 'transfer' || method === 'card') && selectedBank
         ? `${method.toUpperCase()} | ${selectedBank}`
@@ -1129,7 +1133,7 @@ export default function POSPaymentScreen() {
         total,
         paymentMethod: displayMethodName,
         paymentAmount: method === 'cash' && !splitConfig ? paymentAmount : total,
-        selectedBank: isNonCash ? selectedBank : null,
+        selectedBank: isStoreCredit ? null : isNonCash ? selectedBank : null,
         selectedDiscount,
         discountAmount: totalDiscount,
         taxAmount,
@@ -1143,6 +1147,17 @@ export default function POSPaymentScreen() {
       if (!result.success || !result.order) {
         Alert.alert('Payment Error', (result.errors || ['Validation failed']).join('\n'));
         return;
+      }
+
+      // Handle store credit payment after order is created
+      if (method === 'store_credit' && selectedCustomer && selectedCustomer.store_credit_balance >= currentSplitAmount) {
+        await CustomerProcess.spendCredit(
+          db,
+          selectedCustomer.id,
+          currentSplitAmount,
+          result.order.id,
+          `Payment for order #${result.order.id}`
+        );
       }
 
       // Record split payment details if split
@@ -1576,6 +1591,33 @@ export default function POSPaymentScreen() {
                     theme={theme}
                     styles={styles}
                   />
+                ) : method === 'store_credit' ? (
+                  <View style={{ padding: 0, gap: 12 }}>
+                    <View style={{ backgroundColor: theme.input, borderRadius: 12, padding: 16, gap: 12 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <Wallet size={24} color={theme.primary} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 14, color: theme.textSecondary }}>Customer</Text>
+                          <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>
+                            {selectedCustomer?.name || 'No Customer'}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.divider }}>
+                        <Text style={{ fontSize: 14, color: theme.textSecondary }}>Available Balance</Text>
+                        <Text style={{ fontSize: 20, fontWeight: '800', color: theme.primary }}>
+                          {fmt(selectedCustomer?.store_credit_balance || 0)}
+                        </Text>
+                      </View>
+                      {selectedCustomer && selectedCustomer.store_credit_balance < currentSplitAmount && (
+                        <View style={{ backgroundColor: withOpacity(theme.error, 0.1), borderRadius: 8, padding: 12, marginTop: 8 }}>
+                          <Text style={{ fontSize: 13, color: theme.error, fontWeight: '600' }}>
+                            Insufficient balance. Need {fmt(currentSplitAmount - (selectedCustomer.store_credit_balance || 0))} more.
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
                 ) : (
                   <BankGrid
                     banks={activeProvidersForMethod}
@@ -1954,6 +1996,7 @@ export default function POSPaymentScreen() {
         onCustomerSelect={(value) => {
           if (value === '') {
             setSelectedCustomer(null);
+            setPointsToRedeem(0);
             return;
           }
           const customer = customers.find((c) => String(c.id) === value);
@@ -1976,6 +2019,14 @@ export default function POSPaymentScreen() {
           }
           setSelectedDiscount(discount || null);
         }}
+        customerPoints={selectedCustomer?.loyalty_points || 0}
+        pointsToRedeem={pointsToRedeem}
+        onPointsRedeemChange={(points) => {
+          setPointsToRedeem(points);
+          setPointRedemptionEnabled(points > 0);
+        }}
+        maxRedeemablePoints={crmConfig ? Math.floor((subtotal * crmConfig.max_redemption_pct) / 100 * crmConfig.points_per_currency) : 0}
+        pointsToCurrencyRatio={crmConfig ? crmConfig.points_to_currency_ratio : 0}
       />
 
       {/* Receipt Success Dialog */}
