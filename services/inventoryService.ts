@@ -22,7 +22,7 @@ export class InventoryService {
    */
   static async getAllBatches(db: SQLite.SQLiteDatabase) {
     return await db.getAllAsync(
-      `SELECT ib.*, i.name as ingredient_name, s.name as supplier_name, u.symbol as unit_symbol
+      `SELECT ib.*, i.name as ingredient_name, s.name as supplier_name, u.symbol as unit_symbol, i.minimum_stock
        FROM inventory_batches ib
        JOIN ingredients i ON ib.ingredient_id = i.id
        JOIN suppliers s ON ib.supplier_id = s.id

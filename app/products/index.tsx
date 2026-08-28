@@ -7,7 +7,7 @@ import { calculateRecipeCost } from '@/lib/businessLogic';
 import { getDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import { ProductProcess } from '@/processes/productProcess';
-import { AlertTriangle, ChevronRight, CircleCheck, Edit, Package, Plus, Trash2 } from 'lucide-react-native';
+import { AlertTriangle, Check, ChevronRight, Edit, Package, Plus, Trash2 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -308,7 +308,7 @@ export default function ProductsScreen() {
                             style={styles.stockAlertIcon}
                           />
                         ) : (
-                          <CircleCheck
+                          <Check
                             size={12}
                             color={isSelected ? '#FFFFFF' : theme.success}
                             style={styles.stockAlertIcon}

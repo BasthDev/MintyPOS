@@ -7,7 +7,7 @@ import { useTheme } from '@/constants/colorTheme';
 import { getDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import { InventoryProcess } from '@/processes/inventoryProcess';
-import { ChevronRight, Layers, Plus } from 'lucide-react-native';
+import { AlertTriangle, ChevronRight, Layers, Plus } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -146,6 +146,8 @@ export default function InventoryScreen() {
         <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }}>
           {filteredBatches.map((b) => {
             const isSelected = selectedBatch?.id === b.id;
+            const isLowStock = b.minimum_stock > 0 && b.remaining_quantity_base <= b.minimum_stock;
+            const isOutOfStock = b.remaining_quantity_base === 0;
 
             return (
               <TouchableOpacity
@@ -186,7 +188,15 @@ export default function InventoryScreen() {
                       <Text
                         style={[
                           styles.stockText,
-                          { color: isSelected ? '#FFFFFF' : theme.primary },
+                          {
+                            color: isSelected
+                              ? '#FFFFFF'
+                              : isOutOfStock
+                              ? theme.error
+                              : isLowStock
+                              ? '#F59E0B'
+                              : theme.primary,
+                          },
                         ]}
                       >
                         {b.remaining_quantity_base} {b.unit_symbol}
@@ -207,6 +217,34 @@ export default function InventoryScreen() {
                     />
                   </View>
                 </View>
+
+                {/* Min Stock Badge */}
+                {b.minimum_stock > 0 && (
+                  <View
+                    style={[
+                      styles.minStockBadge,
+                      {
+                        backgroundColor: isSelected
+                          ? 'rgba(255,255,255,0.2)'
+                          : isLowStock
+                          ? '#FEF2F2'
+                          : theme.input,
+                      },
+                    ]}
+                  >
+                    {isLowStock ? (
+                      <AlertTriangle size={12} color={isSelected ? '#FFFFFF' : theme.warning} style={styles.stockAlertIcon} />
+                    ) : null}
+                    <Text
+                      style={[
+                        styles.minStockText,
+                        { color: isSelected ? '#FFFFFF' : isLowStock ? theme.warning : theme.textSecondary },
+                      ]}
+                    >
+                      Min: {b.minimum_stock}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -260,10 +298,32 @@ export default function InventoryScreen() {
 
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Remaining Stock:</Text>
-            <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>
+            <Text
+              style={[
+                styles.infoValue,
+                {
+                  color:
+                    selectedBatch.remaining_quantity_base === 0
+                      ? theme.error
+                      : selectedBatch.minimum_stock > 0 && selectedBatch.remaining_quantity_base <= selectedBatch.minimum_stock
+                      ? '#F59E0B'
+                      : theme.primary,
+                  fontWeight: '700',
+                },
+              ]}
+            >
               {selectedBatch.remaining_quantity_base} {selectedBatch.unit_symbol}
             </Text>
           </View>
+
+          {selectedBatch.minimum_stock > 0 && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Minimum Stock:</Text>
+              <Text style={[styles.infoValue, { color: theme.text }]}>
+                {selectedBatch.minimum_stock} {selectedBatch.unit_symbol}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Initial Quantity:</Text>
@@ -395,6 +455,25 @@ const styles = StyleSheet.create({
   costText: {
     fontSize: 12,
     marginTop: 2,
+  },
+  minStockBadge: {
+    display: 'none',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    position: 'absolute',
+    minWidth: 60,
+    bottom: -10,
+    right: 10,
+  },
+  minStockText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  stockAlertIcon: {
+    marginRight: 4,
   },
 
   // FAB
