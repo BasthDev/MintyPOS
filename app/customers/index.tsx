@@ -1,3 +1,4 @@
+import { CreditFormSheet } from '@/components/forms/CreditFormSheet';
 import { CustomerFormSheet } from '@/components/forms/CustomerFormSheet';
 import { Header } from '@/components/Header';
 import { DripSearchBar } from '@/components/SearchBar';
@@ -21,11 +22,9 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -51,11 +50,8 @@ export default function CustomersScreen() {
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
   const [saving, setSaving] = useState(false);
 
-  // Store Credit Deposit Modal state
-  const [depositModalVisible, setDepositModalVisible] = useState(false);
-  const [depositAmount, setDepositAmount] = useState('');
-  const [depositNotes, setDepositNotes] = useState('');
-  const [depositing, setDepositing] = useState(false);
+  // Credit form sheet state
+  const [creditSheetVisible, setCreditSheetVisible] = useState(false);
 
   // Logs state
   const [loyaltyLogs, setLoyaltyLogs] = useState<any[]>([]);
@@ -169,33 +165,6 @@ export default function CustomersScreen() {
         },
       },
     ]);
-  };
-
-  const handleDepositSubmit = async () => {
-    const amt = parseFloat(depositAmount);
-    if (isNaN(amt) || amt <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid deposit amount greater than 0');
-      return;
-    }
-    if (!selectedCustomer) return;
-
-    setDepositing(true);
-    try {
-      const db = await getDatabase();
-      const res = await CustomerProcess.depositCredit(db, selectedCustomer.id, amt, depositNotes);
-      if (!res.success) {
-        Alert.alert('Error', res.error || 'Failed to deposit store credit');
-        return;
-      }
-      setDepositModalVisible(false);
-      setDepositAmount('');
-      setDepositNotes('');
-      await loadCustomers();
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to deposit store credit');
-    } finally {
-      setDepositing(false);
-    }
   };
 
   const filteredCustomers = customers.filter(
@@ -345,7 +314,7 @@ export default function CustomersScreen() {
         {/* Deposit Credit Action Button */}
         <TouchableOpacity
           style={[styles.depositBtn, { backgroundColor: theme.primary }]}
-          onPress={() => setDepositModalVisible(true)}
+          onPress={() => setCreditSheetVisible(true)}
           activeOpacity={0.8}
         >
           <CreditCard size={18} color="#FFFFFF" />
@@ -466,77 +435,15 @@ export default function CustomersScreen() {
         loading={saving}
       />
 
-      {/* Deposit Credit Modal */}
-      <Modal
-        visible={depositModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDepositModalVisible(false)}
-      >
-        <View style={[styles.modalOverlay, { backgroundColor: theme.overlay }]}>
-          <View style={[styles.modalCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>
-              Deposit Store Credit
-            </Text>
-            <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
-              Customer: {selectedCustomer?.name}
-            </Text>
-
-            <View style={{ gap: 12, marginVertical: 16 }}>
-              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
-                Deposit Amount ({currency?.symbol || '$'})
-              </Text>
-              <TextInput
-                style={[
-                  styles.modalInput,
-                  { backgroundColor: theme.input, color: theme.text, borderColor: theme.border },
-                ]}
-                placeholder="0"
-                placeholderTextColor={theme.textTertiary}
-                keyboardType="numeric"
-                value={depositAmount}
-                onChangeText={setDepositAmount}
-              />
-
-              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>
-                Notes (Optional)
-              </Text>
-              <TextInput
-                style={[
-                  styles.modalInput,
-                  { backgroundColor: theme.input, color: theme.text, borderColor: theme.border },
-                ]}
-                placeholder="e.g. Top up via cash"
-                placeholderTextColor={theme.textTertiary}
-                value={depositNotes}
-                onChangeText={setDepositNotes}
-              />
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalCancelBtn, { borderColor: theme.border }]}
-                onPress={() => setDepositModalVisible(false)}
-                disabled={depositing}
-              >
-                <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalConfirmBtn, { backgroundColor: theme.primary }]}
-                onPress={handleDepositSubmit}
-                disabled={depositing}
-              >
-                {depositing ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Confirm Deposit</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Credit Form Sheet */}
+      <CreditFormSheet
+        visible={creditSheetVisible}
+        onClose={() => setCreditSheetVisible(false)}
+        customerId={selectedCustomer?.id || 0}
+        customerName={selectedCustomer?.name || ''}
+        currentBalance={selectedCustomer?.store_credit_balance || 0}
+        onSuccess={loadCustomers}
+      />
     </>
   );
 }

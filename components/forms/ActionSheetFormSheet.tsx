@@ -1,6 +1,7 @@
 import { useTheme } from '@/constants/colorTheme';
 import { Tag } from 'lucide-react-native';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { DripButton } from '../Button';
 import { DripDropdown } from '../Dropdown';
 import { DripSheet } from '../Sheet';
 
@@ -38,14 +39,21 @@ export const ActionSheetFormSheet: React.FC<ActionSheetFormSheetProps> = ({
       onClose={onClose}
       title="Actions"
       headerIcon={<Tag size={20} color={theme.primary} />}
+      footer={
+        <DripButton
+          title="Done"
+          onPress={onClose}
+          style={{ width: 120 }}
+        />
+      }
     >
       <View style={{ gap: 16 }}>
         <View>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text, marginBottom: 8 }}>
+          {/* <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text, marginBottom: 8 }}>
             Customer
-          </Text>
+          </Text> */}
           <DripDropdown
-            label="Select Customer"
+            label="Customer"
             options={customerOptions}
             value={selectedCustomer}
             onSelect={onCustomerSelect}
@@ -53,11 +61,11 @@ export const ActionSheetFormSheet: React.FC<ActionSheetFormSheetProps> = ({
         </View>
 
         <View>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text, marginBottom: 8 }}>
+          {/* <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text, marginBottom: 8 }}>
             Discount
-          </Text>
+          </Text> */}
           <DripDropdown
-            label="Select Discount"
+            label="Discount"
             options={discountOptions}
             value={selectedDiscount}
             onSelect={onDiscountSelect}

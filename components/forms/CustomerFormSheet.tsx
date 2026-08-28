@@ -4,6 +4,7 @@ import { FileText, Mail, Phone, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { DripButton } from '../Button';
+import { DeskInput } from '../DeskInput';
 import { DripInput } from '../Input';
 import { DripSheet } from '../Sheet';
 
@@ -143,7 +144,7 @@ export const CustomerFormSheet: React.FC<CustomerFormSheetProps> = ({
           leftIcon={<Mail size={18} color={theme.textSecondary} />}
         />
 
-        <DripInput
+        <DeskInput
           label="Notes / Address (Optional)"
           placeholder="e.g. VIP Customer, prefers extra hot latte"
           value={notes}

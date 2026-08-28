@@ -1221,16 +1221,22 @@ export default function POSPaymentScreen() {
   };
 
   // Convert customers to dropdown options
-  const customerDropdownOptions = customers.map((c) => ({
-    label: c.name,
-    value: String(c.id),
-  }));
+  const customerDropdownOptions = [
+    { label: 'No Customer', value: '' },
+    ...customers.map((c) => ({
+      label: c.name,
+      value: String(c.id),
+    })),
+  ];
 
-  // Convert discounts to dropdown options
-  const discountDropdownOptions = discounts.map((d) => ({
-    label: d.name,
-    value: String(d.id),
-  }));
+  // Convert discounts to dropdown options with details
+  const discountDropdownOptions = [
+    { label: 'No Discount', value: '' },
+    ...discounts.map((d) => ({
+      label: `${d.name} (${d.type === 'percentage' ? `${d.value}%` : fmt(d.value)})`,
+      value: String(d.id),
+    })),
+  ];
 
   // Header Right Button (3-dot menu)
   const headerRight = (
@@ -1915,14 +1921,22 @@ export default function POSPaymentScreen() {
         visible={actionSheetVisible}
         onClose={() => setActionSheetVisible(false)}
         customerOptions={customerDropdownOptions}
-        selectedCustomer={selectedCustomer ? String(selectedCustomer.id) : undefined}
+        selectedCustomer={selectedCustomer ? String(selectedCustomer.id) : ''}
         onCustomerSelect={(value) => {
+          if (value === '') {
+            setSelectedCustomer(null);
+            return;
+          }
           const customer = customers.find((c) => String(c.id) === value);
           setSelectedCustomer(customer || null);
         }}
         discountOptions={discountDropdownOptions}
-        selectedDiscount={selectedDiscount ? String(selectedDiscount.id) : undefined}
+        selectedDiscount={selectedDiscount ? String(selectedDiscount.id) : ''}
         onDiscountSelect={(value) => {
+          if (value === '') {
+            setSelectedDiscount(null);
+            return;
+          }
           const discount = discounts.find((d) => String(d.id) === value);
           if (discount) {
             const validation = CheckoutProcess.validateDiscountSelection(discount, subtotal);
@@ -2098,7 +2112,7 @@ const createPaymentStyles = (theme: ColorTheme) =>
     },
     numpadKey: {
       width: '30%',
-      height: 54,
+      height: 70,
       borderRadius: 10,
       borderWidth: 1,
       justifyContent: 'center',
