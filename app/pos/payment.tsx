@@ -50,17 +50,20 @@ import {
   CompletedOrder,
   CRMConfigItem,
   CustomerItem,
-  dbOperations,
   DiscountItem,
   getDatabase,
   PaymentMethodItem,
-  TaxConfigItem,
+  TaxConfigItem
 } from '@/lib/database';
 import { formatCurrency as fmt } from '@/lib/utils';
 import { CartProcess } from '@/processes/cartProcess';
 import { CheckoutProcess } from '@/processes/checkoutProcess';
 import { CRMProcess } from '@/processes/crmProcess';
 import { CustomerProcess } from '@/processes/customerProcess';
+import { DiscountProcess } from '@/processes/discountProcess';
+import { PaymentMethodProcess } from '@/processes/paymentMethodProcess';
+import { SplitPaymentProcess } from '@/processes/splitPaymentProcess';
+import { TaxProcess } from '@/processes/taxProcess';
 import { useStore } from '@/store/useStore';
 
 // ─── Helper: compute discount amount from a Discount preset ─────────────────
@@ -849,7 +852,7 @@ export default function POSPaymentScreen() {
   } | null>(null);
   const [currentSplitIndex, setCurrentSplitIndex] = useState(0);
   const [paidSplits, setPaidSplits] = useState<
-    Array<{ splitIndex: number; amount: number; paymentMethod: string; provider?: string }>
+    Array<{ splitIndex: number; amount: number; paymentMethod: string; provider?: string; customerId?: number }>
   >([]);
   const [allSplitsCollected, setAllSplitsCollected] = useState(false);
 
@@ -873,16 +876,16 @@ export default function POSPaymentScreen() {
     setLoadingConfigs(true);
     try {
       const db = await getDatabase();
-      const [methods, taxes, discList, crmRes, custRes] = await Promise.all([
-        dbOperations.getActivePaymentMethods(db),
-        dbOperations.getActiveTaxConfigs(db),
-        dbOperations.getActiveDiscounts(db),
+      const [methodsRes, taxesRes, discRes, crmRes, custRes] = await Promise.all([
+        PaymentMethodProcess.getAll(db),
+        TaxProcess.getAll(db),
+        DiscountProcess.getAll(db),
         CRMProcess.getConfig(db),
         CustomerProcess.getAll(db),
       ]);
-      setPaymentMethods(methods);
-      setTaxConfigs(taxes);
-      setDiscounts(discList);
+      setPaymentMethods(methodsRes.success ? (methodsRes.data || []).filter(m => m.is_active) : []);
+      setTaxConfigs(taxesRes.success ? (taxesRes.data || []).filter(t => t.is_active) : []);
+      setDiscounts(discRes.success ? (discRes.data || []).filter(d => d.is_active) : []);
       if (crmRes.success && crmRes.data) setCrmConfig(crmRes.data);
       if (custRes.success && custRes.data) setCustomers(custRes.data);
     } catch (error) {
@@ -1043,7 +1046,18 @@ export default function POSPaymentScreen() {
   const handleQuickAmount = (amt: number) => setNumpadStr(String(amt));
 
   const handleConfirm = async () => {
+    console.log('[PAYMENT] Starting payment confirmation');
+    console.log('[PAYMENT] Payment method:', method);
+    console.log('[PAYMENT] Payment amount:', paymentAmount);
+    console.log('[PAYMENT] Total:', total);
+    console.log('[PAYMENT] Current split amount:', currentSplitAmount);
+    console.log('[PAYMENT] Selected bank:', selectedBank);
+    console.log('[PAYMENT] Selected customer:', selectedCustomer?.name);
+    console.log('[PAYMENT] Is split payment:', !!splitConfig);
+    console.log('[PAYMENT] Can confirm:', canConfirm);
+
     if (!canConfirm) {
+      console.log('[PAYMENT ERROR] Cannot confirm payment');
       Alert.alert(
         'Cannot Confirm',
         method === 'cash' && shortfall > 0
@@ -1057,6 +1071,10 @@ export default function POSPaymentScreen() {
 
     // A. Start split payment configuration
     if (method === 'split' && !splitConfig) {
+      console.log('[PAYMENT] Starting split payment configuration');
+      console.log('[PAYMENT] Split type:', splitType);
+      console.log('[PAYMENT] Split count:', splitCount);
+
       let amounts: number[] = [];
       if (splitType === 'equal') {
         const perPerson = Math.round((total / splitCount) * 100) / 100;
@@ -1067,6 +1085,7 @@ export default function POSPaymentScreen() {
         amounts = customAmounts.length === splitCount ? [...customAmounts] : Array(splitCount).fill(0);
         const sum = amounts.reduce((a, b) => a + b, 0);
         if (Math.abs(sum - total) > 1) {
+          console.log('[PAYMENT ERROR] Invalid split total:', sum, 'expected:', total);
           Alert.alert(
             'Invalid Split Total',
             `Sum of custom amounts (${fmt(sum)}) must equal total order (${fmt(total)}).`
@@ -1075,6 +1094,7 @@ export default function POSPaymentScreen() {
         }
       }
 
+      console.log('[PAYMENT] Split amounts:', amounts);
       setSplitConfig({
         splitCount,
         splitType,
@@ -1091,17 +1111,25 @@ export default function POSPaymentScreen() {
 
     // B. Collect individual split payment
     if (splitConfig && !allSplitsCollected) {
+      console.log('[PAYMENT] Collecting split payment');
+      console.log('[PAYMENT] Split index:', currentSplitIndex);
+      console.log('[PAYMENT] Split amount:', currentSplitAmount);
+      console.log('[PAYMENT] Payment method:', method);
+
       const thisSplitPayment = {
         splitIndex: currentSplitIndex,
         amount: currentSplitAmount,
         paymentMethod: method,
         provider: selectedBank || undefined,
+        customerId: method === 'store_credit' ? selectedCustomer?.id : undefined,
       };
 
       const updatedPaidSplits = [...paidSplits, thisSplitPayment];
       setPaidSplits(updatedPaidSplits);
+      console.log('[PAYMENT] Collected splits:', updatedPaidSplits.length, 'of', splitConfig.splitCount);
 
       if (updatedPaidSplits.length === splitConfig.splitCount) {
+        console.log('[PAYMENT] All splits collected');
         setAllSplitsCollected(true);
         Alert.alert(
           'All Splits Collected',
@@ -1109,6 +1137,7 @@ export default function POSPaymentScreen() {
         );
       } else {
         const nextIndex = currentSplitIndex + 1;
+        console.log('[PAYMENT] Moving to next split:', nextIndex);
         setCurrentSplitIndex(nextIndex);
         setMethod('cash');
         setNumpadStr('');
@@ -1118,6 +1147,7 @@ export default function POSPaymentScreen() {
     }
 
     // C. Final order checkout confirmation
+    console.log('[PAYMENT] Starting final checkout confirmation');
     setConfirming(true);
     try {
       const db = await getDatabase();
@@ -1126,6 +1156,14 @@ export default function POSPaymentScreen() {
         : (method === 'qris' || method === 'transfer' || method === 'card') && selectedBank
         ? `${method.toUpperCase()} | ${selectedBank}`
         : method.toUpperCase();
+
+      console.log('[PAYMENT] Display method name:', displayMethodName);
+      console.log('[PAYMENT] Cart items:', cart.length);
+      console.log('[PAYMENT] Subtotal:', subtotal);
+      console.log('[PAYMENT] Discount amount:', totalDiscount);
+      console.log('[PAYMENT] Tax amount:', taxAmount);
+      console.log('[PAYMENT] Service amount:', serviceAmount);
+      console.log('[PAYMENT] Total:', total);
 
       const result = await CheckoutProcess.processCheckout({
         cart,
@@ -1144,25 +1182,39 @@ export default function POSPaymentScreen() {
         isSplit: !!splitConfig,
       });
 
+      console.log('[PAYMENT] Checkout result:', result.success ? 'SUCCESS' : 'FAILED');
+      if (!result.success) {
+        console.log('[PAYMENT ERROR] Checkout errors:', result.errors);
+      }
+
       if (!result.success || !result.order) {
         Alert.alert('Payment Error', (result.errors || ['Validation failed']).join('\n'));
         return;
       }
 
+      console.log('[PAYMENT] Order created:', result.order.id, result.order.order_number);
+
       // Handle store credit payment after order is created
       if (method === 'store_credit' && selectedCustomer && selectedCustomer.store_credit_balance >= currentSplitAmount) {
-        await CustomerProcess.spendCredit(
+        console.log('[PAYMENT] Deducting store credit:', currentSplitAmount);
+        console.log('[PAYMENT] Customer balance before:', selectedCustomer.store_credit_balance);
+        const creditResult = await CustomerProcess.spendCredit(
           db,
           selectedCustomer.id,
           currentSplitAmount,
           result.order.id,
           `Payment for order #${result.order.id}`
         );
+        console.log('[PAYMENT] Store credit deduction result:', creditResult.success ? 'SUCCESS' : 'FAILED');
+        if (!creditResult.success) {
+          console.log('[PAYMENT ERROR] Store credit error:', creditResult.error);
+        }
       }
 
       // Record split payment details if split
       if (splitConfig && paidSplits.length > 0) {
-        await dbOperations.createOrderSplits(
+        console.log('[PAYMENT] Saving split payments:', paidSplits.length);
+        const splitResult = await SplitPaymentProcess.saveSplits(
           db,
           result.order.id,
           paidSplits.map((s) => ({
@@ -1171,9 +1223,31 @@ export default function POSPaymentScreen() {
             amount: s.amount,
             paymentMethod: s.paymentMethod,
             paymentProvider: s.provider,
-            customerId: selectedCustomer?.id,
+            customerId: s.customerId || selectedCustomer?.id,
           }))
         );
+        console.log('[PAYMENT] Split payments save result:', splitResult.success ? 'SUCCESS' : 'FAILED');
+        if (!splitResult.success) {
+          console.log('[PAYMENT ERROR] Split save error:', splitResult.error);
+        }
+
+        // Handle store credit deduction for each split that used store credit
+        for (const split of paidSplits) {
+          if (split.paymentMethod === 'store_credit' && split.customerId) {
+            console.log('[PAYMENT] Deducting store credit for split:', split.splitIndex, split.amount);
+            const creditResult = await CustomerProcess.spendCredit(
+              db,
+              split.customerId,
+              split.amount,
+              result.order.id,
+              `Split payment #${split.splitIndex + 1} for order #${result.order.id}`
+            );
+            console.log('[PAYMENT] Store credit deduction result for split:', creditResult.success ? 'SUCCESS' : 'FAILED');
+            if (!creditResult.success) {
+              console.log('[PAYMENT ERROR] Store credit error for split:', creditResult.error);
+            }
+          }
+        }
       }
 
       // Handle CRM Loyalty Points Earning & Redemption
@@ -1181,37 +1255,46 @@ export default function POSPaymentScreen() {
         if (crmConfig.loyalty_enabled === 1 && total >= (crmConfig.min_transaction_for_points || 0)) {
           const earnedPts = Math.floor(total * (crmConfig.points_per_currency || 0.01));
           if (earnedPts > 0) {
-            const dbRef = await getDatabase();
-            await dbOperations.updateCustomerPoints(
-              dbRef,
+            console.log('[PAYMENT] Earning loyalty points:', earnedPts);
+            const earnResult = await CustomerProcess.earnPoints(
+              db,
               selectedCustomer.id,
               earnedPts,
-              'earn',
               result.order.id,
               result.order.order_number,
               'Earned points from order'
             );
+            console.log('[PAYMENT] Points earn result:', earnResult.success ? 'SUCCESS' : 'FAILED');
+            if (!earnResult.success) {
+              console.log('[PAYMENT ERROR] Points earn error:', earnResult.error);
+            }
           }
         }
 
         if (pointRedemptionEnabled && pointsToRedeem > 0) {
-          const dbRef = await getDatabase();
-          await dbOperations.updateCustomerPoints(
-            dbRef,
+          console.log('[PAYMENT] Redeeming loyalty points:', pointsToRedeem);
+          const redeemResult = await CustomerProcess.redeemPoints(
+            db,
             selectedCustomer.id,
-            -pointsToRedeem,
-            'redeem',
+            pointsToRedeem,
             result.order.id,
             result.order.order_number,
             'Redeemed points for discount'
           );
+          console.log('[PAYMENT] Points redeem result:', redeemResult.success ? 'SUCCESS' : 'FAILED');
+          if (!redeemResult.success) {
+            console.log('[PAYMENT ERROR] Points redeem error:', redeemResult.error);
+          }
         }
       }
 
+      console.log('[PAYMENT] Payment completed successfully');
       CartProcess.clearCart();
       setCompletedReceipt(result.order);
     } catch (error: any) {
-      console.error('Payment failed:', error);
+      console.error('[PAYMENT ERROR] Payment failed:', error);
+      console.error('[PAYMENT ERROR] Error message:', error?.message);
+      console.error('[PAYMENT ERROR] Error stack:', error?.stack);
       Alert.alert('Payment Failed', error?.message || 'An unexpected error occurred during payment processing.');
     } finally {
       setConfirming(false);
@@ -1410,6 +1493,7 @@ export default function POSPaymentScreen() {
                         ]}
                         onPress={() => {
                           if (splitConfig && m.key === 'split') return;
+                          console.log('[PAYMENT] Payment method selected:', m.key, m.label);
                           setMethod(m.key);
                           setNumpadStr('');
                           setSelectedBank(null);

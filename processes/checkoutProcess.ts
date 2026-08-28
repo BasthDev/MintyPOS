@@ -8,6 +8,7 @@ import {
 } from '../lib/database';
 import { CartItem } from '../store/useStore';
 import { CheckoutValidator } from '../validators/checkoutValidator';
+import { CustomerProcess } from './customerProcess';
 
 export interface CheckoutResult {
   success: boolean;
@@ -115,6 +116,27 @@ export class CheckoutProcess {
       );
 
       // 2b. Save Order to SQLite DB
+      console.log('[CHECKOUT] Creating order with customer ID:', input.customerId);
+      console.log('[CHECKOUT] Cart items:', input.cart.map(c => ({ id: c.productId, name: c.name })));
+
+      // Validate customer exists if customerId is provided
+      if (input.customerId) {
+        const customerExists = await db.getFirstAsync('SELECT id FROM customers WHERE id = ?', [input.customerId]);
+        if (!customerExists) {
+          console.log('[CHECKOUT ERROR] Customer does not exist:', input.customerId);
+          return { success: false, errors: ['Customer not found'] };
+        }
+      }
+
+      // Validate all products exist
+      for (const item of input.cart) {
+        const productExists = await db.getFirstAsync('SELECT id FROM products WHERE id = ?', [item.productId]);
+        if (!productExists) {
+          console.log('[CHECKOUT ERROR] Product does not exist:', item.productId, item.name);
+          return { success: false, errors: [`Product "${item.name}" not found`] };
+        }
+      }
+
       const orderId = await dbOperations.createCompletedOrder(db, {
         orderNumber,
         subtotal: input.subtotal,
@@ -127,8 +149,8 @@ export class CheckoutProcess {
         paymentMethod: displayMethodName,
         amountPaid: input.paymentMethod === 'cash' ? input.paymentAmount : input.total,
         changeAmount: input.change,
-        customerId: input.customerId,
-        customerName: input.customerName,
+        customerId: input.customerId || null,
+        customerName: input.customerName || null,
         isSplit: input.isSplit,
         splitParentId: input.splitParentId,
         items: input.cart.map((c) => ({
@@ -143,17 +165,17 @@ export class CheckoutProcess {
 
       // 2c. Update customer total_spent if customer is attached
       if (input.customerId) {
-        await db.runAsync(
-          'UPDATE customers SET total_spent = total_spent + ?, updated_at = datetime("now") WHERE id = ?',
-          [input.total, input.customerId]
-        );
+        const updateResult = await CustomerProcess.updateTotalSpent(db, input.customerId, input.total);
+        if (!updateResult.success) {
+          console.log('[CHECKOUT] Failed to update customer total_spent:', updateResult.error);
+        }
 
         // 2d. Evaluate and update customer tier based on total_spent
         const crmConfig = await db.getFirstAsync<any>('SELECT * FROM crm_configs LIMIT 1');
         if (crmConfig && crmConfig.tier_upgrade_enabled === 1) {
           const customer = await db.getFirstAsync<any>('SELECT total_spent FROM customers WHERE id = ?', [input.customerId]);
           if (customer) {
-            let newTier = 'regular';
+            let newTier: 'regular' | 'bronze' | 'silver' | 'gold' = 'regular';
             if (customer.total_spent >= crmConfig.gold_threshold) {
               newTier = 'gold';
             } else if (customer.total_spent >= crmConfig.silver_threshold) {
@@ -162,10 +184,10 @@ export class CheckoutProcess {
               newTier = 'bronze';
             }
 
-            await db.runAsync(
-              'UPDATE customers SET tier = ?, updated_at = datetime("now") WHERE id = ?',
-              [newTier, input.customerId]
-            );
+            const tierResult = await CustomerProcess.updateTier(db, input.customerId, newTier);
+            if (!tierResult.success) {
+              console.log('[CHECKOUT] Failed to update customer tier:', tierResult.error);
+            }
           }
         }
       }

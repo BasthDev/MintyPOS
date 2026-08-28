@@ -58,26 +58,29 @@ export class CheckoutValidator {
     }
 
     // 5. Payment method specific validation
-    if (input.paymentMethod === 'cash') {
+    const normalizedMethod = input.paymentMethod.toUpperCase();
+    if (normalizedMethod === 'CASH') {
       if (typeof input.paymentAmount !== 'number' || input.paymentAmount < input.total) {
         errors.push(
           `Insufficient cash payment. Required: ${input.total}, Received: ${input.paymentAmount}`
         );
       }
-    } else if (input.paymentMethod === 'STORE CREDIT') {
+    } else if (normalizedMethod === 'STORE CREDIT' || normalizedMethod === 'STORE_CREDIT') {
       // Store credit doesn't require a provider, it uses customer balance
       // Validation is done in the payment screen before calling checkout
+    } else if (normalizedMethod === 'SPLIT PAYMENT') {
+      // Split payment doesn't require a provider, individual splits are validated separately
     } else {
       // Non-cash methods (card, qris, transfer, ewallet, etc.)
       if (!input.selectedBank || input.selectedBank.trim().length === 0) {
         const methodLabel =
-          input.paymentMethod === 'card'
+          normalizedMethod === 'CARD'
             ? 'Card (Debit/Credit)'
-            : input.paymentMethod === 'qris'
+            : normalizedMethod === 'QRIS'
             ? 'QRIS'
-            : input.paymentMethod === 'transfer'
+            : normalizedMethod === 'TRANSFER'
             ? 'Bank Transfer'
-            : input.paymentMethod === 'ewallet'
+            : normalizedMethod === 'EWALLET'
             ? 'Digital Wallet'
             : input.paymentMethod;
         errors.push(`Please select a ${methodLabel} provider`);

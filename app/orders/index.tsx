@@ -21,6 +21,16 @@ import {
   View,
 } from 'react-native';
 
+// Helper function to normalize payment method names
+function normalizePaymentMethod(method: string | null | undefined): string {
+  if (!method) return '';
+  return method
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export default function OrdersScreen() {
   const { theme } = useTheme();
 
@@ -187,7 +197,7 @@ export default function OrdersScreen() {
                       ]}
                     >
                       {o.items_count || o.items?.length || 0} items •{' '}
-                      {o.payment_method?.toUpperCase()}
+                      {normalizePaymentMethod(o.payment_method)}
                     </Text>
                     <Text
                       style={[
@@ -292,7 +302,7 @@ export default function OrdersScreen() {
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Payment Method:</Text>
             <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
-              {selectedOrder.payment_method?.toUpperCase()}
+              {normalizePaymentMethod(selectedOrder.payment_method)}
             </Text>
           </View>
 
@@ -338,7 +348,7 @@ export default function OrdersScreen() {
                       Person {sp.split_index + 1} of {sp.total_splits}
                     </Text>
                     <Text style={{ fontSize: 11, color: theme.textSecondary }}>
-                      {sp.payment_method?.toUpperCase()}
+                      {normalizePaymentMethod(sp.payment_method)}
                       {sp.payment_provider ? ` (${sp.payment_provider})` : ''}
                     </Text>
                   </View>

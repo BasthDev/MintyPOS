@@ -98,6 +98,73 @@ export class CustomerProcess {
     }
   }
 
+  static async earnPoints(
+    db: SQLite.SQLiteDatabase,
+    customerId: number,
+    points: number,
+    orderId?: number,
+    orderNumber?: string,
+    notes?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (points <= 0) return { success: false, error: 'Points must be greater than 0' };
+    try {
+      await CustomerService.updatePoints(db, customerId, points, 'earn', orderId, notes);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to earn points' };
+    }
+  }
+
+  static async redeemPoints(
+    db: SQLite.SQLiteDatabase,
+    customerId: number,
+    points: number,
+    orderId?: number,
+    orderNumber?: string,
+    notes?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (points <= 0) return { success: false, error: 'Points must be greater than 0' };
+    try {
+      await CustomerService.updatePoints(db, customerId, -points, 'redeem', orderId, notes);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to redeem points' };
+    }
+  }
+
+  static async updateTotalSpent(
+    db: SQLite.SQLiteDatabase,
+    customerId: number,
+    amount: number
+  ): Promise<{ success: boolean; error?: string }> {
+    if (amount < 0) return { success: false, error: 'Amount must be non-negative' };
+    try {
+      await db.runAsync(
+        'UPDATE customers SET total_spent = total_spent + ?, updated_at = datetime("now") WHERE id = ?',
+        [amount, customerId]
+      );
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to update total spent' };
+    }
+  }
+
+  static async updateTier(
+    db: SQLite.SQLiteDatabase,
+    customerId: number,
+    tier: 'regular' | 'bronze' | 'silver' | 'gold'
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await db.runAsync(
+        'UPDATE customers SET tier = ?, updated_at = datetime("now") WHERE id = ?',
+        [tier, customerId]
+      );
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to update customer tier' };
+    }
+  }
+
   static async getLogs(
     db: SQLite.SQLiteDatabase,
     customerId: number
