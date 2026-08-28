@@ -777,7 +777,7 @@ function DiscountPickerModal({
                             paddingTop: 4,
                           }}
                         >
-                          <Text style={{ fontSize: 12, color: theme.textSecondary }}>Discount value:</Text>
+                          <Text style={{ fontSize: 12, color: theme.textSecondary }}>Discount value</Text>
                           <Text style={{ fontSize: 14, fontWeight: '700', color: theme.success }}>
                             -{fmt(pointDiscountValue)}
                           </Text>
@@ -1671,7 +1671,7 @@ export default function POSPaymentScreen() {
                         {item.name}
                       </Text>
                       <Text style={[styles.cartItemPrice, { color: theme.textSecondary }]}>
-                        {fmt(item.price)}
+                        {fmt(item.price)} each
                       </Text>
                       {item.note && (
                         <Text style={[styles.cartItemNote, { color: theme.warning }]}>
@@ -1855,10 +1855,39 @@ export default function POSPaymentScreen() {
                 ))}
               </ScrollView>
 
-              <View style={[dm.sheetFooter, { borderTopColor: theme.divider, paddingHorizontal: 20 }]}>
-                <View style={styles.modalTotalRow}>
-                  <Text style={[styles.modalTotalLabel, { color: theme.text }]}>Total:</Text>
-                  <Text style={[styles.modalTotalVal, { color: theme.primary }]}>{fmt(total)}</Text>
+              <View style={[dm.sheetFooter, { borderTopColor: theme.divider, paddingHorizontal: 20, paddingTop: 16, gap: 12 }]}>
+                {/* Summary Details */}
+                <View style={{ gap: 8 }}>
+                  {/* <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 14, color: theme.textSecondary }}>Items</Text>
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{cart.length}</Text>
+                  </View> */}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 14, color: theme.textSecondary }}>Subtotal</Text>
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{fmt(subtotal)}</Text>
+                  </View>
+                  {totalDiscount > 0 && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>Discount</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: theme.error }}>-{fmt(totalDiscount)}</Text>
+                    </View>
+                  )}
+                  {serviceAmount > 0 && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>Service ({serviceRate}%)</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{fmt(serviceAmount)}</Text>
+                    </View>
+                  )}
+                  {taxAmount > 0 && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>Tax ({taxRate}%)</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{fmt(taxAmount)}</Text>
+                    </View>
+                  )}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.divider }}>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>Total</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: theme.primary }}>{fmt(total)}</Text>
+                  </View>
                 </View>
                 <TouchableOpacity
                   style={[
@@ -1963,20 +1992,20 @@ export default function POSPaymentScreen() {
 
             <View style={[styles.receiptSummary, { backgroundColor: theme.input }]}>
               <View style={styles.receiptRow}>
-                <Text style={[styles.receiptLabel, { color: theme.textSecondary }]}>Total Paid:</Text>
+                <Text style={[styles.receiptLabel, { color: theme.textSecondary }]}>Total Paid</Text>
                 <Text style={[styles.receiptVal, { color: theme.text }]}>
                   {fmt(completedReceipt?.amount_paid || 0)}
                 </Text>
               </View>
               <View style={styles.receiptRow}>
-                <Text style={[styles.receiptLabel, { color: theme.textSecondary }]}>Payment Method:</Text>
+                <Text style={[styles.receiptLabel, { color: theme.textSecondary }]}>Payment Method</Text>
                 <Text style={[styles.receiptVal, { color: theme.text }]}>
                   {completedReceipt?.payment_method}
                 </Text>
               </View>
               {completedReceipt?.payment_type === 'cash' && (
                 <View style={styles.receiptRow}>
-                  <Text style={[styles.receiptLabel, { color: theme.textSecondary }]}>Change:</Text>
+                  <Text style={[styles.receiptLabel, { color: theme.textSecondary }]}>Change</Text>
                   <Text style={[styles.receiptVal, { color: theme.success, fontWeight: '800' }]}>
                     {fmt(completedReceipt?.change_amount || 0)}
                   </Text>
@@ -1993,7 +2022,7 @@ export default function POSPaymentScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.receiptItemName, { color: theme.text }]}>{item.product_name}</Text>
                       <Text style={[styles.receiptItemQty, { color: theme.textSecondary }]}>
-                        {item.quantity}x @ {fmt(item.price)}
+                        {item.quantity}x {fmt(item.price)}
                       </Text>
                       {item.note && (
                         <Text style={[styles.receiptItemNote, { color: theme.warning }]}>
