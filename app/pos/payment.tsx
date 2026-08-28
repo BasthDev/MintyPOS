@@ -9,6 +9,7 @@ import {
   Divide,
   FileText,
   Minus,
+  MoreVertical,
   Plus,
   QrCode,
   Search,
@@ -42,6 +43,7 @@ import {
   View,
 } from 'react-native';
 
+import { ActionSheetFormSheet } from '@/components/forms/ActionSheetFormSheet';
 import { Header } from '@/components/Header';
 import { ColorTheme, useTheme, withOpacity } from '@/constants/colorTheme';
 import {
@@ -837,6 +839,7 @@ export default function POSPaymentScreen() {
   const [customerPickerVisible, setCustomerPickerVisible] = useState(false);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [pointRedemptionEnabled, setPointRedemptionEnabled] = useState(false);
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
 
   // Split payment state
   const [splitConfig, setSplitConfig] = useState<{
@@ -1200,7 +1203,7 @@ export default function POSPaymentScreen() {
     }
   };
 
-  const handleSelectDiscount = (d: DiscountItem | null) => {
+  const handleDiscountSelect = (d: DiscountItem | null) => {
     if (d) {
       const validation = CheckoutProcess.validateDiscountSelection(d, subtotal);
       if (!validation.isValid) {
@@ -1212,39 +1215,28 @@ export default function POSPaymentScreen() {
     setDiscountPickerVisible(false);
   };
 
-  // Header Right Buttons (Customer + Discount)
-  const headerRight = (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-      {/* Customer Header Button */}
-      <TouchableOpacity
-        style={[
-          styles.discountHeaderBadge,
-          {
-            backgroundColor: selectedCustomer ? theme.primary : theme.card,
-            borderWidth: 1,
-            borderColor: theme.border,
-          },
-        ]}
-        onPress={() => setCustomerPickerVisible(true)}
-      >
-        <User size={16} color={selectedCustomer ? '#FFFFFF' : theme.text} />
-      </TouchableOpacity>
+  const handleCustomerSelect = (customer: CustomerItem | null) => {
+    setSelectedCustomer(customer);
+    setCustomerPickerVisible(false);
+  };
 
-      {/* Discount Header Button */}
-      <TouchableOpacity
-        style={[
-          styles.discountHeaderBadge,
-          {
-            backgroundColor: selectedDiscount || (pointRedemptionEnabled && pointsToRedeem > 0) ? theme.primary : theme.card,
-            borderWidth: 1,
-            borderColor: theme.border,
-          },
-        ]}
-        onPress={() => setDiscountPickerVisible(true)}
-      >
-        <Tag size={16} color={selectedDiscount || (pointRedemptionEnabled && pointsToRedeem > 0) ? '#FFFFFF' : theme.text} />
-      </TouchableOpacity>
-    </View>
+  // Convert customers to dropdown options
+  const customerDropdownOptions = customers.map((c) => ({
+    label: c.name,
+    value: String(c.id),
+  }));
+
+  // Convert discounts to dropdown options
+  const discountDropdownOptions = discounts.map((d) => ({
+    label: d.name,
+    value: String(d.id),
+  }));
+
+  // Header Right Button (3-dot menu)
+  const headerRight = (
+    <TouchableOpacity onPress={() => setActionSheetVisible(true)}>
+      <MoreVertical size={22} color={theme.text} />
+    </TouchableOpacity>
   );
 
   // Dynamic summary items mapping list (Exact original structure)
@@ -1895,10 +1887,7 @@ export default function POSPaymentScreen() {
         customers={customers}
         loading={false}
         selectedCustomer={selectedCustomer}
-        onCustomerSelect={(c) => {
-          setSelectedCustomer(c);
-          setCustomerPickerVisible(false);
-        }}
+        onCustomerSelect={handleCustomerSelect}
         onClose={() => setCustomerPickerVisible(false)}
         theme={theme}
       />
@@ -1909,16 +1898,41 @@ export default function POSPaymentScreen() {
         discounts={discounts}
         loading={false}
         selectedDiscount={selectedDiscount}
+        onDiscountSelect={handleDiscountSelect}
         subtotal={subtotal}
-        onDiscountSelect={handleSelectDiscount}
-        onClose={() => setDiscountPickerVisible(false)}
-        theme={theme}
         crmConfig={crmConfig}
         customer={selectedCustomer}
         pointsToRedeem={pointsToRedeem}
         onPointsRedeemChange={setPointsToRedeem}
         pointRedemptionEnabled={pointRedemptionEnabled}
         onPointRedemptionToggle={setPointRedemptionEnabled}
+        onClose={() => setDiscountPickerVisible(false)}
+        theme={theme}
+      />
+
+      {/* Action Sheet */}
+      <ActionSheetFormSheet
+        visible={actionSheetVisible}
+        onClose={() => setActionSheetVisible(false)}
+        customerOptions={customerDropdownOptions}
+        selectedCustomer={selectedCustomer ? String(selectedCustomer.id) : undefined}
+        onCustomerSelect={(value) => {
+          const customer = customers.find((c) => String(c.id) === value);
+          setSelectedCustomer(customer || null);
+        }}
+        discountOptions={discountDropdownOptions}
+        selectedDiscount={selectedDiscount ? String(selectedDiscount.id) : undefined}
+        onDiscountSelect={(value) => {
+          const discount = discounts.find((d) => String(d.id) === value);
+          if (discount) {
+            const validation = CheckoutProcess.validateDiscountSelection(discount, subtotal);
+            if (!validation.isValid) {
+              Alert.alert('Discount Ineligible', validation.errors.join('\n'));
+              return;
+            }
+          }
+          setSelectedDiscount(discount || null);
+        }}
       />
 
       {/* Receipt Success Dialog */}
@@ -1928,7 +1942,6 @@ export default function POSPaymentScreen() {
             <View style={styles.receiptIconBox}>
               <CheckCircle size={54} color={theme.success} />
             </View>
-
             <Text style={[styles.receiptTitle, { color: theme.text }]}>Payment Successful!</Text>
             <Text style={[styles.receiptSubtitle, { color: theme.textSecondary }]}>
               Order #{completedReceipt?.order_number}
