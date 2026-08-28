@@ -840,7 +840,30 @@ npm run build
 
 ## 🔄 Recent Updates & Changelog
 
-### Version 1.0.3 (Latest)
+### Version 1.0.4 (Latest - 2026-08-29)
+- 🔧 **Payment & Checkout Enhancements**:
+  - Fixed validator to properly exclude CASH, STORE_CREDIT, and SPLIT PAYMENT from provider validation
+  - Added payment method string normalization to uppercase for consistent comparison
+  - Resolved FOREIGN KEY constraint errors in CheckoutProcess by adding customer and product existence validation
+  - Added customerId tracking in split payment collection
+  - Implemented store credit deduction for individual split payments that use store credit
+  - Updated payment method icons with consistent mapping (QRIS→QrCode, Bank Transfer→Smartphone, E-Wallet→Wallet, Card→CreditCard, Cash→Banknote, Other→Sliders)
+  - Standardized all payment method icons to use primary color except default types
+  - Fixed payment screen to display parent type labels instead of provider names
+  - Added flexible matching for bank transfer type_key variations
+  - Added `normalizePaymentMethod` helper function for readable payment method display
+  - Applied normalization to order screen and success modal payment method display
+  - Reordered payment methods: Cash → Known Types → Other → Store Credit → Split
+- 🏗 **Architecture Improvements**:
+  - Replaced direct database calls with Process layer methods in CheckoutProcess
+  - Added CustomerProcess methods: `updateTotalSpent`, `updateTier`, `earnPoints`, `redeemPoints`
+  - Fixed TypeScript errors by adding proper type definitions for tier values
+  - Ensured all database interactions use Process layer methods
+- 🎨 **UI/UX Improvements**:
+  - Changed header icon to Settings2 in payment screen
+  - Changed ActionSheet icon to Settings2 for better visual consistency
+
+### Version 1.0.3
 - 🔗 **Native Foreign Key Actions**: Implemented ON DELETE SET NULL/CASCADE in database schema for automatic referential integrity:
   - ingredient_units: ON DELETE CASCADE (deletes units when ingredient deleted)
   - inventory_batches: ON DELETE SET NULL for ingredient_id and supplier_id (preserves historical inventory data)

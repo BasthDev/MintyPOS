@@ -2,6 +2,7 @@ import { DripButton } from '@/components/Button';
 import { DripChip } from '@/components/Chip';
 import { CartNoteFormSheet } from '@/components/forms/CartNoteFormSheet';
 import { Header } from '@/components/Header';
+import { InlineScanner } from '@/components/InlineScanner';
 import { DripScannerModal } from '@/components/ScannerModal';
 import { DripSearchBar } from '@/components/SearchBar';
 import { Section } from '@/components/Section';
@@ -54,6 +55,7 @@ export default function POSScreen() {
   // UI state
   const [showCartMobile, setShowCartMobile] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [inlineScannerVisible, setInlineScannerVisible] = useState(false);
   const [noteSheetVisible, setNoteSheetVisible] = useState(false);
   const [selectedCartItem, setSelectedCartItem] = useState<{ productId: number; name: string; note?: string } | null>(null);
 
@@ -214,9 +216,19 @@ export default function POSScreen() {
         onSubmitEditing={handleSearchSubmit}
         returnKeyType="done"
         rightIcon={<ScanLine size={20} color={theme.primary} />}
-        onRightIconPress={() => setScannerVisible(true)}
+        onRightIconPress={() => setInlineScannerVisible(!inlineScannerVisible)}
         style={styles.searchBar}
       />
+
+      {/* Inline Scanner - appears under search bar when scan button is tapped */}
+      {inlineScannerVisible && (
+        <InlineScanner
+          onScanSuccess={(scannedCode) => {
+            setInlineScannerVisible(false);
+            handleScanSuccess(scannedCode);
+          }}
+        />
+      )}
 
       {/* Category Filter Chips using DripChip */}
       <ScrollView
