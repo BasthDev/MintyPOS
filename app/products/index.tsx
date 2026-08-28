@@ -47,10 +47,12 @@ export default function ProductsScreen() {
         const productsWithHpp = await Promise.all(
           result.data.map(async (product: any) => {
             let hpp = product.buy_price || 0;
+            let isRecipeBased = false;
             if (product.recipe_definition_id) {
               const recipeCost = await calculateRecipeCost(db, product.recipe_definition_id);
               if (recipeCost > 0) {
                 hpp = recipeCost;
+                isRecipeBased = true;
               }
             }
             const sellingPrice = product.selling_price || 0;
@@ -62,6 +64,7 @@ export default function ProductsScreen() {
               hpp,
               margin,
               marginPercentage,
+              isRecipeBased,
             };
           })
         );
@@ -255,7 +258,7 @@ export default function ProductsScreen() {
                       {formatCurrency(p.selling_price || 0)}
                     </Text>
 
-                    {/* Dynamic HPP Cost */}
+                    {/* Dynamic HPP / Buy Price + Margin */}
                     <View style={styles.hppRow}>
                       <Text
                         style={[
@@ -263,7 +266,9 @@ export default function ProductsScreen() {
                           { color: isSelected ? '#CBD5E1' : theme.textSecondary },
                         ]}
                       >
-                        HPP: {formatCurrency(p.hpp ? Math.round(p.hpp) : 0)}
+                        {p.isRecipeBased
+                          ? `HPP: ${formatCurrency(p.hpp ? Math.round(p.hpp) : 0)}`
+                          : `Buy: ${formatCurrency(p.buy_price ? Math.round(p.buy_price) : 0)}`}
                       </Text>
                       {p.margin > 0 && (
                         <Text
@@ -395,7 +400,9 @@ export default function ProductsScreen() {
 
       <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Financial & HPP Overview</Text>
+          <Text style={[styles.infoCardTitle, { color: theme.text }]}>
+            {selectedProduct.isRecipeBased ? 'Financial & HPP Overview' : 'Financial & COGS Overview'}
+          </Text>
 
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Selling Price:</Text>
@@ -405,9 +412,13 @@ export default function ProductsScreen() {
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Dynamic HPP / COGS:</Text>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>
+              {selectedProduct.isRecipeBased ? 'Dynamic HPP / COGS:' : 'Buy Price / COGS:'}
+            </Text>
             <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>
-              {formatCurrency(selectedProduct.hpp ? Math.round(selectedProduct.hpp) : 0)}
+              {selectedProduct.isRecipeBased
+                ? formatCurrency(selectedProduct.hpp ? Math.round(selectedProduct.hpp) : 0)
+                : formatCurrency(selectedProduct.buy_price ? Math.round(selectedProduct.buy_price) : 0)}
             </Text>
           </View>
 
