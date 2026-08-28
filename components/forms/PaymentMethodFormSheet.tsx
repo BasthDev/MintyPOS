@@ -168,7 +168,7 @@ export const PaymentMethodFormSheet: React.FC<PaymentMethodFormSheetProps> = ({
                   if (errors.customTypeLabel) setErrors((prev) => ({ ...prev, customTypeLabel: undefined }));
                 }}
                 error={errors.customTypeLabel}
-                style={{ marginTop: 10 }}
+                // style={{ marginTop: 10 }}
               />
             )}
           </View>

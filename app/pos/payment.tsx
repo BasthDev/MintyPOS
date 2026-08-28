@@ -9,10 +9,11 @@ import {
   Divide,
   FileText,
   Minus,
-  MoreVertical,
   Plus,
   QrCode,
   Search,
+  Settings2,
+  Sliders,
   Smartphone,
   Sparkles,
   Tag,
@@ -86,6 +87,17 @@ function getOrdinal(n: number): string {
   const s = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+// ─── Helper: normalize payment method names ─────────────────────────────────
+
+function normalizePaymentMethod(method: string | null | undefined): string {
+  if (!method) return '';
+  return method
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 // ─── Helper sub-components ────────────────────────────────────────────────────
@@ -944,21 +956,54 @@ export default function POSPaymentScreen() {
 
   // 5. Available Payment Method Categories (derived dynamically from database + Split)
   const availableMethodTypes = useMemo(() => {
-    const types: { key: string; label: string; icon: any }[] = [
+    const knownTypes: { key: string; label: string; icon: any }[] = [
       { key: 'cash', label: 'Cash', icon: Banknote },
     ];
 
     const knownKeys = new Set(['cash']);
+    let otherType: { key: string; label: string; icon: any } | null = null;
+
     paymentMethods.forEach((m) => {
       if (m.is_active && !knownKeys.has(m.type_key)) {
         knownKeys.add(m.type_key);
-        let icon = CreditCard;
-        if (m.type_key === 'ewallet') icon = Smartphone;
-        if (m.type_key === 'bank_transfer') icon = Banknote;
-        if (m.type_key === 'qr') icon = QrCode;
-        types.push({ key: m.type_key, label: m.method_name, icon });
+        let icon = Sliders; // Default for other types
+        let label = m.type_label || 'Other';
+        let isOther = false;
+        
+        // Handle various type_key variations
+        if (m.type_key === 'ewallet') {
+          icon = Wallet;
+          label = 'E-Wallet';
+        } else if (m.type_key?.includes('bank') || m.type_key?.includes('transfer')) {
+          icon = Smartphone;
+          label = 'Bank Transfer';
+        } else if (m.type_key === 'qris') {
+          icon = QrCode;
+          label = 'QRIS';
+        } else if (m.type_key === 'card') {
+          icon = CreditCard;
+          label = 'Card';
+        } else {
+          isOther = true;
+        }
+        
+        const typeItem = { key: m.type_key, label, icon };
+        
+        if (isOther) {
+          otherType = typeItem;
+        } else {
+          knownTypes.push(typeItem);
+        }
       }
     });
+
+    // Build final array: Cash + Known Types + Other + Store Credit + Split
+    const types: { key: string; label: string; icon: any }[] = [...knownTypes];
+    
+    // Add Other type if it exists
+    if (otherType) {
+      types.push(otherType);
+    }
 
     // Add Store Credit payment method if customer has credit balance
     if (selectedCustomer && selectedCustomer.store_credit_balance > 0) {
@@ -1339,7 +1384,7 @@ export default function POSPaymentScreen() {
   // Header Right Button (3-dot menu)
   const headerRight = (
     <TouchableOpacity onPress={() => setActionSheetVisible(true)}>
-      <MoreVertical size={22} color={theme.text} />
+      <Settings2 size={22} color={theme.text} />
     </TouchableOpacity>
   );
 
@@ -2135,7 +2180,7 @@ export default function POSPaymentScreen() {
               <View style={styles.receiptRow}>
                 <Text style={[styles.receiptLabel, { color: theme.textSecondary }]}>Payment Method</Text>
                 <Text style={[styles.receiptVal, { color: theme.text }]}>
-                  {completedReceipt?.payment_method}
+                  {normalizePaymentMethod(completedReceipt?.payment_method)}
                 </Text>
               </View>
               {completedReceipt?.payment_type === 'cash' && (

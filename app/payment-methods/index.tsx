@@ -150,15 +150,20 @@ export default function PaymentMethodsScreen() {
   };
 
   const getMethodIcon = (typeKey: string) => {
+    // Handle various possible type_key variations for bank transfer
+    if (typeKey?.includes('bank') || typeKey?.includes('transfer')) {
+      return <Smartphone size={20} color={theme.primary} />;
+    }
+    
     switch (typeKey) {
       case 'cash':
-        return <Banknote size={20} color={theme.success} />;
+        return <Banknote size={20} color={theme.primary} />;
       case 'qris':
         return <QrCode size={20} color={theme.primary} />;
-      case 'transfer':
-        return <Smartphone size={20} color={theme.warning} />;
       case 'ewallet':
-        return <Wallet size={20} color="#0284C7" />;
+        return <Wallet size={20} color={theme.primary} />;
+      case 'card':
+        return <CreditCard size={20} color={theme.primary} />;
       default:
         return <Sliders size={20} color={theme.textSecondary} />;
     }

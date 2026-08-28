@@ -1,5 +1,5 @@
 import { useTheme } from '@/constants/colorTheme';
-import { Award, Tag } from 'lucide-react-native';
+import { Award, Settings2 } from 'lucide-react-native';
 import React from 'react';
 import { Text, View } from 'react-native';
 import { DripButton } from '../Button';
@@ -53,7 +53,7 @@ export const ActionSheetFormSheet: React.FC<ActionSheetFormSheetProps> = ({
       visible={visible}
       onClose={onClose}
       title="Actions"
-      headerIcon={<Tag size={20} color={theme.primary} />}
+      headerIcon={<Settings2 size={20} color={theme.primary} />}
       footer={
         <DripButton
           title="Done"
