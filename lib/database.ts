@@ -1167,7 +1167,9 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
             INSERT INTO units (name, symbol) VALUES 
             ('gram', 'g'),
             ('milliliter', 'ml'),
-            ('piece', 'pcs');
+            ('piece', 'pcs'),
+            ('kilogram', 'kg'),
+            ('liter', 'L');
           `);
         }
       }
@@ -2292,4 +2294,53 @@ export const handleCheckoutOrder = async (
     await db.execAsync('ROLLBACK');
     throw error;
   }
+};
+
+/**
+ * Fetch the active SQLite user_version directly from the database
+ */
+export const getDatabaseVersion = async (db: SQLite.SQLiteDatabase): Promise<number> => {
+  const versionResult = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
+  return versionResult?.user_version || 8;
+};
+
+/**
+ * Reset database to a clean default state (clearing all transactions, catalog, CRM data, and re-seeding default config)
+ */
+export const resetToCleanDatabase = async (db: SQLite.SQLiteDatabase): Promise<void> => {
+  await db.execAsync('PRAGMA foreign_keys = OFF;');
+  await db.execAsync(`
+    DELETE FROM order_items;
+    DELETE FROM order_splits;
+    DELETE FROM customer_loyalty_transactions;
+    DELETE FROM customer_balance_transactions;
+    DELETE FROM orders;
+    DELETE FROM activity_logs;
+    DELETE FROM recipe_ingredients;
+    DELETE FROM recipe_definitions;
+    DELETE FROM products;
+    DELETE FROM inventory_batches;
+    DELETE FROM ingredient_units;
+    DELETE FROM ingredients;
+    DELETE FROM suppliers;
+    DELETE FROM categories;
+    DELETE FROM discounts;
+    DELETE FROM tax_configs;
+    DELETE FROM payment_methods;
+    DELETE FROM customers;
+    DELETE FROM units;
+    DELETE FROM crm_configs;
+  `);
+
+  // Seed default base units only (clean production state)
+  await db.execAsync(`
+    INSERT INTO units (name, symbol) VALUES 
+    ('gram', 'g'),
+    ('milliliter', 'ml'),
+    ('piece', 'pcs'),
+    ('kilogram', 'kg'),
+    ('liter', 'L');
+  `);
+
+  await db.execAsync('PRAGMA foreign_keys = ON;');
 };

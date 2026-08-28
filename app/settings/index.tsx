@@ -2,43 +2,54 @@ import { Header } from '@/components/Header';
 import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
 import { CURRENCY_PRESETS, CurrencyConfig, DEFAULT_CURRENCY } from '@/constants/currencies';
+import { getDatabase, getDatabaseVersion, resetToCleanDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import {
+  AlertTriangle,
   Award,
   BarChart3,
-  Banknote,
   BookOpen,
   Check,
   ChevronRight,
   Coins,
-  CreditCard,
   Divide,
-  DollarSign,
   Edit3,
-  Globe,
   HelpCircle,
   Layers,
   Package,
   Receipt,
+  RotateCcw,
   Search,
   Settings,
   Shield,
   ShoppingCart,
-  Sparkles,
   Store,
   SunMoon,
-  TrendingUp,
-  UtensilsCrossed,
   Users,
+  UtensilsCrossed
 } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 export default function SettingsScreen() {
   const { theme, colorMode, toggleColorMode } = useTheme();
   const currency = useStore((state) => state.currency) || DEFAULT_CURRENCY;
   const setCurrency = useStore((state) => state.setCurrency);
+  const clearCart = useStore((state) => state.clearCart);
   const [selectedSetting, setSelectedSetting] = useState<string | null>(null);
   const [currencySearch, setCurrencySearch] = useState('');
   const [customModalVisible, setCustomModalVisible] = useState(false);
@@ -48,12 +59,93 @@ export default function SettingsScreen() {
   const [customPosition, setCustomPosition] = useState<'prefix' | 'suffix'>(currency.position);
   const [customDecimals, setCustomDecimals] = useState(String(currency.decimals));
 
+  // System & Security Dynamic Info
+  const [dbVersion, setDbVersion] = useState<number | null>(null);
+  const [appVersion, setAppVersion] = useState<string>(Constants.expoConfig?.version || '1.0.1');
+  const [deviceId, setDeviceId] = useState<string>('Loading...');
+  const [deviceName, setDeviceName] = useState<string>('Loading...');
+  const [isResetting, setIsResetting] = useState<boolean>(false);
+
+  useEffect(() => {
+    const loadSystemInfo = async () => {
+      try {
+        const db = await getDatabase();
+        const ver = await getDatabaseVersion(db);
+        setDbVersion(ver);
+
+        // App version from expoConfig / app.json
+        const actualAppVersion = Constants.expoConfig?.version || '1.0.1';
+        setAppVersion(actualAppVersion);
+
+        // Device ID: get stored persistent device ID or generate/fetch
+        let storedId = await AsyncStorage.getItem('mintypos_persistent_device_id');
+        if (!storedId) {
+          const fallbackId = `DEV-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+          const installId =
+            typeof Constants.installationId === 'string' && Constants.installationId.trim().length > 0
+              ? Constants.installationId
+              : null;
+          storedId = installId || fallbackId;
+          await AsyncStorage.setItem('mintypos_persistent_device_id', storedId);
+        }
+        setDeviceId(storedId || 'DEV-UNKNOWN');
+
+        // Device Name
+        const platformModel =
+          (Platform.constants as any)?.Model ||
+          (Platform.constants as any)?.Brand ||
+          (Platform.constants as any)?.model ||
+          '';
+        const detectedName =
+          Constants.deviceName ||
+          (platformModel ? `${Platform.OS.toUpperCase()} (${platformModel})` : `${Platform.OS.toUpperCase()} Device`);
+        setDeviceName(detectedName);
+      } catch (e) {
+        console.error('Failed to load system info:', e);
+      }
+    };
+
+    loadSystemInfo();
+  }, []);
+
+  const handleResetDatabase = () => {
+    Alert.alert(
+      'Reset Database to Clean State',
+      'Are you sure you want to completely erase all transactions, orders, customers, payment methods, recipes, ingredients, and products? This will reset MintyPOS to a clean default state with only base measurement units.\n\n⚠️ THIS ACTION CANNOT BE UNDONE.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Clean & Reset Database',
+          style: 'destructive',
+          onPress: async () => {
+            setIsResetting(true);
+            try {
+              const db = await getDatabase();
+              await resetToCleanDatabase(db);
+              clearCart();
+              const ver = await getDatabaseVersion(db);
+              setDbVersion(ver);
+              Alert.alert(
+                'Database Reset Complete',
+                'The database has been successfully wiped and reset to a clean state with default base units.'
+              );
+            } catch (err: any) {
+              Alert.alert('Reset Failed', err?.message || 'Unable to reset database');
+            } finally {
+              setIsResetting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const settingGroups = [
     { id: 'guide', name: 'User Guide', desc: 'Complete manual & instructions on how to use MintyPOS', icon: BookOpen },
     { id: 'currency', name: 'Currency & Formatting', desc: `Current: ${currency.symbol} (${currency.code})`, icon: Coins },
     { id: 'appearance', name: 'Appearance', desc: 'Theme mode and visual display options', icon: SunMoon },
     { id: 'business', name: 'Business Info', desc: 'Store name, currency, and address', icon: Store },
-    { id: 'system', name: 'System & Security', desc: 'App version, database status, and backup', icon: Shield },
+    { id: 'system', name: 'System & Security', desc: 'App version, database status, device info & reset', icon: Shield },
   ];
 
   // --- LEFT PANEL (Main Screen: Settings Categories) ---
@@ -479,21 +571,81 @@ export default function SettingsScreen() {
           </View>
         )}
 
-        {/* --- SYSTEM SECTION --- */}
+        {/* --- SYSTEM & SECURITY SECTION --- */}
         {selectedSetting === 'system' && (
-          <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.infoCardTitle, { color: theme.text }]}>System Information</Text>
-            <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>App Version:</Text>
-              <Text style={[styles.infoValue, { color: theme.text }]}>1.0.0</Text>
+          <View style={{ gap: 16, paddingBottom: 40 }}>
+            {/* App & Device Info Card */}
+            <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.infoCardTitle, { color: theme.text }]}>Application & Device</Text>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>App Version:</Text>
+                <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>v{appVersion}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Platform OS:</Text>
+                <Text style={[styles.infoValue, { color: theme.text }]}>{Platform.OS.toUpperCase()} (v{Platform.Version})</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Device Name:</Text>
+                <Text style={[styles.infoValue, { color: theme.text }]} numberOfLines={1}>{deviceName}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Device ID:</Text>
+                <Text style={[styles.infoValue, { color: theme.textSecondary, fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]} numberOfLines={1}>
+                  {deviceId}
+                </Text>
+              </View>
             </View>
-            <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Database Version:</Text>
-              <Text style={[styles.infoValue, { color: theme.text }]}>1.0.0</Text>
+
+            {/* Database Engine Card */}
+            <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.infoCardTitle, { color: theme.text }]}>Database & Storage</Text>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Database Engine:</Text>
+                <Text style={[styles.infoValue, { color: theme.text }]}>SQLite</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Database Version:</Text>
+                <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>
+                  {dbVersion !== null ? `v${dbVersion}` : 'Checking...'}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Database Status:</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.success }} />
+                  <Text style={{ color: theme.success, fontWeight: '600', fontSize: 13 }}>Active & Connected</Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Active Currency Code:</Text>
-              <Text style={[styles.infoValue, { color: theme.text }]}>{currency.code}</Text>
+
+            {/* Danger Zone: Database Reset */}
+            <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.error + '50' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <AlertTriangle size={18} color={theme.error} />
+                <Text style={[styles.infoCardTitle, { color: theme.error, marginBottom: 0 }]}>Database Maintenance</Text>
+              </View>
+              <Text style={{ fontSize: 13, color: theme.textSecondary, lineHeight: 18, marginBottom: 14 }}>
+                Wipe all transaction orders, activity logs, customer records, recipe data, and inventory stock to reset the app to a fresh, clean database state.
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[
+                  styles.resetDbButton,
+                  { backgroundColor: theme.error, opacity: isResetting ? 0.7 : 1 },
+                ]}
+                onPress={handleResetDatabase}
+                disabled={isResetting}
+              >
+                {isResetting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <RotateCcw size={16} color="#FFFFFF" />
+                    <Text style={styles.resetDbButtonText}>Reset Database to Clean State</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -1025,5 +1177,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
+  },
+  resetDbButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  resetDbButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

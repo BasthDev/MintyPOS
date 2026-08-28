@@ -151,6 +151,9 @@ Database Layer (lib/database.ts) ───────────────�
 | **Recipes** | `recipeService.ts` | `recipeValidator.ts` | `recipeProcess.ts` | `RecipeFormSheet.tsx` |
 | **Inventory** | `inventoryService.ts` | `inventoryValidator.ts` | `inventoryProcess.ts` | `InventoryFormSheet.tsx` |
 | **Customers** | `customerService.ts` | `customerValidator.ts` | `customerProcess.ts` | `CustomerFormSheet.tsx` |
+| **CRM & Loyalty** | `crmService.ts` | `crmValidator.ts` | `crmProcess.ts` | Inline + CRM Config Page |
+| **Split Payment** | `splitPaymentService.ts` | `splitPaymentValidator.ts` | `splitPaymentProcess.ts` | Inline Split Flow (`payment.tsx`) |
+| **Reports** | `reportService.ts` | Database Operations | `reportService.ts` | Responsive Section View |
 | **Cart** | `cartService.ts` | `cartValidator.ts` | `cartProcess.ts` | Inline + `CartModal` |
 | **Checkout** | `dbOperations` | `checkoutValidator.ts` | `checkoutProcess.ts` | `DiscountPickerModal` |
 | **Payment Methods** | `paymentMethodService.ts` | `paymentMethodValidator.ts` | `paymentMethodProcess.ts` | `PaymentMethodFormSheet.tsx` |
@@ -841,7 +844,28 @@ npm run build
 
 ## 🔄 Recent Updates & Changelog
 
-### Version 1.0.4 (Latest - 2026-08-29)
+### Version 1.0.5 (Latest - 2026-08-29)
+- 📊 **CRM & Loyalty Reports Integration**:
+  - Added dedicated CRM & Loyalty Report to the Reports screen (`app/reports/index.tsx`)
+  - Features real-time KPI metrics for Total Customers, Points Issued, Points Redeemed, and Total Store Credit
+  - Customer Tier breakdown with percentages and top customers list by lifetime spend
+  - Real-time loyalty activity feed with timestamped point earn/redeem events
+- 🏷️ **Dynamic HPP vs Buy Price Distinction**:
+  - Products with recipes dynamically calculate and display `HPP: Rp xxxx (margin %)`
+  - Direct retail products with manual buy prices display `Buy: Rp xxxx (margin %)`
+  - Detail panel updates financial headers to `Financial & HPP Overview` or `Financial & COGS Overview` respectively
+- ⚙️ **System & Security Dynamic Metadata & Clean Database Reset**:
+  - Dynamically reads App Version from `app.json` (`Constants.expoConfig?.version`)
+  - Dynamically queries active SQLite schema `PRAGMA user_version`
+  - Detects persistent Device ID (`AsyncStorage` + `Constants.installationId`) and Device Name/Model
+  - Added safe **Clean Database Reset** operation in Settings with confirmation alert to wipe data and seed default units, payment methods, and CRM configs
+- 📖 **User Guide Overhaul & Navigation Fix**:
+  - Upgraded built-in User Guide to a 10-step manual covering POS, Split Payment, HPP, Inventory, Recipes, CRM, Loyalty, Orders, Reports, and Navigation
+  - Fixed Settings navigation so the User Guide is not auto-opened upon entry (defaults to category selection)
+- 🛡️ **Full 4-Layer Architecture Audit**:
+  - Verified Process + Validator + Service + DB layers across all 14 business modules
+
+### Version 1.0.4
 - 🔧 **Payment & Checkout Enhancements**:
   - Fixed validator to properly exclude CASH, STORE_CREDIT, and SPLIT PAYMENT from provider validation
   - Added payment method string normalization to uppercase for consistent comparison

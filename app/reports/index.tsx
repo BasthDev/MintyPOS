@@ -939,8 +939,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 10,
   },
+  tableCell: {
+    fontSize: 13,
+  },
   tableCellText: {
     fontSize: 13,
+  },
+  tableSubCell: {
+    fontSize: 11,
+  },
+  tableValue: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  emptyTableText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 12,
   },
   insightsCard: {
     padding: 16,
