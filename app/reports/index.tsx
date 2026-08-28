@@ -3,10 +3,11 @@ import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
 import { getDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
-import { ReportService, type InventoryReportData, type ProfitReportData, type SalesReportData } from '@/services/reportService';
+import { ReportService, type CRMReportData, type InventoryReportData, type ProfitReportData, type SalesReportData } from '@/services/reportService';
 import {
   ArrowDown,
   ArrowUp,
+  Award,
   BarChart3,
   Calendar,
   DollarSign,
@@ -14,6 +15,7 @@ import {
   Percent,
   ShoppingCart,
   TrendingUp,
+  Users,
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -26,11 +28,13 @@ export default function ReportsScreen() {
   const [salesData, setSalesData] = useState<SalesReportData | null>(null);
   const [inventoryData, setInventoryData] = useState<InventoryReportData | null>(null);
   const [profitData, setProfitData] = useState<ProfitReportData | null>(null);
+  const [crmData, setCrmData] = useState<CRMReportData | null>(null);
 
   const reportTypes = [
     { id: 'sales', name: 'Sales Report', desc: 'Daily, weekly, monthly sales breakdown', icon: BarChart3 },
     { id: 'inventory', name: 'Inventory Report', desc: 'Stock levels, movements, and usage', icon: Package },
     { id: 'profit', name: 'Profit & Margin Report', desc: 'Margins, COGS analysis, and profit', icon: DollarSign },
+    { id: 'crm', name: 'CRM & Loyalty Report', desc: 'Customer tiers, points, and loyalty activity', icon: Users },
   ];
 
   const timeFilters = [
@@ -86,6 +90,10 @@ export default function ReportsScreen() {
       // Load profit data
       const profit = await ReportService.getProfitReport(db, startDate, endDate);
       setProfitData(profit);
+
+      // Load CRM data
+      const crm = await ReportService.getCRMReport(db);
+      setCrmData(crm);
     } catch (error) {
       console.error('Failed to load report data:', error);
     } finally {
@@ -576,6 +584,93 @@ export default function ReportsScreen() {
                   Gross profit: {formatCurrency(profitData?.grossProfit || 0)}.
                 </Text>
               </View>
+            </View>
+          </>
+        ) : selectedReport === 'crm' ? (
+          <>
+            {/* CRM Summary Cards */}
+            <View style={styles.metricsGrid}>
+              <View style={[styles.metricCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Users size={20} color={theme.primary} />
+                <Text style={[styles.metricValue, { color: theme.text }]}>{crmData?.totalCustomers || 0}</Text>
+                <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Total Customers</Text>
+              </View>
+              <View style={[styles.metricCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Award size={20} color={theme.success} />
+                <Text style={[styles.metricValue, { color: theme.text }]}>{crmData?.totalPointsIssued || 0}</Text>
+                <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Points Issued</Text>
+              </View>
+              <View style={[styles.metricCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <TrendingUp size={20} color={theme.warning || '#F59E0B'} />
+                <Text style={[styles.metricValue, { color: theme.text }]}>{crmData?.totalPointsRedeemed || 0}</Text>
+                <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Points Redeemed</Text>
+              </View>
+              <View style={[styles.metricCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <DollarSign size={20} color={theme.primary} />
+                <Text style={[styles.metricValue, { color: theme.text }]}>{formatCurrency(crmData?.totalStoreCredit || 0)}</Text>
+                <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Store Credit</Text>
+              </View>
+            </View>
+
+            {/* Tier Breakdown */}
+            <View style={[styles.tableCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.tableTitle, { color: theme.text }]}>Customer Tier Breakdown</Text>
+              {(crmData?.tierBreakdown || []).map((tier, index) => (
+                <View key={index} style={[styles.tableRow, { borderBottomColor: theme.border }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <Award size={14} color={
+                      tier.tier === 'GOLD' ? '#F59E0B' :
+                      tier.tier === 'SILVER' ? '#6B7280' :
+                      tier.tier === 'BRONZE' ? '#92400E' : theme.textSecondary
+                    } />
+                    <Text style={[styles.tableCell, { color: theme.text, fontWeight: '600' }]}>{tier.tier}</Text>
+                  </View>
+                  <Text style={[styles.tableCell, { color: theme.textSecondary }]}>{tier.count} customers</Text>
+                  <Text style={[styles.tableValue, { color: theme.primary }]}>{Math.round(tier.percentage)}%</Text>
+                </View>
+              ))}
+              {(!crmData?.tierBreakdown || crmData.tierBreakdown.length === 0) && (
+                <Text style={[styles.emptyTableText, { color: theme.textSecondary }]}>No customer data yet</Text>
+              )}
+            </View>
+
+            {/* Top Customers */}
+            <View style={[styles.tableCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.tableTitle, { color: theme.text }]}>Top Customers by Spending</Text>
+              {(crmData?.topCustomers || []).slice(0, 8).map((customer, index) => (
+                <View key={index} style={[styles.tableRow, { borderBottomColor: theme.border }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.tableCell, { color: theme.text, fontWeight: '600' }]} numberOfLines={1}>{customer.name}</Text>
+                    <Text style={[styles.tableSubCell || styles.tableCell, { color: theme.textSecondary, fontSize: 11 }]}>{customer.tier} • {customer.loyaltyPoints} pts</Text>
+                  </View>
+                  <Text style={[styles.tableValue, { color: theme.primary }]}>{formatCurrency(customer.totalSpent)}</Text>
+                </View>
+              ))}
+              {(!crmData?.topCustomers || crmData.topCustomers.length === 0) && (
+                <Text style={[styles.emptyTableText, { color: theme.textSecondary }]}>No customer transactions yet</Text>
+              )}
+            </View>
+
+            {/* Recent Loyalty Activity */}
+            <View style={[styles.tableCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.tableTitle, { color: theme.text }]}>Recent Loyalty Activity</Text>
+              {(crmData?.recentLoyaltyActivity || []).map((activity, index) => (
+                <View key={index} style={[styles.tableRow, { borderBottomColor: theme.border }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.tableCell, { color: theme.text }]} numberOfLines={1}>{activity.customerName}</Text>
+                    <Text style={[styles.tableCell, { color: theme.textSecondary, fontSize: 11 }]}>{activity.date}</Text>
+                  </View>
+                  <Text style={[styles.tableCell, {
+                    color: activity.type === 'Earned' ? theme.success : activity.type === 'Redeemed' ? theme.error : theme.primary,
+                    fontWeight: '700',
+                  }]}>
+                    {activity.type === 'Earned' ? '+' : activity.type === 'Redeemed' ? '-' : ''}{Math.abs(activity.points)} pts
+                  </Text>
+                </View>
+              ))}
+              {(!crmData?.recentLoyaltyActivity || crmData.recentLoyaltyActivity.length === 0) && (
+                <Text style={[styles.emptyTableText, { color: theme.textSecondary }]}>No loyalty activity yet</Text>
+              )}
             </View>
           </>
         ) : (

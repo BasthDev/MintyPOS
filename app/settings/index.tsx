@@ -5,11 +5,15 @@ import { CURRENCY_PRESETS, CurrencyConfig, DEFAULT_CURRENCY } from '@/constants/
 import { formatCurrency } from '@/lib/utils';
 import { useStore } from '@/store/useStore';
 import {
+  Award,
+  BarChart3,
   Banknote,
   BookOpen,
   Check,
   ChevronRight,
   Coins,
+  CreditCard,
+  Divide,
   DollarSign,
   Edit3,
   Globe,
@@ -21,9 +25,12 @@ import {
   Settings,
   Shield,
   ShoppingCart,
+  Sparkles,
   Store,
   SunMoon,
+  TrendingUp,
   UtensilsCrossed,
+  Users,
 } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -32,7 +39,7 @@ export default function SettingsScreen() {
   const { theme, colorMode, toggleColorMode } = useTheme();
   const currency = useStore((state) => state.currency) || DEFAULT_CURRENCY;
   const setCurrency = useStore((state) => state.setCurrency);
-  const [selectedSetting, setSelectedSetting] = useState<string | null>('guide');
+  const [selectedSetting, setSelectedSetting] = useState<string | null>(null);
   const [currencySearch, setCurrencySearch] = useState('');
   const [customModalVisible, setCustomModalVisible] = useState(false);
   const [customCode, setCustomCode] = useState(currency.code);
@@ -127,11 +134,11 @@ export default function SettingsScreen() {
               <BookOpen size={32} color="#FFFFFF" />
               <Text style={styles.guideHeroTitle}>MintyPOS User Guide</Text>
               <Text style={styles.guideHeroSubtitle}>
-                Welcome to MintyPOS! Master your Point of Sale, Inventory Management, Recipe Costing (HPP), and Stock Deductions.
+                Welcome to MintyPOS — your all-in-one POS, Inventory, Recipe Costing, CRM & Loyalty, Split Payment, and Reports system.
               </Text>
             </View>
 
-            {/* Guide Step 1: POS & Checkout */}
+            {/* Step 1: POS & Checkout */}
             <View style={[styles.guideCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.guideCardHeader}>
                 <View style={[styles.guideStepBadge, { backgroundColor: theme.primary }]}>
@@ -140,85 +147,162 @@ export default function SettingsScreen() {
                 <Text style={[styles.guideCardTitle, { color: theme.text }]}>1. Point of Sale & Checkout</Text>
               </View>
               <Text style={[styles.guideBodyText, { color: theme.textSecondary }]}>
-                • Tap any product in the Catalog on the main POS screen to add it to your active Cart.{'\n'}
-                • Adjust quantities with + / - buttons or swipe to remove items.{'\n'}
-                • Review total price, tax, and discounts.{'\n'}
-                • Tap "Checkout" to complete the transaction. The system automatically executes FIFO/FEFO stock deductions for linked ingredients and product inventory.
+                • Tap any product in the Catalog on the main POS screen to add it to the active Cart.{'\n'}
+                • Adjust quantities using the + / – buttons or long-press to remove items.{'\n'}
+                • Tap the cart icon to review your order, or tap "Charge" to proceed to Payment.{'\n'}
+                • On the Payment screen: select a discount, choose a payment method, enter the amount, then tap Confirm Payment.{'\n'}
+                • The system automatically executes FIFO/FEFO stock deductions for linked ingredients and product inventory upon confirmation.
               </Text>
             </View>
 
-            {/* Guide Step 2: Products & Dynamic HPP */}
+            {/* Step 2: Split Payment */}
+            <View style={[styles.guideCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={styles.guideCardHeader}>
+                <View style={[styles.guideStepBadge, { backgroundColor: theme.primary }]}>
+                  <Divide size={16} color="#FFFFFF" />
+                </View>
+                <Text style={[styles.guideCardTitle, { color: theme.text }]}>2. Split Payment</Text>
+              </View>
+              <Text style={[styles.guideBodyText, { color: theme.textSecondary }]}>
+                • On the Payment screen, tap "Split" in the payment method bar (top-left area).{'\n'}
+                • Select how many ways to split: 2, 3, or 4 parties.{'\n'}
+                • Each split payer can use a different payment method (Cash, QRIS, Bank Transfer).{'\n'}
+                • Enter the amount for each split — remaining balance updates in real-time.{'\n'}
+                • Confirm each split payment individually. All splits are saved and linked to the parent order in the Orders screen.
+              </Text>
+            </View>
+
+            {/* Step 3: Products & Dynamic HPP */}
             <View style={[styles.guideCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.guideCardHeader}>
                 <View style={[styles.guideStepBadge, { backgroundColor: theme.primary }]}>
                   <Package size={16} color="#FFFFFF" />
                 </View>
-                <Text style={[styles.guideCardTitle, { color: theme.text }]}>2. Products & Dynamic HPP / Images</Text>
+                <Text style={[styles.guideCardTitle, { color: theme.text }]}>3. Products & HPP / COGS</Text>
               </View>
               <Text style={[styles.guideBodyText, { color: theme.textSecondary }]}>
-                • Go to the "Products" screen to view catalog items, images, and live profit margins.{'\n'}
-                • Tap "+ New Product" to create an item. You can upload an image, scan barcodes/SKUs, assign categories, and set selling prices.{'\n'}
-                • Choose "Deduct from Product Stock" for direct retail items or "Deduct from Recipe Ingredients" for food/beverages made from raw materials.{'\n'}
-                • Dynamic HPP (Harga Pokok Penjualan) and margins are calculated automatically in real-time from linked recipes or buy prices!
+                • Go to "Products" to view your catalog with live profit margins.{'\n'}
+                • For recipe-based products: the cost label shows "HPP: Rp xxxx" — calculated dynamically from ingredient batch prices.{'\n'}
+                • For manually-priced products: the label shows "Buy: Rp xxxx" — based on your set buy price.{'\n'}
+                • Both show the margin % in green next to the cost.{'\n'}
+                • Choose stock deduction mode: "Product Stock" for retail items, "Recipe Ingredients" for food/beverages, or "None" for services.
               </Text>
             </View>
 
-            {/* Guide Step 3: Raw Ingredients & Unit Conversions */}
+            {/* Step 4: Ingredients & Inventory Batches */}
             <View style={[styles.guideCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.guideCardHeader}>
                 <View style={[styles.guideStepBadge, { backgroundColor: theme.primary }]}>
                   <Layers size={16} color="#FFFFFF" />
                 </View>
-                <Text style={[styles.guideCardTitle, { color: theme.text }]}>3. Ingredients & Inventory Batches</Text>
+                <Text style={[styles.guideCardTitle, { color: theme.text }]}>4. Ingredients & Inventory</Text>
               </View>
               <Text style={[styles.guideBodyText, { color: theme.textSecondary }]}>
                 • Register base ingredients (e.g. Coffee Beans in grams, Milk in ml, Sugar in grams).{'\n'}
-                • Set custom conversion units (e.g. 1 kg = 1000 g, 1 Liter = 1000 ml) to buy in bulk and use in grams.{'\n'}
-                • In the "Inventory" screen, tap "+ Restock Batch" whenever you purchase new stock from suppliers.{'\n'}
-                • Enter purchase cost and optional expiration dates. MintyPOS uses FEFO/FIFO tracking to cost out oldest/expiring batches first.
+                • Set custom conversion units (e.g. 1 kg = 1000 g, 1 L = 1000 ml) to buy in bulk.{'\n'}
+                • In the "Inventory" screen, tap "+ Restock Batch" whenever you purchase new stock from a supplier.{'\n'}
+                • Enter purchase cost and optional expiration dates. MintyPOS uses FEFO/FIFO — oldest/expiring batches are deducted first.{'\n'}
+                • Low stock alerts trigger when current stock drops below the configured minimum threshold.
               </Text>
             </View>
 
-            {/* Guide Step 4: Recipes & COGS Breakdown */}
+            {/* Step 5: Recipes */}
             <View style={[styles.guideCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.guideCardHeader}>
                 <View style={[styles.guideStepBadge, { backgroundColor: theme.primary }]}>
                   <UtensilsCrossed size={16} color="#FFFFFF" />
                 </View>
-                <Text style={[styles.guideCardTitle, { color: theme.text }]}>4. Recipes & Cost Estimation</Text>
+                <Text style={[styles.guideCardTitle, { color: theme.text }]}>5. Recipes & Cost Estimation</Text>
               </View>
               <Text style={[styles.guideBodyText, { color: theme.textSecondary }]}>
-                • In the "Recipes" screen, tap "+ New Recipe" to build composite recipes (e.g. Cappuccino = 18g espresso beans + 150ml milk).{'\n'}
-                • You can edit existing recipes at any time by selecting them from the list and clicking the Edit button.{'\n'}
-                • Recipe costs update dynamically as new ingredient batches with different purchase prices are received.
+                • In "Recipes", tap "+ New Recipe" to build composite recipes (e.g. Cappuccino = 18g beans + 150ml milk).{'\n'}
+                • Edit existing recipes by selecting them and tapping Edit — changes apply to all linked products immediately.{'\n'}
+                • Recipe HPP costs update dynamically as new ingredient batches with different purchase prices arrive.{'\n'}
+                • Assign a recipe to a product in the Product Form — the product's HPP will be calculated from the recipe automatically.
               </Text>
             </View>
 
-            {/* Guide Step 5: Sales Receipts & Audits */}
+            {/* Step 6: Customers & CRM */}
+            <View style={[styles.guideCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={styles.guideCardHeader}>
+                <View style={[styles.guideStepBadge, { backgroundColor: theme.primary }]}>
+                  <Users size={16} color="#FFFFFF" />
+                </View>
+                <Text style={[styles.guideCardTitle, { color: theme.text }]}>6. Customers & CRM</Text>
+              </View>
+              <Text style={[styles.guideBodyText, { color: theme.textSecondary }]}>
+                • Go to "Customers" to create and manage customer profiles (name, phone, email).{'\n'}
+                • Each customer has a Tier (Regular → Bronze → Silver → Gold) based on total spending — upgrades automatically.{'\n'}
+                • Tap "Deposit Store Credit" to add pre-paid credit to a customer's account for future purchases.{'\n'}
+                • View each customer's loyalty points balance, store credit, total spend, and full transaction history.{'\n'}
+                • On the Payment screen, tap the Customer icon to attach a customer to the current order before checkout.
+              </Text>
+            </View>
+
+            {/* Step 7: Loyalty Program */}
+            <View style={[styles.guideCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={styles.guideCardHeader}>
+                <View style={[styles.guideStepBadge, { backgroundColor: theme.primary }]}>
+                  <Award size={16} color="#FFFFFF" />
+                </View>
+                <Text style={[styles.guideCardTitle, { color: theme.text }]}>7. Loyalty Points & Redemption</Text>
+              </View>
+              <Text style={[styles.guideBodyText, { color: theme.textSecondary }]}>
+                • Go to "CRM & Loyalty" to configure the entire loyalty program.{'\n'}
+                • Set: points per currency unit earned, minimum transaction to earn, point-to-currency conversion ratio.{'\n'}
+                • Set tier upgrade thresholds (Bronze / Silver / Gold) and toggle automatic tier upgrades.{'\n'}
+                • On the Payment screen, tap the Discount icon — if a customer is attached and loyalty is enabled, you'll see a "Redeem Points" toggle.{'\n'}
+                • Enter how many points to redeem — the discount is calculated automatically and subtracted from the total.
+              </Text>
+            </View>
+
+            {/* Step 8: Orders & Activity */}
             <View style={[styles.guideCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.guideCardHeader}>
                 <View style={[styles.guideStepBadge, { backgroundColor: theme.primary }]}>
                   <Receipt size={16} color="#FFFFFF" />
                 </View>
-                <Text style={[styles.guideCardTitle, { color: theme.text }]}>5. Orders, Receipts & Activity Audit</Text>
+                <Text style={[styles.guideCardTitle, { color: theme.text }]}>8. Orders, Receipts & Audit</Text>
               </View>
               <Text style={[styles.guideBodyText, { color: theme.textSecondary }]}>
-                • "Orders" tab preserves full transaction histories, itemized receipts, payment details, and date-time stamps.{'\n'}
-                • "Activity Log" tracks all stock movements (stock additions, manual adjustments, deductions, and restocks) with a real-time audit trail.
+                • "Orders" shows all completed transactions with itemized receipts, payment details, customer info, and timestamps.{'\n'}
+                • Split orders show a SPLIT badge — tap to see each individual split payment method and amount.{'\n'}
+                • Orders linked to customers show the customer's name and loyalty points earned.{'\n'}
+                • "Activity Log" tracks all stock movements in real-time: restocks, deductions, and order events.
               </Text>
             </View>
 
-            {/* Guide Step 6: Responsive Layouts */}
+            {/* Step 9: Reports */}
+            <View style={[styles.guideCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={styles.guideCardHeader}>
+                <View style={[styles.guideStepBadge, { backgroundColor: theme.primary }]}>
+                  <BarChart3 size={16} color="#FFFFFF" />
+                </View>
+                <Text style={[styles.guideCardTitle, { color: theme.text }]}>9. Reports & Analytics</Text>
+              </View>
+              <Text style={[styles.guideBodyText, { color: theme.textSecondary }]}>
+                • "Reports" offers 4 report types: Sales, Inventory, Profit & Margin, and CRM & Loyalty.{'\n'}
+                • Filter by time period: Today, This Week, This Month, or All Time.{'\n'}
+                • Sales Report: total revenue, orders, average order value, top-selling products, hourly patterns.{'\n'}
+                • Profit Report: revenue, COGS, gross profit, margin %, and product-level profitability.{'\n'}
+                • CRM Report: tier breakdown, top customers, total points issued vs redeemed, loyalty activity.
+              </Text>
+            </View>
+
+            {/* Step 10: Navigation */}
             <View style={[styles.guideCard, { backgroundColor: theme.card, borderColor: theme.border, marginBottom: 24 }]}>
               <View style={styles.guideCardHeader}>
                 <View style={[styles.guideStepBadge, { backgroundColor: theme.primary }]}>
                   <HelpCircle size={16} color="#FFFFFF" />
                 </View>
-                <Text style={[styles.guideCardTitle, { color: theme.text }]}>6. Mobile & Tablet Navigation</Text>
+                <Text style={[styles.guideCardTitle, { color: theme.text }]}>10. Mobile & Tablet Navigation</Text>
               </View>
               <Text style={[styles.guideBodyText, { color: theme.textSecondary }]}>
-                • On Tablet: Side-by-side split screen shows your list on the left and full details on the right simultaneously. Click the Back button on the right panel to close details.{'\n'}
-                • On Mobile: Tapping any list item slides open the Next Screen with complete action buttons and a top Back Button to return.
+                • On Tablet: Side-by-side split screen shows your list on the left and full details on the right simultaneously.{'\n'}
+                • On Mobile: Tapping any list item slides open the next screen. Tap the Back button at the top to return.{'\n'}
+                • Open the navigation Drawer from the menu icon on any screen header to switch between modules.{'\n'}
+                • Settings → Currency lets you configure your local currency symbol, code, and decimal places.{'\n'}
+                • Settings → Appearance lets you toggle between Light and Dark mode.
               </Text>
             </View>
           </View>
