@@ -1,7 +1,8 @@
+import { closeAllDatabases, closeStoreDatabase } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
+import { OrganizationService } from '@/services/organizationService';
 import { StaffService } from '@/services/staffService';
 import { StoreService } from '@/services/storeService';
-import { OrganizationService } from '@/services/organizationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 
@@ -160,10 +161,47 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const signOut = async (): Promise<void> => {
-    setUser(null);
-    await AsyncStorage.removeItem('user');
-    await StaffService.logout();
-    await supabase.auth.signOut();
+    try {
+      console.log('[AUTH] Starting logout process with database isolation...');
+      
+      // Get active store ID before logout for database closure
+      const activeStoreId = await AsyncStorage.getItem('mintypos_active_store_id');
+      
+      // Close store database for isolation
+      if (activeStoreId) {
+        try {
+          await closeStoreDatabase(activeStoreId);
+          console.log('[AUTH] Closed database for store:', activeStoreId);
+        } catch (dbError) {
+          console.error('[AUTH] Error closing store database:', dbError);
+        }
+      }
+      
+      // Close all databases for complete isolation
+      try {
+        await closeAllDatabases();
+        console.log('[AUTH] All databases closed for isolation');
+      } catch (dbError) {
+        console.error('[AUTH] Error closing all databases:', dbError);
+      }
+      
+      // Clear user data
+      setUser(null);
+      await AsyncStorage.removeItem('user');
+      await StaffService.logout();
+      
+      // Finally sign out from Supabase
+      await supabase.auth.signOut();
+      
+      console.log('[AUTH] Logout completed with database isolation');
+    } catch (error) {
+      console.error('[AUTH] Error during logout:', error);
+      // Even if something fails, try to complete logout
+      setUser(null);
+      await AsyncStorage.removeItem('user');
+      await StaffService.logout();
+      await supabase.auth.signOut();
+    }
   };
 
   const updateUser = (updates: Partial<User>): void => {

@@ -871,6 +871,66 @@ export const clearAllDatabases = async (): Promise<void> => {
   }
 };
 
+/**
+ * Close a specific store's database instance
+ * This is used when a user logs out or switches stores to isolate database access
+ */
+export const closeStoreDatabase = async (storeId: string): Promise<void> => {
+  try {
+    const dbName = `mintypos_store_${storeId}.db`;
+    
+    if (dbStoreInstances.has(dbName)) {
+      const db = dbStoreInstances.get(dbName);
+      if (db) {
+        try {
+          await db.closeAsync();
+          console.log(`[DB] Closed database for store: ${storeId}`);
+        } catch (e) {
+          console.error(`[DB] Error closing database for store ${storeId}:`, e);
+        }
+      }
+      dbStoreInstances.delete(dbName);
+    }
+    
+    if (dbStorePromises.has(dbName)) {
+      dbStorePromises.delete(dbName);
+    }
+    
+    // If this was the active database instance, clear it
+    if (dbInstance && dbStoreInstances.size === 0) {
+      dbInstance = null;
+    }
+  } catch (error) {
+    console.error(`[DB] Error closing store database for ${storeId}:`, error);
+  }
+};
+
+/**
+ * Close all database instances for isolation purposes
+ * Used during logout to ensure complete database isolation
+ */
+export const closeAllDatabases = async (): Promise<void> => {
+  try {
+    for (const [dbName, db] of dbStoreInstances.entries()) {
+      try {
+        await db.closeAsync();
+        console.log(`[DB] Closed database: ${dbName}`);
+      } catch (e) {
+        console.error(`[DB] Error closing database ${dbName}:`, e);
+      }
+    }
+    
+    dbStoreInstances.clear();
+    dbStorePromises.clear();
+    dbInstance = null;
+    initPromise = null;
+    
+    console.log('[DB] All databases closed for isolation');
+  } catch (error) {
+    console.error('[DB] Error closing all databases:', error);
+  }
+};
+
 
 // Database operations (same as your implementation)
 export const dbOperations = {

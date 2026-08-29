@@ -3,6 +3,7 @@ import { useTheme } from '@/constants/colorTheme';
 import { useDrawer } from '@/constants/drawerContext';
 import { DRAWER_MENU_ITEMS, MenuItem } from '@/constants/menu';
 import { useStoreContext } from '@/constants/storeContext';
+import { useSync } from '@/constants/syncContext';
 import { SyncProcess } from '@/processes/syncProcess';
 import { router, usePathname } from 'expo-router';
 import {
@@ -28,10 +29,9 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
-  ViewStyle,
+  ViewStyle
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SyncModal } from '../SyncModal';
 
 type DrawerItemProps = {
   label: string;
@@ -162,8 +162,8 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
   }, [user]);
 
   const { activeStore } = useStoreContext();
+  const { showSyncModal, setSyncFunction } = useSync();
   const [syncing, setSyncing] = useState(false);
-  const [syncModalVisible, setSyncModalVisible] = useState(false);
 
   useEffect(() => {
     if (isDrawerOpen) {
@@ -196,36 +196,84 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
       Alert.alert('Sync', 'No active store selected for sync');
       return;
     }
-    setSyncModalVisible(true);
-  };
-
-  const handleSyncComplete = async (onProgress: (progress: any) => void) => {
-    if (!activeStore?.id) {
-      Alert.alert('Sync', 'No active store selected for sync');
-      return;
-    }
-    setSyncing(true);
-    try {
-      const res = await SyncProcess.sync(activeStore.id, onProgress);
-      if (res.success) {
-        Alert.alert(
-          'Cloud Sync Complete',
-          `Successfully synchronized with Supabase cloud.\nPushed: ${res.data?.pushedCount || 0} records\nPulled: ${res.data?.pulledCount || 0} records`
-        );
-      } else {
-        Alert.alert('Sync Notice', res.error || res.errors?.[0] || 'Sync completed locally.');
+    
+    console.log('[DRAWER] Setting sync function and showing modal');
+    
+    // Set the sync function for the global modal
+    const syncFunc = async (onProgress: any) => {
+      setSyncing(true);
+      try {
+        const res = await SyncProcess.sync(activeStore.id, onProgress);
+        if (res.success) {
+          Alert.alert(
+            'Cloud Sync Complete',
+            `Successfully synchronized with Supabase cloud.\nPushed: ${res.data?.pushedCount || 0} records\nPulled: ${res.data?.pulledCount || 0} records`
+          );
+        } else {
+          Alert.alert('Sync Notice', res.error || res.errors?.[0] || 'Sync completed locally.');
+        }
+      } catch (e: any) {
+        Alert.alert('Sync Error', e?.message || 'Failed to sync');
+      } finally {
+        setSyncing(false);
       }
-    } catch (e: any) {
-      Alert.alert('Sync Error', e?.message || 'Failed to sync');
-    } finally {
-      setSyncing(false);
-    }
+    };
+    
+    setSyncFunction(syncFunc);
+    
+    // Show the global sync modal
+    showSyncModal(false);
+    
+    console.log('[DRAWER] Sync function set and modal shown');
   };
 
   const handleLogout = async () => {
     closeDrawer();
-    await signOut();
-    router.replace('/(auth)' as any);
+    
+    // Show user that final sync is happening
+    Alert.alert(
+      'Logging Out',
+      'Performing final data synchronization to ensure no data is lost...\n\nThis may take a few moments.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Continue',
+          onPress: () => {
+            // Set the sync function for logout
+            setSyncFunction(async (onProgress: any) => {
+              if (!activeStore?.id) {
+                Alert.alert('Logout', 'No active store found');
+                return;
+              }
+              
+              try {
+                const res = await SyncProcess.sync(activeStore.id, onProgress);
+                if (res.success) {
+                  // Sync completed, now perform logout
+                  await signOut();
+                  router.replace('/(auth)' as any);
+                } else {
+                  Alert.alert('Sync Notice', res.error || res.errors?.[0] || 'Sync completed. Proceeding with logout...');
+                  // Continue with logout even if sync had issues
+                  await signOut();
+                  router.replace('/(auth)' as any);
+                }
+              } catch (e: any) {
+                Alert.alert('Sync Error', e?.message || 'Sync failed. Proceeding with logout...');
+                // Continue with logout even if sync fails
+                await signOut();
+                router.replace('/(auth)' as any);
+              }
+            });
+            // Show the global sync modal for logout
+            showSyncModal(true);
+          }
+        }
+      ]
+    );
   };
 
   const effectiveRole = user?.role || 'Staff';
@@ -424,13 +472,6 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
           </View>
         </Animated.View>
       </View>
-
-      {/* Sync Modal */}
-      <SyncModal
-        visible={syncModalVisible}
-        onClose={() => setSyncModalVisible(false)}
-        syncFunction={handleSyncComplete}
-      />
     </Modal>
   );
 };

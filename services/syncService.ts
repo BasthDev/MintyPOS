@@ -73,9 +73,20 @@ export class SyncService {
 
     const db = await getDatabase(storeId);
 
-    // Initialize breakdown
+    // Initialize breakdown and set all entities to pending status
     SYNC_ENTITIES.forEach((e) => {
       result.entityBreakdown[e.type] = { pushed: 0, pulled: 0 };
+      // Initialize all entities as pending
+      if (onProgress) {
+        onProgress({
+          entity: e.type,
+          entityLabel: e.type,
+          pushed: 0,
+          pulled: 0,
+          total: 0,
+          status: 'pending',
+        });
+      }
     });
 
     try {
@@ -84,7 +95,7 @@ export class SyncService {
       // =========================================================================
       for (const entity of SYNC_ENTITIES) {
         try {
-          // Report pushing status
+          // Update status to pushing
           if (onProgress) {
             onProgress({
               entity: entity.type,
@@ -97,7 +108,20 @@ export class SyncService {
           }
 
           const validCols = await this.getTableColumns(db, entity.table);
-          if (validCols.size === 0) continue;
+          if (validCols.size === 0) {
+            // Skip table with no columns, mark as completed
+            if (onProgress) {
+              onProgress({
+                entity: entity.type,
+                entityLabel: entity.type,
+                pushed: 0,
+                pulled: 0,
+                total: 0,
+                status: 'completed',
+              });
+            }
+            continue;
+          }
 
           let query = `SELECT * FROM ${quoteTable(entity.table)}`;
           let params: any[] = [];
@@ -134,23 +158,25 @@ export class SyncService {
                   onProgress({
                     entity: entity.type,
                     entityLabel: entity.type,
-                    pushed: 0,
+                    pushed: result.entityBreakdown[entity.type].pushed,
                     pulled: 0,
                     total: pushRows.length,
                     status: 'error',
                     error: pushErr.message,
                   });
                 }
+                // Skip to next entity on error
+                break;
               } else {
                 result.pushedCount += batch.length;
                 result.entityBreakdown[entity.type].pushed += batch.length;
                 
-                // Report progress during push
+                // Report progress during push (more frequent updates)
                 if (onProgress) {
                   onProgress({
                     entity: entity.type,
                     entityLabel: entity.type,
-                    pushed: Math.min(i + batch.length, pushRows.length),
+                    pushed: result.entityBreakdown[entity.type].pushed,
                     pulled: 0,
                     total: pushRows.length,
                     status: 'pushing',
@@ -160,7 +186,7 @@ export class SyncService {
             }
           }
 
-          // Report completed push for this entity
+          // Mark push phase as completed for this entity
           if (onProgress) {
             onProgress({
               entity: entity.type,
@@ -168,7 +194,7 @@ export class SyncService {
               pushed: result.entityBreakdown[entity.type].pushed,
               pulled: 0,
               total: result.entityBreakdown[entity.type].pushed,
-              status: 'pushing',
+              status: 'completed',
             });
           }
         } catch (entityPushErr: any) {
@@ -177,7 +203,7 @@ export class SyncService {
             onProgress({
               entity: entity.type,
               entityLabel: entity.type,
-              pushed: 0,
+              pushed: result.entityBreakdown[entity.type].pushed,
               pulled: 0,
               total: 0,
               status: 'error',
@@ -196,7 +222,7 @@ export class SyncService {
       try {
         for (const entity of SYNC_ENTITIES) {
           try {
-            // Report pulling status
+            // Update status to pulling (reset from completed if needed)
             if (onProgress) {
               onProgress({
                 entity: entity.type,
@@ -247,8 +273,8 @@ export class SyncService {
                   result.pulledCount++;
                   result.entityBreakdown[entity.type].pulled++;
 
-                  // Report progress during pull
-                  if (onProgress && i % 10 === 0) {
+                  // Report progress during pull (more frequent updates)
+                  if (onProgress) {
                     onProgress({
                       entity: entity.type,
                       entityLabel: entity.type,
@@ -261,7 +287,7 @@ export class SyncService {
                 }
               }
 
-              // Report completed pull for this entity
+              // Mark pull phase as completed for this entity
               if (onProgress) {
                 onProgress({
                   entity: entity.type,
@@ -269,11 +295,11 @@ export class SyncService {
                   pushed: result.entityBreakdown[entity.type].pushed,
                   pulled: result.entityBreakdown[entity.type].pulled,
                   total: cloudRows.length,
-                  status: 'pulling',
+                  status: 'completed',
                 });
               }
             } else {
-              // Report completed pull for this entity (no new data)
+              // No new data to pull, mark as completed
               if (onProgress) {
                 onProgress({
                   entity: entity.type,
@@ -281,7 +307,7 @@ export class SyncService {
                   pushed: result.entityBreakdown[entity.type].pushed,
                   pulled: 0,
                   total: 0,
-                  status: 'pulling',
+                  status: 'completed',
                 });
               }
             }

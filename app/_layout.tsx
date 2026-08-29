@@ -1,10 +1,12 @@
 import { DripDrawer } from "@/components/drawer/index";
 import { LockScreen } from "@/components/LockScreen";
+import { SyncModal } from "@/components/SyncModal";
 import { AuthProvider, useAuth } from "@/constants/auth";
 import { ThemeProvider, useTheme } from "@/constants/colorTheme";
 import { DrawerProvider } from "@/constants/drawerContext";
 import { StoreProvider, useStoreContext } from "@/constants/storeContext";
-import { initDatabase } from "@/lib/database";
+import { SyncProvider, useSync } from "@/constants/syncContext";
+import { closeStoreDatabase, initDatabase } from "@/lib/database";
 import { checkLockStatus } from "@/lib/lock";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -13,22 +15,40 @@ import { useEffect, useRef, useState } from "react";
 /**
  * Initializes the per-store SQLite database when a storeId becomes available.
  * Must be inside both AuthProvider and StoreProvider.
+ * Handles database isolation when switching between stores.
  */
 function DatabaseInitializer() {
   const { user } = useAuth();
   const { activeStore } = useStoreContext();
   const initializedRef = useRef<Set<string>>(new Set());
+  const previousStoreIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const storeId = activeStore?.id || user?.storeId;
     if (!storeId) return;
-    // Prevent re-initializing the same store DB multiple times
-    if (initializedRef.current.has(storeId)) return;
 
     const initializeDB = async () => {
       try {
+        // Close previous store's database for isolation when switching stores
+        if (previousStoreIdRef.current && previousStoreIdRef.current !== storeId) {
+          try {
+            await closeStoreDatabase(previousStoreIdRef.current);
+            console.log(`[DB] Closed previous store database: ${previousStoreIdRef.current}`);
+            initializedRef.current.delete(previousStoreIdRef.current);
+          } catch (closeError) {
+            console.error(`[DB] Error closing previous store database:`, closeError);
+          }
+        }
+
+        // Prevent re-initializing the same store DB multiple times
+        if (initializedRef.current.has(storeId)) {
+          console.log(`[DB] Database already initialized for store: ${storeId}`);
+          return;
+        }
+
         await initDatabase(storeId);
         initializedRef.current.add(storeId);
+        previousStoreIdRef.current = storeId;
         console.log(`[DB] Initialized database for store: ${storeId}`);
       } catch (error) {
         console.error("[DB] Failed to initialize database:", error);
@@ -73,6 +93,25 @@ function LicenseChecker({ onValid }: { onValid: () => void }) {
 }
 
 /**
+ * Global Sync Modal Overlay
+ * Renders SyncModal at the highest level as a global overlay
+ */
+function GlobalSyncModal() {
+  const { isSyncModalVisible, hideSyncModal, syncFunction } = useSync();
+
+  // Don't render if modal is not visible or no sync function is set
+  if (!isSyncModalVisible || !syncFunction) return null;
+
+  return (
+    <SyncModal
+      visible={isSyncModalVisible}
+      onClose={hideSyncModal}
+      syncFunction={syncFunction}
+    />
+  );
+}
+
+/**
  * Inner app content — always renders Stack navigator so routing always works.
  * LicenseChecker is rendered as an OVERLAY above the stack, not instead of it.
  */
@@ -93,6 +132,9 @@ function ThemedAppContent() {
 
       {/* Drawer overlay */}
       <DripDrawer />
+
+      {/* Global Sync Modal overlay - always on top */}
+      <GlobalSyncModal />
 
       {/* License overlay — blocks UI if locked, otherwise invisible */}
       {!isValid && <LicenseChecker onValid={() => setIsValid(true)} />}
@@ -120,7 +162,9 @@ export default function RootLayout() {
       <StoreProvider>
         <ThemeProvider>
           <DrawerProvider>
-            <AppShell />
+            <SyncProvider>
+              <AppShell />
+            </SyncProvider>
           </DrawerProvider>
         </ThemeProvider>
       </StoreProvider>

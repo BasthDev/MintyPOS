@@ -218,26 +218,34 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                   </Text>
                 </View>
 
-                {/* Push Progress */}
-                {progress.pushed > 0 && (
-                  <DripProgressBar
-                    current={progress.pushed}
-                    max={progress.total || progress.pushed}
-                    label={`Push: ${progress.pushed} records`}
-                    showValues={false}
-                    style={styles.progressBar}
-                  />
+                {/* Push Progress - Always show if status is pushing or has pushed data */}
+                {(progress.status === 'pushing' || progress.pushed > 0) && (
+                  <View style={styles.progressRow}>
+                    <Text style={[styles.progressLabel, { color: theme.textSecondary }]}>
+                      Push: {progress.pushed} records
+                    </Text>
+                    <DripProgressBar
+                      current={progress.pushed}
+                      max={progress.total || Math.max(progress.pushed, 1)}
+                      showValues={false}
+                      style={styles.progressBar}
+                    />
+                  </View>
                 )}
 
-                {/* Pull Progress */}
-                {progress.pulled > 0 && (
-                  <DripProgressBar
-                    current={progress.pulled}
-                    max={progress.total || progress.pulled}
-                    label={`Pull: ${progress.pulled} records`}
-                    showValues={false}
-                    style={styles.progressBar}
-                  />
+                {/* Pull Progress - Always show if status is pulling or has pulled data */}
+                {(progress.status === 'pulling' || progress.pulled > 0) && (
+                  <View style={styles.progressRow}>
+                    <Text style={[styles.progressLabel, { color: theme.textSecondary }]}>
+                      Pull: {progress.pulled} records
+                    </Text>
+                    <DripProgressBar
+                      current={progress.pulled}
+                      max={progress.total || Math.max(progress.pulled, 1)}
+                      showValues={false}
+                      style={styles.progressBar}
+                    />
+                  </View>
                 )}
 
                 {progress.error && (
@@ -369,6 +377,17 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     marginTop: 4,
+    flex: 1,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 8,
+  },
+  progressLabel: {
+    fontSize: 11,
+    minWidth: 60,
   },
   errorText: {
     fontSize: 11,
