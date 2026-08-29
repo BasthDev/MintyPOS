@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Decimal } from 'decimal.js';
 import * as SQLite from 'expo-sqlite';
 
@@ -9,7 +10,7 @@ const DB_NAME = 'mintypos.db';
 // ==========================================
 // Set to true to seed/reset mock data on app restart.
 // Set to false for production or to preserve user data.
-const ENABLE_MOCK_DATA = true;
+const ENABLE_MOCK_DATA = false;
 
 // Types
 export interface Category {
@@ -493,46 +494,46 @@ const seedMockDataIfNeeded = async (db: SQLite.SQLiteDatabase) => {
   }
 };
 
+// Multi-store Database instances cache
+const dbStoreInstances = new Map<string, SQLite.SQLiteDatabase>();
+const dbStorePromises = new Map<string, Promise<SQLite.SQLiteDatabase>>();
+
 // Database initialization
-export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
-  if (dbInstance) {
-    return dbInstance;
+export const initDatabase = async (storeId?: string): Promise<SQLite.SQLiteDatabase> => {
+  const dbName = storeId ? `mintypos_store_${storeId}.db` : DB_NAME;
+
+  if (dbStoreInstances.has(dbName)) {
+    return dbStoreInstances.get(dbName)!;
   }
 
-  if (initPromise) {
-    return initPromise;
+  if (dbStorePromises.has(dbName)) {
+    return dbStorePromises.get(dbName)!;
   }
 
-  initPromise = (async () => {
+  const promise = (async () => {
     try {
-      const db = await SQLite.openDatabaseAsync(DB_NAME);
+      const db = await SQLite.openDatabaseAsync(dbName);
 
       // Enable foreign keys and WAL (Write-Ahead Logging) mode
       await db.execAsync('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
 
-      // Get current database version
-      const versionResult = await db.getFirstAsync<{ version: number }>('PRAGMA user_version');
-      const currentVersion = versionResult?.version || 0;
-      const TARGET_VERSION = 8;
+      // Set user_version
+      await db.execAsync('PRAGMA user_version = 10;');
 
-      // Create all base tables first
+      // 1. Create all 20 tables with complete schemas
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS units (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
           symbol TEXT NOT NULL
         );
-      `);
 
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS suppliers (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
           contact TEXT
         );
-      `);
 
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS ingredients (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
@@ -543,9 +544,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           updated_at TEXT NOT NULL DEFAULT (datetime('now')),
           FOREIGN KEY (base_unit_id) REFERENCES units(id)
         );
-      `);
 
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS ingredient_units (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           ingredient_id INTEGER NOT NULL,
@@ -553,9 +552,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           multiplier_to_base REAL NOT NULL,
           FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
         );
-      `);
 
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS inventory_batches (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           ingredient_id INTEGER NOT NULL,
@@ -568,25 +565,19 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL,
           FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
         );
-      `);
 
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS categories (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL
         );
-      `);
 
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS recipe_definitions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
           description TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
 
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS recipe_ingredients (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           recipe_id INTEGER NOT NULL,
@@ -595,9 +586,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           FOREIGN KEY (recipe_id) REFERENCES recipe_definitions(id) ON DELETE CASCADE,
           FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
         );
-      `);
 
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS products (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
@@ -612,336 +601,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
           FOREIGN KEY (recipe_definition_id) REFERENCES recipe_definitions(id) ON DELETE SET NULL
         );
-      `);
 
-      // Create indexes for better performance
-      await db.execAsync(`
-        CREATE INDEX IF NOT EXISTS idx_inventory_batches_ingredient 
-        ON inventory_batches(ingredient_id);
-        
-        CREATE INDEX IF NOT EXISTS idx_inventory_batches_date 
-        ON inventory_batches(received_date);
-        
-        CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe 
-        ON recipe_ingredients(recipe_id);
-        
-        CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient 
-        ON recipe_ingredients(ingredient_id);
-        
-        CREATE INDEX IF NOT EXISTS idx_products_recipe 
-        ON products(recipe_definition_id);
-      `);
-
-      // Migration checks
-      if (currentVersion < TARGET_VERSION) {
-        if (currentVersion < 4) {
-          try {
-            const columns = await db.getAllAsync('PRAGMA table_info(inventory_batches)');
-            const hasExpirationDate = columns.some((col: any) => col.name === 'expiration_date');
-            if (!hasExpirationDate) {
-              await db.execAsync('ALTER TABLE inventory_batches ADD COLUMN expiration_date TEXT');
-            }
-
-            await db.execAsync(`
-              UPDATE products 
-              SET stock_deduction_method = 'none' 
-              WHERE stock_deduction_method = 'product' AND (current_stock IS NULL OR current_stock = 0)
-            `);
-
-            const productColumns = await db.getAllAsync('PRAGMA table_info(products)');
-            const hasImageUri = productColumns.some((col: any) => col.name === 'image_uri');
-            if (!hasImageUri) {
-              await db.execAsync('ALTER TABLE products ADD COLUMN image_uri TEXT');
-            }
-          } catch (error) {
-            console.error('Migration error for version 4:', error);
-          }
-        }
-
-        if (currentVersion < 5) {
-          try {
-            await db.execAsync(`
-              CREATE TABLE IF NOT EXISTS activity_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                type TEXT NOT NULL,
-                entity_type TEXT NOT NULL,
-                entity_id INTEGER NOT NULL,
-                entity_name TEXT NOT NULL,
-                quantity REAL,
-                unit TEXT,
-                description TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
-              );
-            `);
-            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);');
-            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(type);');
-          } catch (error) {
-            console.error('Migration error for version 5:', error);
-          }
-        }
-
-        if (currentVersion < 6) {
-          try {
-            // Check if note column already exists
-            const tableInfo = await db.getAllAsync('PRAGMA table_info(order_items)');
-            const hasNoteColumn = tableInfo.some((col: any) => col.name === 'note');
-
-            if (!hasNoteColumn) {
-              // Add note column to order_items table
-              await db.execAsync(`
-                ALTER TABLE order_items ADD COLUMN note TEXT;
-              `);
-            }
-          } catch (error) {
-            console.error('Migration error for version 6:', error);
-          }
-        }
-
-        if (currentVersion < 8) {
-          try {
-            const orderCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(orders)');
-            const colNames = new Set(orderCols.map((col: any) => col.name));
-
-            if (!colNames.has('note')) {
-              await db.execAsync('ALTER TABLE orders ADD COLUMN note TEXT;');
-            }
-            if (!colNames.has('customer_id')) {
-              await db.execAsync('ALTER TABLE orders ADD COLUMN customer_id INTEGER;');
-            }
-            if (!colNames.has('customer_name')) {
-              await db.execAsync('ALTER TABLE orders ADD COLUMN customer_name TEXT;');
-            }
-            if (!colNames.has('is_split')) {
-              await db.execAsync('ALTER TABLE orders ADD COLUMN is_split INTEGER DEFAULT 0;');
-            }
-            if (!colNames.has('split_parent_id')) {
-              await db.execAsync('ALTER TABLE orders ADD COLUMN split_parent_id INTEGER;');
-            }
-
-            // Add order_number column to customer_loyalty_transactions
-            const loyaltyCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(customer_loyalty_transactions)');
-            const loyaltyColNames = new Set(loyaltyCols.map((col: any) => col.name));
-            if (!loyaltyColNames.has('order_number')) {
-              await db.execAsync('ALTER TABLE customer_loyalty_transactions ADD COLUMN order_number TEXT;');
-            }
-          } catch (error) {
-            console.error('Migration error for version 8 (orders columns):', error);
-          }
-        }
-
-        if (currentVersion < 9) {
-          try {
-            // Add is_active column to ingredients for soft-delete
-            const ingredientCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(ingredients)');
-            const ingredientColNames = new Set(ingredientCols.map((col: any) => col.name));
-            if (!ingredientColNames.has('is_active')) {
-              await db.execAsync('ALTER TABLE ingredients ADD COLUMN is_active INTEGER DEFAULT 1;');
-            }
-            if (!ingredientColNames.has('created_at')) {
-              await db.execAsync('ALTER TABLE ingredients ADD COLUMN created_at TEXT;');
-              await db.execAsync('UPDATE ingredients SET created_at = datetime("now") WHERE created_at IS NULL;');
-            }
-            if (!ingredientColNames.has('updated_at')) {
-              await db.execAsync('ALTER TABLE ingredients ADD COLUMN updated_at TEXT;');
-              await db.execAsync('UPDATE ingredients SET updated_at = datetime("now") WHERE updated_at IS NULL;');
-            }
-
-            // Migration to add foreign key actions (ON DELETE SET NULL/CASCADE)
-            // SQLite doesn't support ALTER TABLE to modify foreign key constraints
-            // We need to recreate tables with new foreign key actions
-            await db.execAsync('PRAGMA foreign_keys = OFF;');
-
-            // Recreate ingredient_units with ON DELETE CASCADE
-            await db.execAsync(`
-              CREATE TABLE IF NOT EXISTS ingredient_units_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ingredient_id INTEGER NOT NULL,
-                unit_name TEXT NOT NULL,
-                multiplier_to_base REAL NOT NULL,
-                FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
-              );
-            `);
-            await db.execAsync('INSERT INTO ingredient_units_new (id, ingredient_id, unit_name, multiplier_to_base) SELECT id, ingredient_id, unit_name, multiplier_to_base FROM ingredient_units;');
-            await db.execAsync('DROP TABLE ingredient_units;');
-            await db.execAsync('ALTER TABLE ingredient_units_new RENAME TO ingredient_units;');
-
-            // Recreate inventory_batches with ON DELETE SET NULL
-            await db.execAsync(`
-              CREATE TABLE IF NOT EXISTS inventory_batches_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ingredient_id INTEGER NOT NULL,
-                supplier_id INTEGER NOT NULL,
-                initial_quantity_base REAL NOT NULL,
-                remaining_quantity_base REAL NOT NULL,
-                cost_per_base_unit REAL NOT NULL,
-                received_date TEXT NOT NULL,
-                expiration_date TEXT,
-                FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL,
-                FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
-              );
-            `);
-            await db.execAsync('INSERT INTO inventory_batches_new (id, ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date, expiration_date) SELECT id, ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, cost_per_base_unit, received_date, expiration_date FROM inventory_batches;');
-            await db.execAsync('DROP TABLE inventory_batches;');
-            await db.execAsync('ALTER TABLE inventory_batches_new RENAME TO inventory_batches;');
-
-            // Recreate recipe_ingredients with ON DELETE CASCADE
-            await db.execAsync(`
-              CREATE TABLE IF NOT EXISTS recipe_ingredients_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                recipe_id INTEGER NOT NULL,
-                ingredient_id INTEGER NOT NULL,
-                quantity_needed_base REAL NOT NULL,
-                FOREIGN KEY (recipe_id) REFERENCES recipe_definitions(id) ON DELETE CASCADE,
-                FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
-              );
-            `);
-            await db.execAsync('INSERT INTO recipe_ingredients_new (id, recipe_id, ingredient_id, quantity_needed_base) SELECT id, recipe_id, ingredient_id, quantity_needed_base FROM recipe_ingredients;');
-            await db.execAsync('DROP TABLE recipe_ingredients;');
-            await db.execAsync('ALTER TABLE recipe_ingredients_new RENAME TO recipe_ingredients;');
-
-            // Recreate products with ON DELETE SET NULL
-            await db.execAsync(`
-              CREATE TABLE IF NOT EXISTS products_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                sku TEXT,
-                category_id INTEGER,
-                buy_price REAL,
-                selling_price REAL NOT NULL,
-                recipe_definition_id INTEGER,
-                current_stock REAL DEFAULT 0,
-                stock_deduction_method TEXT NOT NULL DEFAULT 'none',
-                image_uri TEXT,
-                FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
-                FOREIGN KEY (recipe_definition_id) REFERENCES recipe_definitions(id) ON DELETE SET NULL
-              );
-            `);
-            await db.execAsync('INSERT INTO products_new (id, name, sku, category_id, buy_price, selling_price, recipe_definition_id, current_stock, stock_deduction_method, image_uri) SELECT id, name, sku, category_id, buy_price, selling_price, recipe_definition_id, current_stock, stock_deduction_method, image_uri FROM products;');
-            await db.execAsync('DROP TABLE products;');
-            await db.execAsync('ALTER TABLE products_new RENAME TO products;');
-
-            // Recreate orders with ON DELETE SET NULL
-            await db.execAsync(`
-              CREATE TABLE IF NOT EXISTS orders_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_number TEXT NOT NULL,
-                subtotal REAL NOT NULL,
-                discount_amount REAL NOT NULL DEFAULT 0,
-                discount_name TEXT,
-                tax_amount REAL NOT NULL DEFAULT 0,
-                service_amount REAL NOT NULL DEFAULT 0,
-                total REAL NOT NULL,
-                payment_type TEXT NOT NULL,
-                payment_method TEXT NOT NULL,
-                amount_paid REAL NOT NULL,
-                change_amount REAL NOT NULL DEFAULT 0,
-                items_count INTEGER NOT NULL DEFAULT 0,
-                note TEXT,
-                customer_id INTEGER,
-                customer_name TEXT,
-                is_split INTEGER DEFAULT 0,
-                split_parent_id INTEGER,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
-              );
-            `);
-            await db.execAsync('INSERT INTO orders_new (id, order_number, subtotal, discount_amount, discount_name, tax_amount, service_amount, total, payment_type, payment_method, amount_paid, change_amount, items_count, note, customer_id, customer_name, is_split, split_parent_id, created_at) SELECT id, order_number, subtotal, discount_amount, discount_name, tax_amount, service_amount, total, payment_type, payment_method, amount_paid, change_amount, items_count, note, customer_id, customer_name, is_split, split_parent_id, created_at FROM orders;');
-            await db.execAsync('DROP TABLE orders;');
-            await db.execAsync('ALTER TABLE orders_new RENAME TO orders;');
-
-            // Recreate order_items with ON DELETE CASCADE/SET NULL
-            await db.execAsync(`
-              CREATE TABLE IF NOT EXISTS order_items_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_id INTEGER NOT NULL,
-                product_id INTEGER NOT NULL,
-                product_name TEXT NOT NULL,
-                price REAL NOT NULL,
-                quantity REAL NOT NULL,
-                subtotal REAL NOT NULL,
-                note TEXT,
-                FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
-              );
-            `);
-            await db.execAsync('INSERT INTO order_items_new (id, order_id, product_id, product_name, price, quantity, subtotal, note) SELECT id, order_id, product_id, product_name, price, quantity, subtotal, note FROM order_items;');
-            await db.execAsync('DROP TABLE order_items;');
-            await db.execAsync('ALTER TABLE order_items_new RENAME TO order_items;');
-
-            // Recreate customer_loyalty_transactions with ON DELETE CASCADE
-            await db.execAsync(`
-              CREATE TABLE IF NOT EXISTS customer_loyalty_transactions_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                order_id INTEGER,
-                order_number TEXT,
-                type TEXT NOT NULL,
-                points INTEGER NOT NULL,
-                notes TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-              );
-            `);
-            await db.execAsync('INSERT INTO customer_loyalty_transactions_new (id, customer_id, order_id, order_number, type, points, notes, created_at) SELECT id, customer_id, order_id, order_number, type, points, notes, created_at FROM customer_loyalty_transactions;');
-            await db.execAsync('DROP TABLE customer_loyalty_transactions;');
-            await db.execAsync('ALTER TABLE customer_loyalty_transactions_new RENAME TO customer_loyalty_transactions;');
-
-            // Recreate customer_balance_transactions with ON DELETE CASCADE
-            await db.execAsync(`
-              CREATE TABLE IF NOT EXISTS customer_balance_transactions_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                order_id INTEGER,
-                type TEXT NOT NULL,
-                amount REAL NOT NULL,
-                notes TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-              );
-            `);
-            await db.execAsync('INSERT INTO customer_balance_transactions_new (id, customer_id, order_id, type, amount, notes, created_at) SELECT id, customer_id, order_id, type, amount, notes, created_at FROM customer_balance_transactions;');
-            await db.execAsync('DROP TABLE customer_balance_transactions;');
-            await db.execAsync('ALTER TABLE customer_balance_transactions_new RENAME TO customer_balance_transactions;');
-
-            // Recreate order_splits with ON DELETE CASCADE/SET NULL
-            await db.execAsync(`
-              CREATE TABLE IF NOT EXISTS order_splits_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                parent_order_id INTEGER NOT NULL,
-                split_index INTEGER NOT NULL,
-                total_splits INTEGER NOT NULL,
-                amount REAL NOT NULL,
-                payment_method TEXT NOT NULL,
-                payment_provider TEXT,
-                customer_id INTEGER,
-                status TEXT DEFAULT 'completed',
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                FOREIGN KEY (parent_order_id) REFERENCES orders(id) ON DELETE CASCADE,
-                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
-              );
-            `);
-            await db.execAsync('INSERT INTO order_splits_new (id, parent_order_id, split_index, total_splits, amount, payment_method, payment_provider, customer_id, status, created_at) SELECT id, parent_order_id, split_index, total_splits, amount, payment_method, payment_provider, customer_id, status, created_at FROM order_splits;');
-            await db.execAsync('DROP TABLE order_splits;');
-            await db.execAsync('ALTER TABLE order_splits_new RENAME TO order_splits;');
-
-            await db.execAsync('PRAGMA foreign_keys = ON;');
-
-            // Recreate indexes
-            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_inventory_batches_ingredient ON inventory_batches(ingredient_id);');
-            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_inventory_batches_date ON inventory_batches(received_date);');
-            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe ON recipe_ingredients(recipe_id);');
-            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient ON recipe_ingredients(ingredient_id);');
-            await db.execAsync('CREATE INDEX IF NOT EXISTS idx_products_recipe ON products(recipe_definition_id);');
-          } catch (error) {
-            console.error('Migration error for version 9 (foreign key actions):', error);
-          }
-        }
-      }
-
-      await db.execAsync(`PRAGMA user_version = ${TARGET_VERSION};`);
-
-      // Create activity_logs table
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS activity_logs (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           type TEXT NOT NULL,
@@ -953,12 +613,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           description TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
-      await db.execAsync('CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);');
-      await db.execAsync('CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(type);');
 
-      // Create configuration & operational tables
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS payment_methods (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           type_key TEXT NOT NULL,
@@ -968,9 +623,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           is_system INTEGER NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
 
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS tax_configs (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
@@ -979,9 +632,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           is_active INTEGER NOT NULL DEFAULT 1,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
 
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS discounts (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
@@ -992,9 +643,40 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           is_active INTEGER NOT NULL DEFAULT 1,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-      `);
 
-      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS customers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          uuid TEXT UNIQUE,
+          name TEXT NOT NULL,
+          phone TEXT,
+          email TEXT,
+          notes TEXT,
+          tier TEXT DEFAULT 'regular',
+          loyalty_points INTEGER DEFAULT 0,
+          total_spent REAL DEFAULT 0,
+          store_credit_balance REAL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS crm_configs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          loyalty_enabled INTEGER DEFAULT 1,
+          points_per_currency REAL DEFAULT 0.01,
+          min_transaction_for_points REAL DEFAULT 0,
+          tier_upgrade_enabled INTEGER DEFAULT 1,
+          tier_upgrade_period TEXT DEFAULT 'lifetime',
+          bronze_threshold REAL DEFAULT 1000000,
+          silver_threshold REAL DEFAULT 5000000,
+          gold_threshold REAL DEFAULT 10000000,
+          redemption_enabled INTEGER DEFAULT 1,
+          points_to_currency_ratio REAL DEFAULT 0.01,
+          min_points_to_redeem INTEGER DEFAULT 100,
+          max_redemption_pct REAL DEFAULT 50,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE TABLE IF NOT EXISTS orders (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           order_number TEXT NOT NULL,
@@ -1017,9 +699,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
         );
-      `);
 
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS order_items (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           order_id INTEGER NOT NULL,
@@ -1032,75 +712,7 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
           FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
         );
-      `);
 
-      // CRM Tables
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS customers (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          uuid TEXT UNIQUE,
-          name TEXT NOT NULL,
-          phone TEXT,
-          email TEXT,
-          notes TEXT,
-          tier TEXT DEFAULT 'regular',
-          loyalty_points INTEGER DEFAULT 0,
-          total_spent REAL DEFAULT 0,
-          store_credit_balance REAL DEFAULT 0,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      `);
-
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS crm_configs (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          loyalty_enabled INTEGER DEFAULT 1,
-          points_per_currency REAL DEFAULT 0.01,
-          min_transaction_for_points REAL DEFAULT 0,
-          tier_upgrade_enabled INTEGER DEFAULT 1,
-          tier_upgrade_period TEXT DEFAULT 'lifetime',
-          bronze_threshold REAL DEFAULT 1000000,
-          silver_threshold REAL DEFAULT 5000000,
-          gold_threshold REAL DEFAULT 10000000,
-          redemption_enabled INTEGER DEFAULT 1,
-          points_to_currency_ratio REAL DEFAULT 0.01,
-          min_points_to_redeem INTEGER DEFAULT 100,
-          max_redemption_pct REAL DEFAULT 50,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      `);
-
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS customer_loyalty_transactions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          customer_id INTEGER NOT NULL,
-          order_id INTEGER,
-          order_number TEXT,
-          type TEXT NOT NULL,
-          points INTEGER NOT NULL,
-          notes TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-        );
-      `);
-
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS customer_balance_transactions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          customer_id INTEGER NOT NULL,
-          order_id INTEGER,
-          type TEXT NOT NULL,
-          amount REAL NOT NULL,
-          notes TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-        );
-      `);
-
-      // Order Splits Table
-      await db.execAsync(`
         CREATE TABLE IF NOT EXISTS order_splits (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           parent_order_id INTEGER NOT NULL,
@@ -1115,9 +727,66 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           FOREIGN KEY (parent_order_id) REFERENCES orders(id) ON DELETE CASCADE,
           FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
         );
+
+        CREATE TABLE IF NOT EXISTS customer_loyalty_transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL,
+          order_id INTEGER,
+          order_number TEXT,
+          type TEXT NOT NULL,
+          points INTEGER NOT NULL,
+          notes TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS customer_balance_transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL,
+          order_id INTEGER,
+          type TEXT NOT NULL,
+          amount REAL NOT NULL,
+          notes TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+        );
       `);
 
-      // Default CRM Config seeding if missing
+      // 2. Create performance indexes
+      await db.execAsync(`
+        CREATE INDEX IF NOT EXISTS idx_inventory_batches_ingredient ON inventory_batches(ingredient_id);
+        CREATE INDEX IF NOT EXISTS idx_inventory_batches_date ON inventory_batches(received_date);
+        CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe ON recipe_ingredients(recipe_id);
+        CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient ON recipe_ingredients(ingredient_id);
+        CREATE INDEX IF NOT EXISTS idx_products_recipe ON products(recipe_definition_id);
+        CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(type);
+      `);
+
+      // 3. Ensure Default Seeding for Clean Operations
+      // Units: Always ensure standard base units exist
+      const existingUnits = await db.getAllAsync<Unit>('SELECT * FROM units LIMIT 1');
+      if (existingUnits.length === 0) {
+        await db.execAsync(`
+          INSERT INTO units (name, symbol) VALUES 
+          ('gram', 'g'),
+          ('milliliter', 'ml'),
+          ('piece', 'pcs'),
+          ('kilogram', 'kg'),
+          ('liter', 'L');
+        `);
+      }
+
+      // Payment Methods: Always ensure Cash exists
+      const existingMethods = await db.getAllAsync<any>('SELECT * FROM payment_methods LIMIT 1');
+      if (existingMethods.length === 0) {
+        await db.execAsync(`
+          INSERT INTO payment_methods (type_key, type_label, method_name, is_active, is_system) VALUES 
+          ('cash', 'Cash', 'Cash', 1, 1);
+        `);
+      }
+
+      // CRM Configs: Always ensure default loyalty configuration exists
       const existingCrm = await db.getAllAsync<any>('SELECT * FROM crm_configs LIMIT 1');
       if (existingCrm.length === 0) {
         await db.execAsync(`
@@ -1133,65 +802,71 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
         `);
       }
 
-      // Migration check for orders table new columns
-      try {
-        const orderCols = await db.getAllAsync('PRAGMA table_info(orders)');
-        const hasOrderNote = orderCols.some((col: any) => col.name === 'note');
-        if (!hasOrderNote) {
-          await db.execAsync('ALTER TABLE orders ADD COLUMN note TEXT;');
-        }
-        const hasCustomerId = orderCols.some((col: any) => col.name === 'customer_id');
-        if (!hasCustomerId) {
-          await db.execAsync('ALTER TABLE orders ADD COLUMN customer_id INTEGER;');
-        }
-        const hasCustomerName = orderCols.some((col: any) => col.name === 'customer_name');
-        if (!hasCustomerName) {
-          await db.execAsync('ALTER TABLE orders ADD COLUMN customer_name TEXT;');
-        }
-        const hasIsSplit = orderCols.some((col: any) => col.name === 'is_split');
-        if (!hasIsSplit) {
-          await db.execAsync('ALTER TABLE orders ADD COLUMN is_split INTEGER DEFAULT 0;');
-        }
-      } catch (err) {
-        console.error('Migration check error for orders:', err);
-      }
-
-      // Seed mock data if enabled
+      // If mock data is enabled explicitly, seed mock datasets
       if (ENABLE_MOCK_DATA) {
         await seedMockDataIfNeeded(db);
-      } else {
-        // Fallback minimal default rows if mock data is disabled
-        const existingUnits = await db.getAllAsync<Unit>('SELECT * FROM units LIMIT 1');
-        if (existingUnits.length === 0) {
-          await db.execAsync(`
-            INSERT INTO units (name, symbol) VALUES 
-            ('gram', 'g'),
-            ('milliliter', 'ml'),
-            ('piece', 'pcs'),
-            ('kilogram', 'kg'),
-            ('liter', 'L');
-          `);
-        }
       }
 
+      dbStoreInstances.set(dbName, db);
       dbInstance = db;
       return db;
     } catch (error) {
+      dbStorePromises.delete(dbName);
       initPromise = null;
       throw error;
     }
   })();
 
-  return initPromise;
+  dbStorePromises.set(dbName, promise);
+  return promise;
 };
 
-// Get database instance (always awaits singleton initialization)
-export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
-  if (dbInstance) {
-    return dbInstance;
+// Get database instance (always awaits store-isolated initialization)
+export const getDatabase = async (storeId?: string): Promise<SQLite.SQLiteDatabase> => {
+  let targetStoreId = storeId;
+  if (!targetStoreId) {
+    try {
+      targetStoreId = (await AsyncStorage.getItem('mintypos_active_store_id')) || undefined;
+    } catch {
+      targetStoreId = undefined;
+    }
   }
-  return await initDatabase();
+
+  const dbName = targetStoreId ? `mintypos_store_${targetStoreId}.db` : DB_NAME;
+  if (dbStoreInstances.has(dbName)) {
+    return dbStoreInstances.get(dbName)!;
+  }
+  return await initDatabase(targetStoreId);
 };
+
+// Clean & reset all local database connections & cache
+export const clearAllDatabases = async (): Promise<void> => {
+  try {
+    for (const [dbName, db] of dbStoreInstances.entries()) {
+      try {
+        await db.closeAsync();
+      } catch (e) {
+        // Ignore close errors
+      }
+      try {
+        await SQLite.deleteDatabaseAsync(dbName);
+      } catch (e) {
+        // Ignore delete errors
+      }
+    }
+    try {
+      await SQLite.deleteDatabaseAsync(DB_NAME);
+    } catch (e) {
+      // Ignore
+    }
+  } finally {
+    dbStoreInstances.clear();
+    dbStorePromises.clear();
+    dbInstance = null;
+    initPromise = null;
+  }
+};
+
 
 // Database operations (same as your implementation)
 export const dbOperations = {
@@ -2332,7 +2007,7 @@ export const resetToCleanDatabase = async (db: SQLite.SQLiteDatabase): Promise<v
     DELETE FROM crm_configs;
   `);
 
-  // Seed default base units only (clean production state)
+  // Seed default base units (clean production state)
   await db.execAsync(`
     INSERT INTO units (name, symbol) VALUES 
     ('gram', 'g'),
@@ -2340,6 +2015,12 @@ export const resetToCleanDatabase = async (db: SQLite.SQLiteDatabase): Promise<v
     ('piece', 'pcs'),
     ('kilogram', 'kg'),
     ('liter', 'L');
+  `);
+
+  // Seed Cash as the ONLY default system payment method
+  await db.execAsync(`
+    INSERT INTO payment_methods (type_key, type_label, method_name, is_active, is_system) VALUES 
+    ('cash', 'Cash', 'Cash', 1, 1);
   `);
 
   await db.execAsync('PRAGMA foreign_keys = ON;');

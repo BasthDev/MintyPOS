@@ -18,9 +18,10 @@ import {
   Tag,
   Truck,
   User,
+  Users,
 } from 'lucide-react-native';
 
-export type UserRole = 'Admin' | 'Manager' | 'Staff';
+export type UserRole = 'Admin' | 'Manager' | 'Cashier' | 'Staff';
 
 export interface SubMenuItem {
   title: string;
@@ -163,6 +164,12 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
         roles: ['Admin', 'Manager'],
       },
     ],
+  },
+  {
+    title: 'Staff',
+    path: '/staff',
+    icon: Users,
+    roles: ['Admin', 'Manager'],
   },
   {
     title: 'Settings',

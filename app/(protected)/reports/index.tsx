@@ -589,26 +589,22 @@ export default function ReportsScreen() {
         ) : selectedReport === 'crm' ? (
           <>
             {/* CRM Summary Cards */}
-            <View style={styles.metricsGrid}>
-              <View style={[styles.metricCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <Users size={20} color={theme.primary} />
-                <Text style={[styles.metricValue, { color: theme.text }]}>{crmData?.totalCustomers || 0}</Text>
-                <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Total Customers</Text>
+            <View style={styles.detailsStatsGrid}>
+              <View style={[styles.detailStatCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Text style={[styles.detailStatLabel, { color: theme.textSecondary }]}>Total Customers</Text>
+                <Text style={[styles.detailStatValue, { color: theme.text }]}>{crmData?.totalCustomers || 0}</Text>
               </View>
-              <View style={[styles.metricCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <Award size={20} color={theme.success} />
-                <Text style={[styles.metricValue, { color: theme.text }]}>{crmData?.totalPointsIssued || 0}</Text>
-                <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Points Issued</Text>
+              <View style={[styles.detailStatCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Text style={[styles.detailStatLabel, { color: theme.textSecondary }]}>Points Issued</Text>
+                <Text style={[styles.detailStatValue, { color: theme.success }]}>{crmData?.totalPointsIssued || 0}</Text>
               </View>
-              <View style={[styles.metricCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <TrendingUp size={20} color={theme.warning || '#F59E0B'} />
-                <Text style={[styles.metricValue, { color: theme.text }]}>{crmData?.totalPointsRedeemed || 0}</Text>
-                <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Points Redeemed</Text>
+              <View style={[styles.detailStatCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Text style={[styles.detailStatLabel, { color: theme.textSecondary }]}>Points Redeemed</Text>
+                <Text style={[styles.detailStatValue, { color: theme.warning || '#F59E0B' }]}>{crmData?.totalPointsRedeemed || 0}</Text>
               </View>
-              <View style={[styles.metricCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <DollarSign size={20} color={theme.primary} />
-                <Text style={[styles.metricValue, { color: theme.text }]}>{formatCurrency(crmData?.totalStoreCredit || 0)}</Text>
-                <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Store Credit</Text>
+              <View style={[styles.detailStatCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Text style={[styles.detailStatLabel, { color: theme.textSecondary }]}>Store Credit</Text>
+                <Text style={[styles.detailStatValue, { color: theme.primary }]}>{formatCurrency(crmData?.totalStoreCredit || 0)}</Text>
               </View>
             </View>
 

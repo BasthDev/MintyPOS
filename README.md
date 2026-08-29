@@ -844,7 +844,31 @@ npm run build
 
 ## 🔄 Recent Updates & Changelog
 
-### Version 1.0.5 (Latest - 2026-08-29)
+### Version 1.0.6 (Latest - 2026-08-29)
+- ☁️ **Supabase Cloud Integration & Environment Setup**:
+  - Integrated `@supabase/supabase-js` with AsyncStorage session persistence for web and native
+  - Configured environment variable bindings (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`)
+- 🏢 **Organization Onboarding Flow (`app/(new)/index.tsx`)**:
+  - Automatically redirects newly registered business owners to complete their organization profile
+  - Captures Business Name, Owner Name, Contact Phone, and Headquarters Address
+- 🗄️ **Multi-Store Database Isolation**:
+  - Dynamic SQLite database connection routing per store (`mintypos_store_${storeId}.db`)
+  - Ensures 100% data separation between branches on physical devices
+  - Clean database reset operates per-store and seeds **base units** (`g`, `ml`, `pcs`, `kg`, `L`) and **Cash** as default payment method
+- 🏪 **Store Setup & Branch Switcher (`app/(protected)/`)**:
+  - `setup-store.tsx`: First-time store initialization with logo, address, phone, and currency
+  - `select-store.tsx`: Multi-store switcher with active status indicators and branch switcher
+  - Dynamic store header in navigation drawer for quick branch switching
+- 🔐 **Dual Owner & Staff Authentication (`app/(auth)/index.tsx`)**:
+  - Owner Login via Supabase Auth (Email + Password with email click confirmation) or Google OAuth
+  - Staff Login via Username + Password with automatic store context detection and role-based permissions
+- 👥 **Staff Management Module (`app/staff/index.tsx` & `StaffFormSheet.tsx`)**:
+  - Full 4-layer architecture for staff accounts with `Manager`, `Cashier`, and `Staff` roles
+- 🔄 **Bi-Directional Cloud Backup & Sync Engine (`syncService.ts` & `syncProcess.ts`)**:
+  - Automatic and manual cloud synchronization for orders and catalog items with cloud push/pull status
+  - One-tap Cloud Sync button integrated into the navigation drawer footer
+
+### Version 1.0.5
 - 📊 **CRM & Loyalty Reports Integration**:
   - Added dedicated CRM & Loyalty Report to the Reports screen (`app/reports/index.tsx`)
   - Features real-time KPI metrics for Total Customers, Points Issued, Points Redeemed, and Total Store Credit

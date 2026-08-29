@@ -1,22 +1,53 @@
 import { DripButton } from '@/components/Button';
+import { StaffFormSheet } from '@/components/forms/StaffFormSheet';
 import { Header } from '@/components/Header';
 import { DripSearchBar } from '@/components/SearchBar';
 import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
-import { Plus, Users } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useStoreContext } from '@/constants/storeContext';
+import { StaffProcess } from '@/processes/staffProcess';
+import { StaffRecord } from '@/services/staffService';
+import { Edit3, KeyRound, Phone, Plus, ShieldCheck, Trash2, User, UserCheck, Users } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function StaffScreen() {
   const { theme } = useTheme();
+  const { activeStore } = useStoreContext();
 
-  const [staffList, setStaffList] = useState<any[]>([]);
-  const [selectedStaff, setSelectedStaff] = useState<any | null>(null);
+  const [staffList, setStaffList] = useState<StaffRecord[]>([]);
+  const [selectedStaff, setSelectedStaff] = useState<StaffRecord | null>(null);
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [formSheetVisible, setFormSheetVisible] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<StaffRecord | null>(null);
+
+  const loadStaff = async () => {
+    setLoading(true);
+    try {
+      const res = await StaffProcess.getAll(activeStore?.id);
+      if (res.success && res.data) {
+        setStaffList(res.data);
+        if (selectedStaff) {
+          const updated = res.data.find((s) => s.id === selectedStaff.id);
+          setSelectedStaff(updated || null);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load staff list:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStaff();
+  }, [activeStore?.id]);
 
   const filteredStaff = staffList.filter(
     (s) =>
       s.name?.toLowerCase().includes(search.toLowerCase()) ||
+      s.username?.toLowerCase().includes(search.toLowerCase()) ||
       s.role?.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -24,19 +55,23 @@ export default function StaffScreen() {
   const leftPanel = (
     <View style={styles.leftPanelContainer}>
       <DripSearchBar
-        placeholder="Search staff members..."
+        placeholder="Search staff by name, username..."
         value={search}
         onChangeText={setSearch}
         onClear={() => setSearch('')}
         style={styles.searchBar}
       />
 
-      {filteredStaff.length === 0 ? (
+      {loading ? (
+        <View style={styles.emptyListContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      ) : filteredStaff.length === 0 ? (
         <View style={styles.emptyListContainer}>
           <Users size={48} color={theme.textTertiary || '#888'} />
           <Text style={[styles.emptyListText, { color: theme.text }]}>No staff members found</Text>
           <Text style={[styles.emptyListSubtext, { color: theme.textSecondary }]}>
-            Add team members to manage access permissions
+            Add cashier and manager accounts to grant POS access.
           </Text>
         </View>
       ) : (
@@ -74,7 +109,7 @@ export default function StaffScreen() {
                         { color: isSelected ? '#E0F2FE' : theme.textSecondary },
                       ]}
                     >
-                      Role: {s.role || 'Staff'}
+                      @{s.username} • {s.role}
                     </Text>
                   </View>
                 </View>
@@ -88,7 +123,10 @@ export default function StaffScreen() {
       <TouchableOpacity
         activeOpacity={0.8}
         style={[styles.fabButton, { backgroundColor: theme.primary }]}
-        onPress={() => console.log('Add staff member')}
+        onPress={() => {
+          setEditingStaff(null);
+          setFormSheetVisible(true);
+        }}
       >
         <Plus size={22} color="#FFFFFF" />
         <Text style={styles.fabText}>Add Member</Text>
@@ -109,15 +147,27 @@ export default function StaffScreen() {
               {selectedStaff.name}
             </Text>
             <Text style={[styles.detailsSubtitle, { color: theme.primary }]}>
-              {selectedStaff.role || 'Staff Member'}
+              @{selectedStaff.username} • {selectedStaff.role}
             </Text>
           </View>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+          <DripButton
+            title="Edit Member"
+            variant="secondary"
+            icon={<Edit3 size={16} color={theme.text} />}
+            onPress={() => {
+              setEditingStaff(selectedStaff);
+              setFormSheetVisible(true);
+            }}
+          />
         </View>
       </View>
 
       <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={false}>
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Member Details</Text>
+          <Text style={[styles.infoCardTitle, { color: theme.text }]}>Staff Account Credentials</Text>
 
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Full Name:</Text>
@@ -125,9 +175,23 @@ export default function StaffScreen() {
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Role:</Text>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>POS Username:</Text>
+            <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>
+              {selectedStaff.username}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Role / Permissions:</Text>
             <Text style={[styles.infoValue, { color: theme.text }]}>{selectedStaff.role}</Text>
           </View>
+
+          {selectedStaff.phone ? (
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Phone Number:</Text>
+              <Text style={[styles.infoValue, { color: theme.text }]}>{selectedStaff.phone}</Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </View>
@@ -143,7 +207,7 @@ export default function StaffScreen() {
 
   return (
     <>
-      <Header title="Staff" />
+      <Header title="Staff Management" />
       <Section
         leftPanel={leftPanel}
         rightPanel={rightPanel}
@@ -151,6 +215,16 @@ export default function StaffScreen() {
         onBack={() => setSelectedStaff(null)}
         backButtonTitle="Back to Staff"
         childrenPadding={16}
+      />
+
+      <StaffFormSheet
+        visible={formSheetVisible}
+        onClose={() => {
+          setFormSheetVisible(false);
+          setEditingStaff(null);
+        }}
+        onSuccess={loadStaff}
+        staff={editingStaff}
       />
     </>
   );

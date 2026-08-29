@@ -2,27 +2,35 @@ import { useAuth } from '@/constants/auth';
 import { useTheme } from '@/constants/colorTheme';
 import { useDrawer } from '@/constants/drawerContext';
 import { DRAWER_MENU_ITEMS, MenuItem } from '@/constants/menu';
+import { useStoreContext } from '@/constants/storeContext';
+import { SyncProcess } from '@/processes/syncProcess';
 import { router, usePathname } from 'expo-router';
 import {
-    ChevronDown,
-    ChevronUp,
-    LogOut,
-    Moon,
-    Store,
-    Sun
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Cloud,
+  LogOut,
+  Moon,
+  RefreshCw,
+  Store,
+  Sun,
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
-    ViewStyle,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+  ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -154,6 +162,9 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
     }
   }, [user]);
 
+  const { activeStore } = useStoreContext();
+  const [syncing, setSyncing] = useState(false);
+
   useEffect(() => {
     if (isDrawerOpen) {
       setModalVisible(true);
@@ -171,8 +182,6 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
     }
   }, [isDrawerOpen, position, DRAWER_WIDTH]);
 
-  if (!modalVisible) return null;
-
   const handleNavigation = (path: string) => {
     if (pathname === path) {
       closeDrawer();
@@ -182,10 +191,33 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
     router.push(path as any);
   };
 
+  const handleTriggerSync = async () => {
+    if (!activeStore?.id) {
+      Alert.alert('Sync', 'No active store selected for sync');
+      return;
+    }
+    setSyncing(true);
+    try {
+      const res = await SyncProcess.sync(activeStore.id);
+      if (res.success) {
+        Alert.alert(
+          'Cloud Sync Complete',
+          `Successfully synchronized with Supabase cloud.\nPushed: ${res.data?.pushedCount || 0} records\nPulled: ${res.data?.pulledCount || 0} records`
+        );
+      } else {
+        Alert.alert('Sync Notice', res.error || res.errors?.[0] || 'Sync completed locally.');
+      }
+    } catch (e: any) {
+      Alert.alert('Sync Error', e?.message || 'Failed to sync');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleLogout = async () => {
     closeDrawer();
     await signOut();
-    router.replace('/');
+    router.replace('/(auth)' as any);
   };
 
   const effectiveRole = user?.role || 'Staff';
@@ -195,6 +227,8 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
 
   const displayName = user?.name || 'Staff Member';
   const avatarLetter = (displayName[0] || 'U').toUpperCase();
+
+  if (!modalVisible) return null;
 
   return (
     <Modal transparent visible={modalVisible} animationType="none" onRequestClose={closeDrawer}>
@@ -218,18 +252,29 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
             style,
           ]}
         >
-          {/* TOP ORGANIZATION HEADER SECTION */}
+          {/* TOP ORGANIZATION / STORE HEADER SECTION */}
           <View style={[styles.storeHeader, { borderBottomColor: theme.border }]}>
-            <View style={styles.storeHeaderLeft}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                closeDrawer();
+                router.push('/(protected)/select-store' as any);
+              }}
+              style={styles.storeHeaderLeft}
+            >
               <View style={[styles.storeLogoBox, { backgroundColor: PRIMARY + '15' }]}>
                 <Store size={22} color={PRIMARY} />
               </View>
               <View style={styles.storeHeaderText}>
                 <Text style={[styles.storeTitle, { color: theme.text }]} numberOfLines={1}>
-                  {displayOrg}
+                  {activeStore?.name || displayOrg}
                 </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                  <Text style={{ fontSize: 11, color: PRIMARY, fontWeight: '700' }}>Switch Store</Text>
+                  <ChevronRight size={12} color={PRIMARY} />
+                </View>
               </View>
-            </View>
+            </TouchableOpacity>
 
             {/* Theme Toggle Button */}
             <TouchableOpacity
@@ -345,13 +390,28 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
                 </View>
               </View>
 
-              <TouchableOpacity
-                style={styles.logoutButtonRow}
-                activeOpacity={0.8}
-                onPress={handleLogout}
-              >
-                <LogOut size={20} color="#EF4444" />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <TouchableOpacity
+                  style={[styles.syncButtonRow, { backgroundColor: theme.input }]}
+                  activeOpacity={0.8}
+                  onPress={handleTriggerSync}
+                  disabled={syncing}
+                >
+                  {syncing ? (
+                    <ActivityIndicator size="small" color={PRIMARY} />
+                  ) : (
+                    <Cloud size={18} color={PRIMARY} />
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.logoutButtonRow}
+                  activeOpacity={0.8}
+                  onPress={handleLogout}
+                >
+                  <LogOut size={20} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Animated.View>
@@ -567,6 +627,13 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  syncButtonRow: {
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logoutButtonRow: {
     padding: 10,
