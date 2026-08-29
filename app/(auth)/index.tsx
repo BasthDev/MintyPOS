@@ -9,30 +9,29 @@ import { StoreProcess } from '@/processes/storeProcess';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import {
-    Globe,
-    KeyRound,
-    Lock,
-    LogIn,
-    Mail,
-    RotateCcw,
-    Shield,
-    ShoppingBag,
-    User,
-    UserCheck,
-    Users
+  Globe,
+  KeyRound,
+  Lock,
+  LogIn,
+  Mail,
+  Shield,
+  ShoppingBag,
+  User,
+  UserCheck,
+  Users
 } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export default function AuthScreen() {
@@ -92,10 +91,22 @@ export default function AuthScreen() {
 
         if (res.error) {
           console.error('❌ [AUTH] SignUp Failed with Error:', JSON.stringify(res.error, null, 2));
-          Alert.alert(
-            'Registration Failed',
-            `Error: ${res.error.message}\nStatus: ${(res.error as any).status || 'N/A'}\nCode: ${(res.error as any).code || 'N/A'}`
-          );
+          
+          // Handle email confirmation errors specifically
+          if (res.error.message.includes('email') || res.error.status === 500) {
+            Alert.alert(
+              'Email Service Error',
+              'The email confirmation service is not configured. Please:\n\n1. Go to Supabase Dashboard → Authentication → Providers\n2. Disable "Confirm email" for development\n3. Or configure your email service in Supabase\n\nFor now, you can try logging in with existing credentials.',
+              [
+                { text: 'OK', onPress: () => setIsRegistering(false) }
+              ]
+            );
+          } else {
+            Alert.alert(
+              'Registration Failed',
+              `Error: ${res.error.message}\nStatus: ${(res.error as any).status || 'N/A'}`
+            );
+          }
           return;
         }
 
@@ -494,7 +505,7 @@ export default function AuthScreen() {
         )}
 
         {/* Clean Cache, Session & Local Database Button */}
-        <View style={styles.cleanSection}>
+        {/* <View style={styles.cleanSection}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={[
@@ -512,7 +523,7 @@ export default function AuthScreen() {
           <Text style={[styles.cleanHelpText, { color: theme.textTertiary }]}>
             Use this to wipe local SQLite storage and sign out completely
           </Text>
-        </View>
+        </View> */}
       </ScrollView>
     </KeyboardAvoidingView>
   );

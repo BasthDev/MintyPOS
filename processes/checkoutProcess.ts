@@ -1,10 +1,10 @@
 import { validateSaleStock } from '../lib/businessLogic';
 import {
-  CompletedOrder,
-  dbOperations,
-  DiscountItem,
-  getDatabase,
-  handleCheckoutOrder
+    CompletedOrder,
+    dbOperations,
+    DiscountItem,
+    getDatabase,
+    handleCheckoutOrder
 } from '../lib/database';
 import { CartItem } from '../store/useStore';
 import { CheckoutValidator } from '../validators/checkoutValidator';
@@ -26,7 +26,9 @@ export interface ProcessCheckoutInput {
   selectedDiscount: DiscountItem | null;
   discountAmount: number;
   taxAmount: number;
+  taxName?: string | null;
   serviceAmount: number;
+  serviceName?: string | null;
   change: number;
   customerId?: number | null;
   customerName?: string | null;
@@ -143,7 +145,9 @@ export class CheckoutProcess {
         discountAmount: input.discountAmount,
         discountName: input.selectedDiscount?.name || null,
         taxAmount: input.taxAmount,
+        taxName: input.taxName || null,
         serviceAmount: input.serviceAmount,
+        serviceName: input.serviceName || null,
         total: input.total,
         paymentType: input.paymentMethod,
         paymentMethod: displayMethodName,
@@ -200,7 +204,9 @@ export class CheckoutProcess {
         discount_amount: input.discountAmount,
         discount_name: input.selectedDiscount?.name || null,
         tax_amount: input.taxAmount,
+        tax_name: input.taxName || null,
         service_amount: input.serviceAmount,
+        service_name: input.serviceName || null,
         total: input.total,
         payment_type: input.paymentMethod,
         payment_method: displayMethodName,

@@ -4,6 +4,7 @@ import { useTheme } from '@/constants/colorTheme';
 import { CURRENCY_PRESETS, CurrencyConfig, DEFAULT_CURRENCY } from '@/constants/currencies';
 import { getDatabase, getDatabaseVersion, resetToCleanDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
+import { StoreService } from '@/services/storeService';
 import { useStore } from '@/store/useStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -65,6 +66,9 @@ export default function SettingsScreen() {
   const [deviceId, setDeviceId] = useState<string>('Loading...');
   const [deviceName, setDeviceName] = useState<string>('Loading...');
   const [isResetting, setIsResetting] = useState<boolean>(false);
+  
+  // Business Info Dynamic Data
+  const [storeInfo, setStoreInfo] = useState<any>(null);
 
   useEffect(() => {
     const loadSystemInfo = async () => {
@@ -106,6 +110,19 @@ export default function SettingsScreen() {
     };
 
     loadSystemInfo();
+  }, []);
+
+  useEffect(() => {
+    const loadStoreInfo = async () => {
+      try {
+        const store = await StoreService.getActiveStore();
+        setStoreInfo(store);
+      } catch (e) {
+        console.error('Failed to load store info:', e);
+      }
+    };
+
+    loadStoreInfo();
   }, []);
 
   const handleResetDatabase = () => {
@@ -554,8 +571,26 @@ export default function SettingsScreen() {
             <Text style={[styles.infoCardTitle, { color: theme.text }]}>Store Details</Text>
             <View style={styles.infoRow}>
               <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Store Name:</Text>
-              <Text style={[styles.infoValue, { color: theme.text }]}>MintyPOS Store</Text>
+              <Text style={[styles.infoValue, { color: theme.text, fontWeight: '700' }]}>
+                {storeInfo?.name || 'MintyPOS Store'}
+              </Text>
             </View>
+            {storeInfo?.address && (
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Address:</Text>
+                <Text style={[styles.infoValue, { color: theme.text }]} numberOfLines={2}>
+                  {storeInfo.address}
+                </Text>
+              </View>
+            )}
+            {storeInfo?.phone && (
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Phone:</Text>
+                <Text style={[styles.infoValue, { color: theme.text }]}>
+                  {storeInfo.phone}
+                </Text>
+              </View>
+            )}
             <View style={styles.infoRow}>
               <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Active Currency:</Text>
               <Text style={[styles.infoValue, { color: theme.primary, fontWeight: '700' }]}>

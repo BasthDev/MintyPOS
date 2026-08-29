@@ -1,60 +1,60 @@
 import { router } from 'expo-router';
 import {
-  ArrowLeft,
-  Banknote,
-  CheckCircle,
-  CheckCircle2,
-  Coins,
-  CreditCard,
-  Divide,
-  FileText,
-  Minus,
-  Plus,
-  QrCode,
-  Search,
-  Settings2,
-  Sliders,
-  Smartphone,
-  Sparkles,
-  Tag,
-  User,
-  Users,
-  Wallet,
-  X,
-  XCircle
+    ArrowLeft,
+    Banknote,
+    CheckCircle,
+    CheckCircle2,
+    Coins,
+    CreditCard,
+    Divide,
+    FileText,
+    Minus,
+    Plus,
+    QrCode,
+    Search,
+    Settings2,
+    Sliders,
+    Smartphone,
+    Sparkles,
+    Tag,
+    User,
+    Users,
+    Wallet,
+    X,
+    XCircle
 } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    useWindowDimensions,
+    View,
 } from 'react-native';
 
 import { ActionSheetFormSheet } from '@/components/forms/ActionSheetFormSheet';
 import { Header } from '@/components/Header';
 import { ColorTheme, useTheme, withOpacity } from '@/constants/colorTheme';
 import {
-  CompletedOrder,
-  CRMConfigItem,
-  CustomerItem,
-  DiscountItem,
-  getDatabase,
-  PaymentMethodItem,
-  TaxConfigItem
+    CompletedOrder,
+    CRMConfigItem,
+    CustomerItem,
+    DiscountItem,
+    getDatabase,
+    PaymentMethodItem,
+    TaxConfigItem
 } from '@/lib/database';
 import { formatCurrency as fmt } from '@/lib/utils';
 import { CartProcess } from '@/processes/cartProcess';
@@ -945,11 +945,13 @@ export default function POSPaymentScreen() {
   const afterDiscount = Math.max(0, subtotal - totalDiscount);
 
   // 3. Tax & Service Charge
-  const { taxAmount, serviceAmount, taxRate, serviceRate } = useMemo(() => {
+  const { taxAmount, serviceAmount, taxRate, serviceRate, taxName, serviceName } = useMemo(() => {
     let tAmt = 0;
     let sAmt = 0;
     let tRate = 0;
     let sRate = 0;
+    let tName = '';
+    let sName = '';
 
     taxConfigs.forEach((t) => {
       let amt = 0;
@@ -962,13 +964,15 @@ export default function POSPaymentScreen() {
       if (t.name.toLowerCase().includes('service')) {
         sAmt += amt;
         sRate = t.rate;
+        sName = t.name;
       } else {
         tAmt += amt;
         tRate = t.rate;
+        tName = t.name;
       }
     });
 
-    return { taxAmount: tAmt, serviceAmount: sAmt, taxRate: tRate, serviceRate: sRate };
+    return { taxAmount: tAmt, serviceAmount: sAmt, taxRate: tRate, serviceRate: sRate, taxName: tName, serviceName: sName };
   }, [taxConfigs, afterDiscount]);
 
   // 4. Net Total
@@ -1243,7 +1247,9 @@ export default function POSPaymentScreen() {
         selectedDiscount,
         discountAmount: totalDiscount,
         taxAmount,
+        taxName: taxName || null,
         serviceAmount,
+        serviceName: serviceName || null,
         change: splitConfig ? 0 : change,
         customerId: selectedCustomer?.id,
         customerName: selectedCustomer?.name,
@@ -1421,10 +1427,10 @@ export default function POSPaymentScreen() {
       items.push({ label: 'Discount', value: `-${fmt(totalDiscount)}`, red: true });
     }
     if (serviceAmount > 0) {
-      items.push({ label: `Service (${serviceRate}%)`, value: fmt(serviceAmount) });
+      items.push({ label: `Service ${serviceName ? `(${serviceName})` : ''} (${serviceRate}%)`, value: fmt(serviceAmount) });
     }
     if (taxAmount > 0) {
-      items.push({ label: `Tax (${taxRate}%)`, value: fmt(taxAmount) });
+      items.push({ label: `Tax ${taxName ? `(${taxName})` : ''} (${taxRate}%)`, value: fmt(taxAmount) });
     }
 
     items.push({
@@ -1436,7 +1442,7 @@ export default function POSPaymentScreen() {
     items.push({ label: 'Change', value: fmt(change), green: change > 0 });
 
     return items;
-  }, [subtotal, totalDiscount, serviceAmount, serviceRate, taxAmount, taxRate, total, splitConfig, currentSplitIndex, currentSplitAmount, paymentAmount, change]);
+  }, [subtotal, totalDiscount, serviceAmount, serviceRate, serviceName, taxAmount, taxRate, taxName, total, splitConfig, currentSplitIndex, currentSplitAmount, paymentAmount, change]);
 
   const mobileSummary = (
     <View style={[styles.summaryGrid, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -1922,7 +1928,7 @@ export default function POSPaymentScreen() {
               {serviceAmount > 0 ? (
                 <View style={styles.rightSummaryLine}>
                   <Text style={[styles.rightSummaryLabel, { color: theme.textSecondary }]}>
-                    Service ({serviceRate}%)
+                    Service {serviceName ? `(${serviceName})` : ''} ({serviceRate}%)
                   </Text>
                   <Text style={[styles.rightSummaryValue, { color: theme.text }]}>
                     {fmt(serviceAmount)}
@@ -1933,7 +1939,7 @@ export default function POSPaymentScreen() {
               {taxAmount > 0 ? (
                 <View style={styles.rightSummaryLine}>
                   <Text style={[styles.rightSummaryLabel, { color: theme.textSecondary }]}>
-                    Tax ({taxRate}%)
+                    Tax {taxName ? `(${taxName})` : ''} ({taxRate}%)
                   </Text>
                   <Text style={[styles.rightSummaryValue, { color: theme.text }]}>
                     {fmt(taxAmount)}
@@ -2068,13 +2074,13 @@ export default function POSPaymentScreen() {
                   )}
                   {serviceAmount > 0 && (
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>Service ({serviceRate}%)</Text>
+                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>Service {serviceName ? `(${serviceName})` : ''} ({serviceRate}%)</Text>
                       <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{fmt(serviceAmount)}</Text>
                     </View>
                   )}
                   {taxAmount > 0 && (
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>Tax ({taxRate}%)</Text>
+                      <Text style={{ fontSize: 14, color: theme.textSecondary }}>Tax {taxName ? `(${taxName})` : ''} ({taxRate}%)</Text>
                       <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{fmt(taxAmount)}</Text>
                     </View>
                   )}

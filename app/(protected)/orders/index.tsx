@@ -5,20 +5,20 @@ import { useTheme } from '@/constants/colorTheme';
 import { CompletedOrder, OrderSplitItem, dbOperations, getDatabase } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
 import {
-  ChevronRight,
-  ClipboardList,
-  Receipt,
-  User,
-  Users
+    ChevronRight,
+    ClipboardList,
+    Receipt,
+    User,
+    Users
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 // Helper function to normalize payment method names
@@ -433,7 +433,9 @@ export default function OrdersScreen() {
 
           {selectedOrder.tax_amount > 0 && (
             <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Tax (PPN / PB1):</Text>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>
+                Tax {selectedOrder.tax_name ? `(${selectedOrder.tax_name})` : ''}:
+              </Text>
               <Text style={[styles.infoValue, { color: theme.text }]}>
                 +{formatCurrency(selectedOrder.tax_amount)}
               </Text>
@@ -442,7 +444,9 @@ export default function OrdersScreen() {
 
           {selectedOrder.service_amount > 0 && (
             <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Service Charge:</Text>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>
+                Service Charge {selectedOrder.service_name ? `(${selectedOrder.service_name})` : ''}:
+              </Text>
               <Text style={[styles.infoValue, { color: theme.text }]}>
                 +{formatCurrency(selectedOrder.service_amount)}
               </Text>

@@ -138,7 +138,9 @@ export interface CompletedOrder {
   discount_amount: number;
   discount_name?: string | null;
   tax_amount: number;
+  tax_name?: string | null;
   service_amount: number;
+  service_name?: string | null;
   total: number;
   payment_type: string;
   payment_method: string;
@@ -684,7 +686,9 @@ export const initDatabase = async (storeId?: string): Promise<SQLite.SQLiteDatab
           discount_amount REAL NOT NULL DEFAULT 0,
           discount_name TEXT,
           tax_amount REAL NOT NULL DEFAULT 0,
+          tax_name TEXT,
           service_amount REAL NOT NULL DEFAULT 0,
+          service_name TEXT,
           total REAL NOT NULL,
           payment_type TEXT NOT NULL,
           payment_method TEXT NOT NULL,
@@ -1463,7 +1467,9 @@ export const dbOperations = {
       discountAmount: number;
       discountName?: string | null;
       taxAmount: number;
+      taxName?: string | null;
       serviceAmount: number;
+      serviceName?: string | null;
       total: number;
       paymentType: string;
       paymentMethod: string;
@@ -1488,17 +1494,19 @@ export const dbOperations = {
       const result = await db.runAsync(
         `INSERT INTO orders (
           order_number, subtotal, discount_amount, discount_name, 
-          tax_amount, service_amount, total, payment_type, 
+          tax_amount, tax_name, service_amount, service_name, total, payment_type, 
           payment_method, amount_paid, change_amount, items_count, note,
           customer_id, customer_name, is_split, split_parent_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           orderData.orderNumber,
           orderData.subtotal,
           orderData.discountAmount,
           orderData.discountName || null,
           orderData.taxAmount,
+          orderData.taxName || null,
           orderData.serviceAmount,
+          orderData.serviceName || null,
           orderData.total,
           orderData.paymentType,
           orderData.paymentMethod,
@@ -1533,6 +1541,8 @@ export const dbOperations = {
           if (!colNames.has('customer_name')) await db.execAsync('ALTER TABLE orders ADD COLUMN customer_name TEXT;');
           if (!colNames.has('is_split')) await db.execAsync('ALTER TABLE orders ADD COLUMN is_split INTEGER DEFAULT 0;');
           if (!colNames.has('split_parent_id')) await db.execAsync('ALTER TABLE orders ADD COLUMN split_parent_id INTEGER;');
+          if (!colNames.has('tax_name')) await db.execAsync('ALTER TABLE orders ADD COLUMN tax_name TEXT;');
+          if (!colNames.has('service_name')) await db.execAsync('ALTER TABLE orders ADD COLUMN service_name TEXT;');
 
           const result = await db.runAsync(
             `INSERT INTO orders (
