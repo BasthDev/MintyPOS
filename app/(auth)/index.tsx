@@ -65,12 +65,13 @@ export default function AuthScreen() {
         console.log('🔷 [AUTH] Starting Owner Registration...');
         console.log('🔷 [AUTH] Payload:', { email: email.trim(), ownerName: ownerName.trim() });
 
-        // Register new owner with Supabase Auth
+        // Register new owner with Supabase Auth with email confirmation enabled
         const res = await supabase.auth.signUp({
           email: email.trim(),
           password: password,
           options: {
             data: { full_name: ownerName.trim() },
+            emailRedirectTo: 'mintypos://auth-callback', // Deep link for mobile app
           },
         });
 
@@ -95,8 +96,8 @@ export default function AuthScreen() {
           // Handle email confirmation errors specifically
           if (res.error.message.includes('email') || res.error.status === 500) {
             Alert.alert(
-              'Email Service Error',
-              'The email confirmation service is not configured. Please:\n\n1. Go to Supabase Dashboard → Authentication → Providers\n2. Disable "Confirm email" for development\n3. Or configure your email service in Supabase\n\nFor now, you can try logging in with existing credentials.',
+              'Email Service Configuration Required',
+              'To enable email confirmation, you need to configure email service in Supabase:\n\n1. Go to Supabase Dashboard → Authentication → Providers\n2. Under Email provider, configure SMTP settings\n3. Or use Supabase\'s built-in email service (paid tier)\n\n\nAlternative: Disable "Confirm email" in Supabase Dashboard for development.',
               [
                 { text: 'OK', onPress: () => setIsRegistering(false) }
               ]
@@ -115,10 +116,10 @@ export default function AuthScreen() {
           await refreshUser();
           router.replace('/(new)' as any);
         } else if (res.data?.user) {
-          console.log('✅ [AUTH] User created without session (email confirmation required).');
+          console.log('✅ [AUTH] User created successfully. Email confirmation required.');
           Alert.alert(
-            'Registration Successful',
-            'Please check your email inbox to confirm your account, or log in if email confirmation is disabled.',
+            'Registration Successful - Email Confirmation Required',
+            'We\'ve sent a confirmation email to ' + email.trim() + '\n\nPlease check your inbox and click the confirmation link to activate your account.\n\nAfter confirming, you can log in with your credentials.',
             [
               {
                 text: 'OK',

@@ -6,16 +6,14 @@ import { useStoreContext } from '@/constants/storeContext';
 import { SyncProcess } from '@/processes/syncProcess';
 import { router, usePathname } from 'expo-router';
 import {
-  Building2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   Cloud,
   LogOut,
   Moon,
-  RefreshCw,
   Store,
-  Sun,
+  Sun
 } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -33,6 +31,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SyncModal } from '../SyncModal';
 
 type DrawerItemProps = {
   label: string;
@@ -164,6 +163,7 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
 
   const { activeStore } = useStoreContext();
   const [syncing, setSyncing] = useState(false);
+  const [syncModalVisible, setSyncModalVisible] = useState(false);
 
   useEffect(() => {
     if (isDrawerOpen) {
@@ -196,9 +196,17 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
       Alert.alert('Sync', 'No active store selected for sync');
       return;
     }
+    setSyncModalVisible(true);
+  };
+
+  const handleSyncComplete = async (onProgress: (progress: any) => void) => {
+    if (!activeStore?.id) {
+      Alert.alert('Sync', 'No active store selected for sync');
+      return;
+    }
     setSyncing(true);
     try {
-      const res = await SyncProcess.sync(activeStore.id);
+      const res = await SyncProcess.sync(activeStore.id, onProgress);
       if (res.success) {
         Alert.alert(
           'Cloud Sync Complete',
@@ -416,6 +424,13 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
           </View>
         </Animated.View>
       </View>
+
+      {/* Sync Modal */}
+      <SyncModal
+        visible={syncModalVisible}
+        onClose={() => setSyncModalVisible(false)}
+        syncFunction={handleSyncComplete}
+      />
     </Modal>
   );
 };

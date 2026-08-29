@@ -1,9 +1,10 @@
-import { SyncResult, SyncService } from '@/services/syncService';
+import { SyncProgress, SyncResult, SyncService } from '@/services/syncService';
 import { SyncValidator } from '@/validators/syncValidator';
 
 export class SyncProcess {
   static async sync(
-    storeId: string
+    storeId: string,
+    onProgress?: (progress: SyncProgress) => void
   ): Promise<{ success: boolean; data?: SyncResult; error?: string; errors?: string[] }> {
     const validation = SyncValidator.validate({ storeId });
     if (!validation.isValid) {
@@ -11,7 +12,7 @@ export class SyncProcess {
     }
 
     try {
-      const data = await SyncService.syncStore(storeId);
+      const data = await SyncService.syncStore(storeId, onProgress);
       return { success: data.errors.length === 0, data, errors: data.errors };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Sync failed' };

@@ -11,6 +11,16 @@ export interface SyncResult {
   entityBreakdown: { [key: string]: { pushed: number; pulled: number } };
 }
 
+export interface SyncProgress {
+  entity: string;
+  entityLabel: string;
+  pushed: number;
+  pulled: number;
+  total: number;
+  status: 'pending' | 'pushing' | 'pulling' | 'completed' | 'error';
+  error?: string;
+}
+
 const tableColumnsCache: Record<string, Set<string>> = {};
 
 export class SyncService {
@@ -47,7 +57,10 @@ export class SyncService {
   /**
    * Execute dedicated 1-to-1 table synchronization for all 20 entities between local SQLite and Supabase
    */
-  static async syncStore(storeId: string): Promise<SyncResult> {
+  static async syncStore(
+    storeId: string,
+    onProgress?: (progress: SyncProgress) => void
+  ): Promise<SyncResult> {
     const lastSyncedAt = await this.getLastSyncedAt(storeId);
     const now = new Date().toISOString();
     const result: SyncResult = {
@@ -71,6 +84,18 @@ export class SyncService {
       // =========================================================================
       for (const entity of SYNC_ENTITIES) {
         try {
+          // Report pushing status
+          if (onProgress) {
+            onProgress({
+              entity: entity.type,
+              entityLabel: entity.type,
+              pushed: 0,
+              pulled: 0,
+              total: 0,
+              status: 'pushing',
+            });
+          }
+
           const validCols = await this.getTableColumns(db, entity.table);
           if (validCols.size === 0) continue;
 
@@ -105,14 +130,60 @@ export class SyncService {
 
               if (pushErr) {
                 result.errors.push(`Failed to push table ${entity.table}: ${pushErr.message}`);
+                if (onProgress) {
+                  onProgress({
+                    entity: entity.type,
+                    entityLabel: entity.type,
+                    pushed: 0,
+                    pulled: 0,
+                    total: pushRows.length,
+                    status: 'error',
+                    error: pushErr.message,
+                  });
+                }
               } else {
                 result.pushedCount += batch.length;
                 result.entityBreakdown[entity.type].pushed += batch.length;
+                
+                // Report progress during push
+                if (onProgress) {
+                  onProgress({
+                    entity: entity.type,
+                    entityLabel: entity.type,
+                    pushed: Math.min(i + batch.length, pushRows.length),
+                    pulled: 0,
+                    total: pushRows.length,
+                    status: 'pushing',
+                  });
+                }
               }
             }
           }
+
+          // Report completed push for this entity
+          if (onProgress) {
+            onProgress({
+              entity: entity.type,
+              entityLabel: entity.type,
+              pushed: result.entityBreakdown[entity.type].pushed,
+              pulled: 0,
+              total: result.entityBreakdown[entity.type].pushed,
+              status: 'pushing',
+            });
+          }
         } catch (entityPushErr: any) {
           result.errors.push(`Push error on ${entity.table}: ${entityPushErr?.message}`);
+          if (onProgress) {
+            onProgress({
+              entity: entity.type,
+              entityLabel: entity.type,
+              pushed: 0,
+              pulled: 0,
+              total: 0,
+              status: 'error',
+              error: entityPushErr?.message,
+            });
+          }
         }
       }
 
@@ -125,6 +196,18 @@ export class SyncService {
       try {
         for (const entity of SYNC_ENTITIES) {
           try {
+            // Report pulling status
+            if (onProgress) {
+              onProgress({
+                entity: entity.type,
+                entityLabel: entity.type,
+                pushed: result.entityBreakdown[entity.type].pushed,
+                pulled: 0,
+                total: 0,
+                status: 'pulling',
+              });
+            }
+
             let pullQuery = supabase.from(entity.table).select('*').eq('store_id', storeId);
             if (lastSyncedAt) {
               pullQuery = pullQuery.gt('updated_at', lastSyncedAt);
@@ -134,10 +217,22 @@ export class SyncService {
 
             if (pullErr) {
               result.errors.push(`Failed to pull table ${entity.table}: ${pullErr.message}`);
+              if (onProgress) {
+                onProgress({
+                  entity: entity.type,
+                  entityLabel: entity.type,
+                  pushed: result.entityBreakdown[entity.type].pushed,
+                  pulled: 0,
+                  total: 0,
+                  status: 'error',
+                  error: pullErr.message,
+                });
+              }
             } else if (cloudRows && cloudRows.length > 0) {
               const validCols = await this.getTableColumns(db, entity.table);
 
-              for (const cloudRow of cloudRows) {
+              for (let i = 0; i < cloudRows.length; i++) {
+                const cloudRow = cloudRows[i];
                 // Filter out non-local columns like store_id if not in local schema
                 const rowData: Record<string, any> = {};
                 for (const key of Object.keys(cloudRow)) {
@@ -151,11 +246,58 @@ export class SyncService {
                   await db.runAsync(sql, values as any[]);
                   result.pulledCount++;
                   result.entityBreakdown[entity.type].pulled++;
+
+                  // Report progress during pull
+                  if (onProgress && i % 10 === 0) {
+                    onProgress({
+                      entity: entity.type,
+                      entityLabel: entity.type,
+                      pushed: result.entityBreakdown[entity.type].pushed,
+                      pulled: result.entityBreakdown[entity.type].pulled,
+                      total: cloudRows.length,
+                      status: 'pulling',
+                    });
+                  }
                 }
+              }
+
+              // Report completed pull for this entity
+              if (onProgress) {
+                onProgress({
+                  entity: entity.type,
+                  entityLabel: entity.type,
+                  pushed: result.entityBreakdown[entity.type].pushed,
+                  pulled: result.entityBreakdown[entity.type].pulled,
+                  total: cloudRows.length,
+                  status: 'pulling',
+                });
+              }
+            } else {
+              // Report completed pull for this entity (no new data)
+              if (onProgress) {
+                onProgress({
+                  entity: entity.type,
+                  entityLabel: entity.type,
+                  pushed: result.entityBreakdown[entity.type].pushed,
+                  pulled: 0,
+                  total: 0,
+                  status: 'pulling',
+                });
               }
             }
           } catch (entityPullErr: any) {
             result.errors.push(`Pull error on ${entity.table}: ${entityPullErr?.message}`);
+            if (onProgress) {
+              onProgress({
+                entity: entity.type,
+                entityLabel: entity.type,
+                pushed: result.entityBreakdown[entity.type].pushed,
+                pulled: 0,
+                total: 0,
+                status: 'error',
+                error: entityPullErr?.message,
+              });
+            }
           }
         }
 
