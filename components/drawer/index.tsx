@@ -162,7 +162,7 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
   }, [user]);
 
   const { activeStore } = useStoreContext();
-  const { showSyncModal, setSyncFunction } = useSync();
+  const { showSyncModalWithFunction } = useSync();
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -199,7 +199,7 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
     
     console.log('[DRAWER] Setting sync function and showing modal');
     
-    // Set the sync function for the global modal
+    // Set the sync function and show modal in one atomic operation
     const syncFunc = async (onProgress: any) => {
       setSyncing(true);
       try {
@@ -219,10 +219,8 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
       }
     };
     
-    setSyncFunction(syncFunc);
-    
-    // Show the global sync modal
-    showSyncModal(false);
+    // Use the combined function to set sync function and show modal atomically
+    showSyncModalWithFunction(syncFunc, false);
     
     console.log('[DRAWER] Sync function set and modal shown');
   };
@@ -242,8 +240,8 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
         {
           text: 'Continue',
           onPress: () => {
-            // Set the sync function for logout
-            setSyncFunction(async (onProgress: any) => {
+            // Set the sync function for logout and show modal atomically
+            const logoutSyncFunc = async (onProgress: any) => {
               if (!activeStore?.id) {
                 Alert.alert('Logout', 'No active store found');
                 return;
@@ -267,9 +265,10 @@ export const DripDrawer: React.FC<DripDrawerProps> = ({ position = 'left', style
                 await signOut();
                 router.replace('/(auth)' as any);
               }
-            });
-            // Show the global sync modal for logout
-            showSyncModal(true);
+            };
+            
+            // Use the combined function to set sync function and show modal atomically
+            showSyncModalWithFunction(logoutSyncFunc, true);
           }
         }
       ]

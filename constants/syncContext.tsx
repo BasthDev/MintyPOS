@@ -17,6 +17,7 @@ interface SyncContextType {
   hideSyncModal: () => void;
   syncFunction: ((onProgress: (progress: SyncProgress) => void) => Promise<any>) | null;
   setSyncFunction: (fn: ((onProgress: (progress: SyncProgress) => void) => Promise<any>) | null) => void;
+  showSyncModalWithFunction: (fn: ((onProgress: (progress: SyncProgress) => void) => Promise<any>), isLogout?: boolean) => void;
 }
 
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
@@ -43,6 +44,13 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSyncFunction(() => fn);
   };
 
+  const showSyncModalWithFunction = (fn: ((onProgress: (progress: SyncProgress) => void) => Promise<any>), isLogout = false) => {
+    console.log('[SyncContext] showSyncModalWithFunction called, isLogout:', isLogout);
+    setSyncFunction(() => fn);
+    setIsLogoutSync(isLogout);
+    setIsSyncModalVisible(true);
+  };
+
   return (
     <SyncContext.Provider
       value={{
@@ -52,6 +60,7 @@ export const SyncProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         hideSyncModal,
         syncFunction,
         setSyncFunction: handleSetSyncFunction,
+        showSyncModalWithFunction,
       }}
     >
       {children}
