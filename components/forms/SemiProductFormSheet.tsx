@@ -193,7 +193,7 @@ export const SemiProductFormSheet: React.FC<SemiProductFormSheetProps> = ({
     >
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         <DripInput
-          label="Semi-Product Name (e.g. Bumbu Nasi Goreng, Adonan Pizza)"
+          label="Semi-Product Name (e.g. Pizza Dough, House Sauce)"
           value={name}
           onChangeText={setName}
           error={errors.name}
@@ -208,7 +208,7 @@ export const SemiProductFormSheet: React.FC<SemiProductFormSheetProps> = ({
         />
 
         <DripDropdown
-          label="Satuan Output / Unit"
+          label="Output Unit"
           options={unitOptions}
           value={baseUnitId}
           onSelect={setBaseUnitId}
@@ -234,14 +234,14 @@ export const SemiProductFormSheet: React.FC<SemiProductFormSheetProps> = ({
         />
 
         <Text style={[styles.sectionTitle, { color: theme.text }]}>
-          Recipe Formulation (Komponen Bahan Baku Mentah)
+          Recipe Formulation
         </Text>
         <Text style={[styles.sectionSub, { color: theme.textSecondary }]}>
-          Tentukan takaran bahan baku mentah yang dibutuhkan untuk menghasilkan{' '}
+          Specify the raw ingredient quantities required to produce{' '}
           <Text style={{ fontWeight: '700', color: theme.primary }}>
             {yieldQuantity || '0'} {selectedUnit?.symbol || 'unit'}
           </Text>{' '}
-          semi-produk ini.
+          of this semi-finished product.
         </Text>
 
         {formulaItems.map((f, idx) => {

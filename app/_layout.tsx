@@ -7,6 +7,7 @@ import { DrawerProvider } from "@/constants/drawerContext";
 import { StoreProvider, useStoreContext } from "@/constants/storeContext";
 import { SyncProvider, useSync } from "@/constants/syncContext";
 import { closeStoreDatabase, initDatabase } from "@/lib/database";
+import { SyncService } from "@/services/syncService";
 import { checkLockStatus } from "@/lib/lock";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -52,6 +53,20 @@ function DatabaseInitializer() {
         initializedRef.current.add(storeId);
         previousStoreIdRef.current = storeId;
         console.log(`[DB] Initialized database for store: ${storeId}`);
+
+        // Automatically pull store data from cloud on initialization for multi-device sync
+        try {
+          console.log(`[SYNC] Initiating background cloud pull for store: ${storeId}`);
+          SyncService.syncStore(storeId)
+            .then((result) => {
+              console.log(`[SYNC] Initial cloud sync completed for store ${storeId}. Pulled: ${result.pulledCount}, Pushed: ${result.pushedCount}`);
+            })
+            .catch((syncErr) => {
+              console.warn(`[SYNC] Initial cloud sync notice:`, syncErr?.message || syncErr);
+            });
+        } catch (syncErr) {
+          console.warn(`[SYNC] Failed to initiate cloud sync:`, syncErr);
+        }
       } catch (error) {
         console.error("[DB] Failed to initialize database:", error);
       }

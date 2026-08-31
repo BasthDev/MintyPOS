@@ -255,7 +255,7 @@ export const PurchaseOrderFormSheet: React.FC<PurchaseOrderFormSheetProps> = ({
     const qty = parseFloat(item.quantityOrdered) || 0;
     const mult = parseFloat(item.multiplierToBase) || 1;
     const totalBase = qty * mult;
-    return `(Total stok: ${totalBase} ${symbol})`;
+    return `(Total: ${totalBase} ${symbol})`;
   };
 
   const footer = (
@@ -302,7 +302,7 @@ export const PurchaseOrderFormSheet: React.FC<PurchaseOrderFormSheetProps> = ({
         />
 
         <DripDatePicker
-          label="Expected Delivery Date (Optional)"
+          label="Expected Delivery Date"
           value={expectedDate}
           onSelect={setExpectedDate}
         />
@@ -311,7 +311,7 @@ export const PurchaseOrderFormSheet: React.FC<PurchaseOrderFormSheetProps> = ({
           label="Notes / Instructions (Optional)"
           value={notes}
           onChangeText={setNotes}
-          placeholder="e.g. Catatan untuk supplier atau instruksi pengiriman..."
+          placeholder="e.g. Notes for supplier or delivery instructions..."
           numberOfLines={3}
         />
 
@@ -356,7 +356,7 @@ export const PurchaseOrderFormSheet: React.FC<PurchaseOrderFormSheetProps> = ({
               />
 
               <DripInput
-                label="Unit Name (e.g. kg, sack, pcs, karton)"
+                label="Unit Name (e.g. kg, box, carton, pcs)"
                 value={item.unitName}
                 onChangeText={(text) => updateItem(item.id, 'unitName', text)}
                 placeholder={symbol}
@@ -382,7 +382,7 @@ export const PurchaseOrderFormSheet: React.FC<PurchaseOrderFormSheetProps> = ({
               {item.quantityOrdered && item.unitPrice ? (
                 <View style={[styles.lineTotalContainer, { backgroundColor: theme.input }]}>
                   <Text style={[styles.lineTotalText, { color: theme.textSecondary }]}>
-                    Subtotal Item: <Text style={{ fontWeight: '700', color: theme.primary }}>{formatCurrency((parseFloat(item.quantityOrdered) || 0) * (parseFloat(item.unitPrice) || 0))}</Text>
+                    Item Subtotal: <Text style={{ fontWeight: '700', color: theme.primary }}>{formatCurrency((parseFloat(item.quantityOrdered) || 0) * (parseFloat(item.unitPrice) || 0))}</Text>
                   </Text>
                 </View>
               ) : null}

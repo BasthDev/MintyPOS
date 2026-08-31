@@ -237,7 +237,7 @@ export const RecipeFormSheet: React.FC<RecipeFormSheetProps> = ({
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         <View>
           <DripInput
-            label="Recipe Name (e.g. Nasi Goreng Spesial, Pizza Supreme)"
+            label="Recipe Name (e.g. Special Fried Rice, Pizza Supreme)"
             value={formData.name}
             onChangeText={(text) => setFormData({ ...formData, name: text })}
             error={errors.name}
@@ -252,9 +252,9 @@ export const RecipeFormSheet: React.FC<RecipeFormSheetProps> = ({
             numberOfLines={3}
           />
 
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Recipe Components (Hybrid BOM)</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Recipe Components</Text>
           <Text style={[styles.sectionSub, { color: theme.textSecondary }]}>
-            Anda dapat menggabungkan bahan baku mentah langsung (Direct Ingredients) dan bahan setengah jadi (Semi-Products).
+            You can combine direct raw ingredients and semi-finished products in this recipe.
           </Text>
 
           {components.map((c, index) => {
@@ -335,7 +335,7 @@ export const RecipeFormSheet: React.FC<RecipeFormSheetProps> = ({
 
                 {c.itemId ? (
                   <Text style={[styles.baseUnitNote, { color: theme.textTertiary }]}>
-                    Takaran pemakaian per 1 porsi menu: {c.quantityNeededBase || '0'} {unitSymbol}
+                    Portion usage per serving: {c.quantityNeededBase || '0'} {unitSymbol}
                   </Text>
                 ) : null}
               </View>

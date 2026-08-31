@@ -175,7 +175,7 @@ export const SemiProductBatchFormSheet: React.FC<SemiProductBatchFormSheetProps>
     <DripSheet
       visible={visible}
       onClose={onClose}
-      title="Produce Batch (Eksekusi Masak)"
+      title="Produce Batch"
       headerIcon={<Flame size={20} color={theme.warning || '#F59E0B'} />}
       footer={footer}
     >
@@ -206,15 +206,15 @@ export const SemiProductBatchFormSheet: React.FC<SemiProductBatchFormSheetProps>
           label="Production Notes (Optional)"
           value={notes}
           onChangeText={setNotes}
-          placeholder="e.g. Batch shift pagi, batch dapur utama..."
+          placeholder="e.g. Morning batch, main kitchen batch..."
           numberOfLines={2}
         />
 
         <Text style={[styles.sectionTitle, { color: theme.text }]}>
-          Raw Ingredients Deduction Preview (Bahan Mentah yang Dipotong)
+          Raw Ingredients Deduction Preview
         </Text>
         <Text style={[styles.sectionSub, { color: theme.textSecondary }]}>
-          Sistem akan langsung memotong stok bahan mentah berikut menggunakan metode FIFO/FEFO seketika tombol ditekan.
+          Raw ingredient stock will be automatically deducted using FIFO/FEFO upon batch execution.
         </Text>
 
         {demands.length === 0 ? (

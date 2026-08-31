@@ -55,6 +55,95 @@ export class SyncService {
   }
 
   /**
+   * Ensure that the organization and store record exist in Supabase cloud before pushing entity data
+   */
+  private static async ensureCloudStore(storeId: string): Promise<boolean> {
+    try {
+      // 1. Check if store already exists in Supabase
+      const { data: existingStore } = await supabase
+        .from('stores')
+        .select('id, org_id, owner_id')
+        .eq('id', storeId)
+        .maybeSingle();
+
+      if (existingStore) {
+        return true;
+      }
+
+      // 2. If not found, get authenticated user to link owner & organization
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user?.id) {
+        console.warn(`[SYNC] Cannot auto-create store in cloud: No authenticated user`);
+        return false;
+      }
+
+      const ownerId = userData.user.id;
+      const ownerName =
+        userData.user.user_metadata?.full_name ||
+        userData.user.email?.split('@')[0] ||
+        'Owner';
+
+      // 3. Ensure organization exists
+      let orgId: string | null = null;
+      const { data: existingOrg } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', ownerId)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingOrg?.id) {
+        orgId = existingOrg.id;
+      } else {
+        const { data: newOrg, error: orgCreateErr } = await supabase
+          .from('organizations')
+          .insert({
+            name: `${ownerName}'s Business`,
+            owner_id: ownerId,
+            owner_name: ownerName,
+            email: userData.user.email,
+          })
+          .select('id')
+          .single();
+
+        if (orgCreateErr) {
+          console.warn(`[SYNC] Failed to auto-create organization in cloud:`, orgCreateErr);
+        }
+        orgId = newOrg?.id || null;
+      }
+
+      if (!orgId) {
+        console.warn(`[SYNC] Cannot create store: Missing org_id`);
+        return false;
+      }
+
+      // 4. Create store in Supabase cloud
+      const { error: storeInsertErr } = await supabase.from('stores').upsert(
+        {
+          id: storeId,
+          org_id: orgId,
+          owner_id: ownerId,
+          name: 'Main Store',
+          currency_code: 'IDR',
+          currency_symbol: 'Rp',
+        },
+        { onConflict: 'id' }
+      );
+
+      if (storeInsertErr) {
+        console.error(`[SYNC] Failed to auto-create store in Supabase:`, storeInsertErr);
+        return false;
+      }
+
+      console.log(`✅ [SYNC] Auto-created store ${storeId} in Supabase cloud.`);
+      return true;
+    } catch (e) {
+      console.warn(`[SYNC] ensureCloudStore error:`, e);
+      return false;
+    }
+  }
+
+  /**
    * Execute dedicated 1-to-1 table synchronization for all 25 entities between local SQLite and Supabase
    */
   static async syncStore(
@@ -70,6 +159,9 @@ export class SyncService {
       errors: [],
       entityBreakdown: {},
     };
+
+    // Ensure store exists in Supabase cloud before pushing entity records
+    await this.ensureCloudStore(storeId);
 
     const db = await getDatabase(storeId);
 

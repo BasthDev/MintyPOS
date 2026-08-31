@@ -60,15 +60,10 @@ export class OrganizationService {
   }
 
   /**
-   * Get current organization from cache or Supabase
+   * Get current organization from Supabase cloud (with owner validation)
    */
   static async getCurrent(): Promise<OrganizationRecord | null> {
     try {
-      const cached = await AsyncStorage.getItem(LOCAL_ORG_KEY);
-      if (cached) {
-        return JSON.parse(cached);
-      }
-
       const { data: userData } = await supabase.auth.getUser();
       if (userData?.user?.id) {
         const { data: cloudOrg, error } = await supabase
@@ -77,12 +72,27 @@ export class OrganizationService {
           .eq('owner_id', userData.user.id)
           .order('created_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (!error && cloudOrg) {
           await AsyncStorage.setItem(LOCAL_ORG_KEY, JSON.stringify(cloudOrg));
           return cloudOrg;
+        } else if (!error && !cloudOrg) {
+          // No organization in cloud for this owner, clear stale cache
+          await AsyncStorage.removeItem(LOCAL_ORG_KEY);
+          return null;
         }
+      }
+
+      // Offline fallback: verify cached org belongs to current user
+      const cached = await AsyncStorage.getItem(LOCAL_ORG_KEY);
+      if (cached) {
+        const parsed: OrganizationRecord = JSON.parse(cached);
+        if (userData?.user?.id && parsed.owner_id && parsed.owner_id !== userData.user.id) {
+          await AsyncStorage.removeItem(LOCAL_ORG_KEY);
+          return null;
+        }
+        return parsed;
       }
     } catch (e) {
       console.warn('Failed to get current organization:', e);

@@ -1,8 +1,9 @@
-import { closeAllDatabases, closeStoreDatabase } from '@/lib/database';
+import { clearAllDatabases, closeStoreDatabase } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 import { OrganizationService } from '@/services/organizationService';
 import { StaffService } from '@/services/staffService';
 import { StoreService } from '@/services/storeService';
+import { useStore } from '@/store/useStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 
@@ -78,41 +79,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       let org = orgData.status === 'fulfilled' ? orgData.value : null;
       let store = storeData.status === 'fulfilled' ? storeData.value : null;
 
-      // Auto-create Organization in Cloud if missing for owner
-      if (!org && supabaseUser?.id) {
-        try {
-          const ownerName =
-            supabaseUser.user_metadata?.full_name ||
-            supabaseUser.email?.split('@')[0] ||
-            'Owner';
-          org = await OrganizationService.create({
-            name: `${ownerName}'s Business`,
-            ownerName,
-            email: supabaseUser.email,
-          });
-          console.log('✅ [AUTH] Auto-created default organization:', org.id);
-        } catch (orgErr) {
-          console.warn('⚠️ [AUTH] Could not auto-create organization:', orgErr);
-        }
+      // Verify org belongs to current authenticated user
+      if (org && org.owner_id && org.owner_id !== supabaseUser.id) {
+        console.warn('⚠️ [AUTH] Cached org owner mismatch, clearing stale org cache...');
+        org = null;
+        await OrganizationService.clear();
       }
 
-      // Auto-create Store in Cloud if missing
-      if (!store && org?.id) {
+      // If no active store set locally, select existing store from cloud if any
+      if (!store && supabaseUser?.id) {
         try {
           const storesList = await StoreService.getAll();
           if (storesList && storesList.length > 0) {
             store = storesList[0];
             await StoreService.setActiveStoreId(store.id);
-          } else {
-            store = await StoreService.create(org.id, {
-              name: 'Main Store',
-              currencyCode: 'IDR',
-              currencySymbol: 'Rp',
-            });
-            console.log('✅ [AUTH] Auto-created default store:', store.id);
           }
         } catch (storeErr) {
-          console.warn('⚠️ [AUTH] Could not auto-create store:', storeErr);
+          console.warn('⚠️ [AUTH] Could not load stores list:', storeErr);
         }
       }
 
@@ -200,45 +183,60 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signOut = async (): Promise<void> => {
     try {
-      console.log('[AUTH] Starting logout process with database isolation...');
-      
-      // Get active store ID before logout for database closure
-      const activeStoreId = await AsyncStorage.getItem('mintypos_active_store_id');
-      
-      // Close store database for isolation
-      if (activeStoreId) {
-        try {
-          await closeStoreDatabase(activeStoreId);
-          console.log('[AUTH] Closed database for store:', activeStoreId);
-        } catch (dbError) {
-          console.error('[AUTH] Error closing store database:', dbError);
-        }
-      }
-      
-      // Close all databases for complete isolation
+      console.log('[AUTH] Starting complete local database & cache cleanup on logout...');
+
+      // 1. Wipe all local SQLite database files and connections
       try {
-        await closeAllDatabases();
-        console.log('[AUTH] All databases closed for isolation');
+        await clearAllDatabases();
+        console.log('[AUTH] All local SQLite databases successfully wiped and closed');
       } catch (dbError) {
-        console.error('[AUTH] Error closing all databases:', dbError);
+        console.error('[AUTH] Error wiping SQLite databases:', dbError);
       }
-      
-      // Clear user data
+
+      // 2. Clear in-memory Zustand store states
+      try {
+        useStore.getState().clearCart();
+        useStore.getState().setProducts([]);
+        useStore.getState().setIngredients([]);
+        useStore.getState().setRecipes([]);
+        useStore.getState().setInventoryBatches([]);
+        useStore.getState().setUnits([]);
+        useStore.getState().setIngredientUnits([]);
+      } catch (storeError) {
+        console.warn('[AUTH] Error resetting Zustand store:', storeError);
+      }
+
+      // 3. Clear local cache and session keys from AsyncStorage
+      try {
+        const allKeys = await AsyncStorage.getAllKeys();
+        const keysToRemove = allKeys.filter(
+          (key) =>
+            key === 'user' ||
+            key === 'mintypos-storage' ||
+            key.startsWith('mintypos_') ||
+            key.startsWith('mintypos-')
+        );
+        if (keysToRemove.length > 0) {
+          await AsyncStorage.multiRemove(keysToRemove);
+        }
+        console.log('[AUTH] All local storage cache keys removed:', keysToRemove);
+      } catch (storageError) {
+        console.error('[AUTH] Error clearing AsyncStorage keys:', storageError);
+      }
+
+      // 4. Clear user state
       setUser(null);
-      await AsyncStorage.removeItem('user');
-      await StaffService.logout();
-      
-      // Finally sign out from Supabase
-      await supabase.auth.signOut();
-      
-      console.log('[AUTH] Logout completed with database isolation');
+
+      // 5. Staff and Supabase cloud logout
+      await StaffService.logout().catch(() => {});
+      await supabase.auth.signOut().catch(() => {});
+
+      console.log('✅ [AUTH] Logout complete: Local database and session clean.');
     } catch (error) {
       console.error('[AUTH] Error during logout:', error);
-      // Even if something fails, try to complete logout
       setUser(null);
-      await AsyncStorage.removeItem('user');
-      await StaffService.logout();
-      await supabase.auth.signOut();
+      await StaffService.logout().catch(() => {});
+      await supabase.auth.signOut().catch(() => {});
     }
   };
 

@@ -944,7 +944,7 @@ export const initDatabase = async (storeId?: string): Promise<SQLite.SQLiteDatab
           INSERT INTO units (name, symbol) VALUES 
           ('gram', 'g'),
           ('milliliter', 'ml'),
-          ('piece', 'pcs'),
+          ('piece', 'pcs');
         `);
       }
 

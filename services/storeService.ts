@@ -82,10 +82,24 @@ export class StoreService {
           .eq('owner_id', userData.user.id)
           .order('created_at', { ascending: true });
 
-        if (!error && cloudStores && cloudStores.length > 0) {
-          await AsyncStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(cloudStores));
-          return cloudStores;
+        if (!error) {
+          if (cloudStores && cloudStores.length > 0) {
+            await AsyncStorage.setItem(LOCAL_STORES_KEY, JSON.stringify(cloudStores));
+            return cloudStores;
+          } else {
+            await AsyncStorage.removeItem(LOCAL_STORES_KEY);
+            return [];
+          }
         }
+      }
+
+      const cached = await AsyncStorage.getItem(LOCAL_STORES_KEY);
+      if (cached) {
+        const parsed: StoreRecord[] = JSON.parse(cached);
+        if (userData?.user?.id) {
+          return parsed.filter((s) => s.owner_id === userData.user.id);
+        }
+        return parsed;
       }
     } catch (e) {
       console.warn('Failed to fetch stores from Supabase:', e);

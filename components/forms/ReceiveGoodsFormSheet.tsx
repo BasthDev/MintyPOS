@@ -5,7 +5,7 @@ import { DripSheet } from '@/components/Sheet';
 import { useTheme } from '@/constants/colorTheme';
 import { PurchaseOrder } from '@/lib/database';
 import { formatCurrency } from '@/lib/utils';
-import { CheckCircle2, PackageCheck } from 'lucide-react-native';
+import { CheckCircle2, PackageCheck, Truck } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -132,7 +132,7 @@ export const ReceiveGoodsFormSheet: React.FC<ReceiveGoodsFormSheetProps> = ({
     <DripSheet
       visible={visible}
       onClose={onClose}
-      title="Goods Receipt (Penerimaan Stok)"
+      title="Receive Goods"
       headerIcon={<PackageCheck size={20} color={theme.primary} />}
       footer={footer}
     >
@@ -151,14 +151,20 @@ export const ReceiveGoodsFormSheet: React.FC<ReceiveGoodsFormSheetProps> = ({
               <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Order Date:</Text>
               <Text style={[styles.summaryVal, { color: theme.text }]}>{purchaseOrder.order_date}</Text>
             </View>
+            {purchaseOrder.notes && (
+              <View style={styles.summaryRow}>
+                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>PO Notes:</Text>
+                <Text style={[styles.summaryVal, { color: theme.text }]}>{purchaseOrder.notes}</Text>
+              </View>
+            )}
           </View>
         )}
 
         <Text style={[styles.sectionTitle, { color: theme.text }]}>
-          Verify Physical Goods Received
+          Items to Receive / Stock In
         </Text>
         <Text style={[styles.sectionSub, { color: theme.textSecondary }]}>
-          Input verified physical quantities and costs. Stock batches will be created automatically in warehouse inventory.
+          Verify the physical quantity and actual total invoice cost paid for each ingredient.
         </Text>
 
         {items.map((it, idx) => {
@@ -171,7 +177,7 @@ export const ReceiveGoodsFormSheet: React.FC<ReceiveGoodsFormSheetProps> = ({
             <View key={it.itemId} style={[styles.itemCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={styles.itemHeader}>
                 <View style={styles.itemTitleGroup}>
-                  <CheckCircle2 size={16} color={theme.primary} />
+                  <Truck size={16} color={theme.primary} />
                   <Text style={[styles.itemName, { color: theme.text }]}>{it.ingredientName}</Text>
                 </View>
                 <Text style={[styles.orderedBadge, { color: theme.textSecondary }]}>
@@ -188,7 +194,7 @@ export const ReceiveGoodsFormSheet: React.FC<ReceiveGoodsFormSheetProps> = ({
               />
 
               <DripInput
-                label="Total Cost Paid (Rp)"
+                label="Total Cost Paid"
                 value={it.actualCost}
                 onChangeText={(val) => updateItem(idx, 'actualCost', val)}
                 error={errors[`item_${idx}_cost`]}
@@ -204,7 +210,7 @@ export const ReceiveGoodsFormSheet: React.FC<ReceiveGoodsFormSheetProps> = ({
               <View style={[styles.calcSummary, { backgroundColor: theme.input }]}>
                 <Text style={[styles.calcText, { color: theme.textSecondary }]}>
                   Adding <Text style={{ fontWeight: '700', color: theme.text }}>{baseQty} {it.baseUnitSymbol}</Text> @{' '}
-                  <Text style={{ fontWeight: '700', color: theme.primary }}>Rp {costPerBase.toFixed(2)}/{it.baseUnitSymbol}</Text>
+                  <Text style={{ fontWeight: '700', color: theme.primary }}>{formatCurrency(costPerBase)}/{it.baseUnitSymbol}</Text>
                 </Text>
               </View>
             </View>
