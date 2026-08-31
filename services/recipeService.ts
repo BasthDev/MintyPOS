@@ -13,7 +13,9 @@ export interface RecipeDefinitionUpdateInput {
 
 export interface RecipeIngredientCreateInput {
   recipeId: number;
-  ingredientId: number;
+  ingredientId?: number | null;
+  semiProductId?: number | null;
+  itemType?: 'ingredient' | 'semi_product';
   quantityNeededBase: number;
 }
 
@@ -67,14 +69,18 @@ export class RecipeService {
   }
 
   /**
-   * Add ingredient to recipe
+   * Add ingredient or semi-product to recipe
    */
   static async addIngredient(db: SQLite.SQLiteDatabase, input: RecipeIngredientCreateInput) {
-    const ingredientId = await dbOperations.addRecipeIngredient(
+    const itemType = input.itemType || (input.semiProductId ? 'semi_product' : 'ingredient');
+    const itemId = itemType === 'semi_product' ? input.semiProductId! : input.ingredientId!;
+
+    await dbOperations.addRecipeIngredient(
       db,
       input.recipeId,
-      input.ingredientId,
-      input.quantityNeededBase
+      itemId,
+      input.quantityNeededBase,
+      itemType
     );
     return await this.getIngredients(db, input.recipeId);
   }
@@ -84,7 +90,6 @@ export class RecipeService {
    */
   static async updateIngredient(db: SQLite.SQLiteDatabase, id: number, input: RecipeIngredientUpdateInput) {
     await dbOperations.updateRecipeIngredient(db, id, input.quantityNeededBase);
-    // Return updated ingredient
     const dbResult = await db.getAllAsync(
       `SELECT ri.*, ri.recipe_id as recipeId FROM recipe_ingredients ri WHERE ri.id = ?`,
       [id]
@@ -100,12 +105,17 @@ export class RecipeService {
   }
 
   /**
-   * Create complete recipe with ingredients
+   * Create complete recipe with hybrid ingredients
    */
   static async createCompleteRecipe(
     db: SQLite.SQLiteDatabase,
     definition: RecipeDefinitionCreateInput,
-    ingredients: RecipeIngredientCreateInput[]
+    ingredients: Array<{
+      ingredientId?: number | null;
+      semiProductId?: number | null;
+      itemType?: 'ingredient' | 'semi_product';
+      quantityNeededBase: number;
+    }>
   ) {
     const recipe = await this.createDefinition(db, definition);
     
@@ -130,7 +140,12 @@ export class RecipeService {
     db: SQLite.SQLiteDatabase,
     id: number,
     definition: RecipeDefinitionUpdateInput,
-    ingredients: Array<{ ingredientId: number; quantityNeededBase: number }>
+    ingredients: Array<{
+      ingredientId?: number | null;
+      semiProductId?: number | null;
+      itemType?: 'ingredient' | 'semi_product';
+      quantityNeededBase: number;
+    }>
   ) {
     await this.updateDefinition(db, id, definition);
 
@@ -141,6 +156,8 @@ export class RecipeService {
       await this.addIngredient(db, {
         recipeId: id,
         ingredientId: ingredient.ingredientId,
+        semiProductId: ingredient.semiProductId,
+        itemType: ingredient.itemType,
         quantityNeededBase: ingredient.quantityNeededBase,
       });
     }

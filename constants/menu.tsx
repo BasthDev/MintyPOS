@@ -1,20 +1,22 @@
 import {
   Activity,
   BarChart3,
-  Boxes, // Added for stock/inventory grouping
+  Boxes,
   ChefHat,
   ClipboardList,
   Coins,
   CreditCard,
+  Flame,
   Folder,
   Layers,
   Package,
+  PackageCheck,
   Receipt,
   Scale,
   Settings,
   ShoppingCart,
   Sparkles,
-  Store, // Added for catalog grouping
+  Store,
   Tag,
   Truck,
   User,
@@ -65,6 +67,12 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
         roles: ['Admin', 'Manager'],
       },
       {
+        title: 'Product Recipes',
+        path: '/recipes',
+        icon: ChefHat,
+        roles: ['Admin', 'Manager'],
+      },
+      {
         title: 'Categories',
         path: '/categories',
         icon: Folder,
@@ -72,37 +80,41 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
       },
     ],
   },
-  
-      {
-        title: 'Product Recipes',
-        path: '/recipes',
-        icon: ChefHat,
-        roles: ['Admin', 'Manager'],
-      },
-  // --- GROUP 2: INVENTORY & PRODUCTION ---
+  // --- GROUP 2: INVENTORY, PROCUREMENT & SEMI-PRODUCTION ---
   {
     title: 'Inventory & Stock',
     path: '/inventory',
     icon: Boxes,
     roles: ['Admin', 'Manager'],
     children: [
-      
       {
-        title: 'Suppliers',
-        path: '/suppliers',
-        icon: Truck,
+        title: 'Purchase Orders',
+        path: '/purchase-orders',
+        icon: PackageCheck,
         roles: ['Admin', 'Manager'],
       },
       {
-        title: 'Inventory',
-        path: '/inventory',
-        icon: Layers,
+        title: 'Semi-Products ',
+        path: '/semi-products',
+        icon: Flame,
         roles: ['Admin', 'Manager'],
       },
       {
         title: 'Ingredients',
         path: '/ingredients',
         icon: Scale,
+        roles: ['Admin', 'Manager'],
+      },
+      {
+        title: 'Inventory Batches',
+        path: '/inventory',
+        icon: Layers,
+        roles: ['Admin', 'Manager'],
+      },
+      {
+        title: 'Suppliers',
+        path: '/suppliers',
+        icon: Truck,
         roles: ['Admin', 'Manager'],
       },
     ],

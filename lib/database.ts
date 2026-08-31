@@ -28,8 +28,14 @@ export interface RecipeDefinition {
 export interface RecipeIngredient {
   id: number;
   recipe_id: number;
-  ingredient_id: number;
+  ingredient_id?: number | null;
+  semi_product_id?: number | null;
+  item_type: 'ingredient' | 'semi_product';
   quantity_needed_base: number;
+  ingredient_name?: string;
+  unit_symbol?: string;
+  cost_per_unit?: number;
+  ingredient_cost?: number;
 }
 
 export interface Unit {
@@ -50,6 +56,7 @@ export interface Ingredient {
   name: string;
   base_unit_id: number;
   minimum_stock: number;
+  is_active?: number;
 }
 
 export interface InventoryBatch {
@@ -61,6 +68,79 @@ export interface InventoryBatch {
   cost_per_base_unit: number;
   received_date: string;
   expiration_date?: string;
+}
+
+export interface SemiProduct {
+  id: number;
+  name: string;
+  code?: string | null;
+  base_unit_id: number;
+  base_unit_name?: string;
+  base_unit_symbol?: string;
+  yield_quantity: number;
+  minimum_stock: number;
+  current_stock: number;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+  formula_ingredients_count?: number;
+  estimated_cost_per_unit?: number;
+}
+
+export interface SemiProductRecipe {
+  id: number;
+  semi_product_id: number;
+  ingredient_id: number;
+  ingredient_name?: string;
+  unit_symbol?: string;
+  quantity_needed_base: number;
+  cost_per_unit?: number;
+  component_cost?: number;
+}
+
+export interface SemiProductBatch {
+  id: number;
+  semi_product_id: number;
+  semi_product_name?: string;
+  unit_symbol?: string;
+  batch_number: string;
+  initial_quantity_base: number;
+  remaining_quantity_base: number;
+  cost_per_base_unit: number;
+  total_cost: number;
+  produced_date: string;
+  expiration_date?: string | null;
+  notes?: string | null;
+}
+
+export interface PurchaseOrder {
+  id: number;
+  po_number: string;
+  supplier_id: number;
+  supplier_name?: string;
+  status: 'draft' | 'ordered' | 'received' | 'cancelled';
+  order_date: string;
+  expected_date?: string | null;
+  received_date?: string | null;
+  total_amount: number;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  items?: PurchaseOrderItem[];
+}
+
+export interface PurchaseOrderItem {
+  id: number;
+  purchase_order_id: number;
+  ingredient_id: number;
+  ingredient_name?: string;
+  base_unit_symbol?: string;
+  quantity_ordered: number;
+  unit_name: string;
+  multiplier_to_base: number;
+  unit_price: number;
+  total_price: number;
+  quantity_received: number;
 }
 
 export interface Product {
@@ -79,7 +159,9 @@ export interface Product {
 export interface Recipe {
   id: number;
   product_id: number;
-  ingredient_id: number;
+  ingredient_id?: number | null;
+  semi_product_id?: number | null;
+  item_type?: 'ingredient' | 'semi_product';
   quantity_needed_base: number;
 }
 
@@ -91,13 +173,13 @@ export interface Supplier {
 
 export interface ActivityLog {
   id: number;
-  type: 'stock_add' | 'stock_deduct' | 'order' | 'restock';
-  entity_type: 'ingredient' | 'product' | 'order';
+  type: 'stock_add' | 'stock_deduct' | 'order' | 'restock' | 'production' | 'po_create' | 'po_receive';
+  entity_type: 'ingredient' | 'product' | 'order' | 'semi_product' | 'purchase_order';
   entity_id: number;
   entity_name: string;
-  quantity: number;
-  unit: string;
-  description: string;
+  quantity?: number;
+  unit?: string;
+  description?: string;
   created_at: string;
 }
 
@@ -754,7 +836,87 @@ export const initDatabase = async (storeId?: string): Promise<SQLite.SQLiteDatab
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS purchase_orders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          po_number TEXT NOT NULL UNIQUE,
+          supplier_id INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'draft',
+          order_date TEXT NOT NULL,
+          expected_date TEXT,
+          received_date TEXT,
+          total_amount REAL NOT NULL DEFAULT 0,
+          notes TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE RESTRICT
+        );
+
+        CREATE TABLE IF NOT EXISTS purchase_order_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          purchase_order_id INTEGER NOT NULL,
+          ingredient_id INTEGER NOT NULL,
+          quantity_ordered REAL NOT NULL,
+          unit_name TEXT NOT NULL,
+          multiplier_to_base REAL NOT NULL DEFAULT 1,
+          unit_price REAL NOT NULL,
+          total_price REAL NOT NULL,
+          quantity_received REAL DEFAULT 0,
+          FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+          FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE RESTRICT
+        );
+
+        CREATE TABLE IF NOT EXISTS semi_products (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          code TEXT,
+          base_unit_id INTEGER NOT NULL,
+          yield_quantity REAL NOT NULL DEFAULT 1,
+          minimum_stock REAL NOT NULL DEFAULT 0,
+          current_stock REAL DEFAULT 0,
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (base_unit_id) REFERENCES units(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS semi_product_recipes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          semi_product_id INTEGER NOT NULL,
+          ingredient_id INTEGER NOT NULL,
+          quantity_needed_base REAL NOT NULL,
+          FOREIGN KEY (semi_product_id) REFERENCES semi_products(id) ON DELETE CASCADE,
+          FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS semi_product_batches (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          semi_product_id INTEGER NOT NULL,
+          batch_number TEXT,
+          initial_quantity_base REAL NOT NULL,
+          remaining_quantity_base REAL NOT NULL,
+          cost_per_base_unit REAL NOT NULL,
+          total_cost REAL NOT NULL,
+          produced_date TEXT NOT NULL DEFAULT (datetime('now')),
+          expiration_date TEXT,
+          notes TEXT,
+          FOREIGN KEY (semi_product_id) REFERENCES semi_products(id) ON DELETE CASCADE
+        );
       `);
+
+      // Migration for recipe_ingredients hybrid columns if existing
+      try {
+        const recipeIngCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(recipe_ingredients)');
+        const ringColNames = new Set(recipeIngCols.map((c) => c.name));
+        if (!ringColNames.has('item_type')) {
+          await db.execAsync("ALTER TABLE recipe_ingredients ADD COLUMN item_type TEXT DEFAULT 'ingredient';");
+        }
+        if (!ringColNames.has('semi_product_id')) {
+          await db.execAsync('ALTER TABLE recipe_ingredients ADD COLUMN semi_product_id INTEGER;');
+        }
+      } catch (colErr) {
+        console.log('Recipe ingredients column migration check completed');
+      }
 
       // 2. Create performance indexes
       await db.execAsync(`
@@ -762,9 +924,16 @@ export const initDatabase = async (storeId?: string): Promise<SQLite.SQLiteDatab
         CREATE INDEX IF NOT EXISTS idx_inventory_batches_date ON inventory_batches(received_date);
         CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe ON recipe_ingredients(recipe_id);
         CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient ON recipe_ingredients(ingredient_id);
+        CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_semi ON recipe_ingredients(semi_product_id);
         CREATE INDEX IF NOT EXISTS idx_products_recipe ON products(recipe_definition_id);
         CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(type);
+        CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier ON purchase_orders(supplier_id);
+        CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders(status);
+        CREATE INDEX IF NOT EXISTS idx_purchase_order_items_po ON purchase_order_items(purchase_order_id);
+        CREATE INDEX IF NOT EXISTS idx_semi_products_unit ON semi_products(base_unit_id);
+        CREATE INDEX IF NOT EXISTS idx_semi_product_recipes_sp ON semi_product_recipes(semi_product_id);
+        CREATE INDEX IF NOT EXISTS idx_semi_product_batches_sp ON semi_product_batches(semi_product_id);
       `);
 
       // 3. Ensure Default Seeding for Clean Operations
@@ -776,8 +945,6 @@ export const initDatabase = async (storeId?: string): Promise<SQLite.SQLiteDatab
           ('gram', 'g'),
           ('milliliter', 'ml'),
           ('piece', 'pcs'),
-          ('kilogram', 'kg'),
-          ('liter', 'L');
         `);
       }
 
@@ -1002,10 +1169,26 @@ export const dbOperations = {
 
   async getRecipeIngredients(db: SQLite.SQLiteDatabase, recipeId: number): Promise<RecipeIngredient[]> {
     return await db.getAllAsync<RecipeIngredient>(
-      `SELECT ri.*, i.name as ingredient_name, u.symbol as unit_symbol
+      `SELECT 
+         ri.id,
+         ri.recipe_id,
+         ri.ingredient_id,
+         ri.semi_product_id,
+         COALESCE(ri.item_type, 'ingredient') as item_type,
+         ri.quantity_needed_base,
+         CASE 
+           WHEN ri.item_type = 'semi_product' THEN sp.name 
+           ELSE i.name 
+         END as ingredient_name,
+         CASE 
+           WHEN ri.item_type = 'semi_product' THEN sp_u.symbol 
+           ELSE u.symbol 
+         END as unit_symbol
        FROM recipe_ingredients ri
-       JOIN ingredients i ON ri.ingredient_id = i.id
-       JOIN units u ON i.base_unit_id = u.id
+       LEFT JOIN ingredients i ON ri.ingredient_id = i.id
+       LEFT JOIN units u ON i.base_unit_id = u.id
+       LEFT JOIN semi_products sp ON ri.semi_product_id = sp.id
+       LEFT JOIN units sp_u ON sp.base_unit_id = sp_u.id
        WHERE ri.recipe_id = ?`,
       [recipeId]
     );
@@ -1014,12 +1197,15 @@ export const dbOperations = {
   async addRecipeIngredient(
     db: SQLite.SQLiteDatabase,
     recipeId: number,
-    ingredientId: number,
-    quantityNeededBase: number
+    itemId: number,
+    quantityNeededBase: number,
+    itemType: 'ingredient' | 'semi_product' = 'ingredient'
   ): Promise<number> {
+    const ingredientId = itemType === 'ingredient' ? itemId : null;
+    const semiProductId = itemType === 'semi_product' ? itemId : null;
     const result = await db.runAsync(
-      'INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity_needed_base) VALUES (?, ?, ?)',
-      [recipeId, ingredientId, quantityNeededBase]
+      'INSERT INTO recipe_ingredients (recipe_id, ingredient_id, semi_product_id, item_type, quantity_needed_base) VALUES (?, ?, ?, ?, ?)',
+      [recipeId, ingredientId, semiProductId, itemType, quantityNeededBase]
     );
     return result.lastInsertRowId;
   },
@@ -1272,8 +1458,8 @@ export const dbOperations = {
 
   async logActivity(
     db: SQLite.SQLiteDatabase,
-    type: 'stock_add' | 'stock_deduct' | 'order' | 'restock',
-    entityType: 'ingredient' | 'product' | 'order',
+    type: 'stock_add' | 'stock_deduct' | 'order' | 'restock' | 'production' | 'po_create' | 'po_receive',
+    entityType: 'ingredient' | 'product' | 'order' | 'semi_product' | 'purchase_order',
     entityId: number,
     entityName: string,
     quantity?: number,
@@ -1296,7 +1482,7 @@ export const dbOperations = {
 
   async getActivityLogsByType(
     db: SQLite.SQLiteDatabase,
-    type: 'stock_add' | 'stock_deduct' | 'order' | 'restock',
+    type: 'stock_add' | 'stock_deduct' | 'order' | 'restock' | 'production' | 'po_create' | 'po_receive',
     limit: number = 50
   ): Promise<ActivityLog[]> {
     return await db.getAllAsync<ActivityLog>(
@@ -1871,6 +2057,587 @@ export const dbOperations = {
       [parentOrderId]
     );
   },
+
+  // ─── PURCHASE ORDER OPERATIONS ───
+  async getAllPurchaseOrders(db: SQLite.SQLiteDatabase): Promise<PurchaseOrder[]> {
+    const orders = await db.getAllAsync<PurchaseOrder>(`
+      SELECT 
+        po.*,
+        s.name as supplier_name
+      FROM purchase_orders po
+      LEFT JOIN suppliers s ON po.supplier_id = s.id
+      ORDER BY po.order_date DESC, po.id DESC
+    `);
+
+    const ordersWithItems = await Promise.all(
+      orders.map(async (order) => {
+        const items = await db.getAllAsync<PurchaseOrderItem>(`
+          SELECT 
+            poi.*,
+            i.name as ingredient_name,
+            u.symbol as base_unit_symbol
+          FROM purchase_order_items poi
+          JOIN ingredients i ON poi.ingredient_id = i.id
+          LEFT JOIN units u ON i.base_unit_id = u.id
+          WHERE poi.purchase_order_id = ?
+        `, [order.id]);
+        return {
+          ...order,
+          items,
+        };
+      })
+    );
+
+    return ordersWithItems;
+  },
+
+  async getPurchaseOrderById(db: SQLite.SQLiteDatabase, id: number): Promise<PurchaseOrder | null> {
+    const order = await db.getFirstAsync<PurchaseOrder>(`
+      SELECT 
+        po.*,
+        s.name as supplier_name
+      FROM purchase_orders po
+      LEFT JOIN suppliers s ON po.supplier_id = s.id
+      WHERE po.id = ?
+    `, [id]);
+
+    if (!order) return null;
+
+    const items = await db.getAllAsync<PurchaseOrderItem>(`
+      SELECT 
+        poi.*,
+        i.name as ingredient_name,
+        u.symbol as base_unit_symbol
+      FROM purchase_order_items poi
+      JOIN ingredients i ON poi.ingredient_id = i.id
+      LEFT JOIN units u ON i.base_unit_id = u.id
+      WHERE poi.purchase_order_id = ?
+    `, [id]);
+
+    return {
+      ...order,
+      items,
+    };
+  },
+
+  async createPurchaseOrder(
+    db: SQLite.SQLiteDatabase,
+    data: {
+      poNumber: string;
+      supplierId: number;
+      orderDate: string;
+      expectedDate?: string | null;
+      notes?: string | null;
+      items: Array<{
+        ingredientId: number;
+        quantityOrdered: number;
+        unitName: string;
+        multiplierToBase: number;
+        unitPrice: number;
+        totalPrice: number;
+      }>;
+    }
+  ): Promise<number> {
+    const totalAmount = data.items.reduce((sum, item) => sum + item.totalPrice, 0);
+
+    const result = await db.runAsync(
+      `INSERT INTO purchase_orders (
+        po_number, supplier_id, status, order_date, expected_date, total_amount, notes
+      ) VALUES (?, ?, 'ordered', ?, ?, ?, ?)`,
+      [
+        data.poNumber,
+        data.supplierId,
+        data.orderDate,
+        data.expectedDate || null,
+        totalAmount,
+        data.notes || null,
+      ]
+    );
+
+    const poId = result.lastInsertRowId;
+
+    for (const item of data.items) {
+      await db.runAsync(
+        `INSERT INTO purchase_order_items (
+          purchase_order_id, ingredient_id, quantity_ordered, unit_name, 
+          multiplier_to_base, unit_price, total_price, quantity_received
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+        [
+          poId,
+          item.ingredientId,
+          item.quantityOrdered,
+          item.unitName,
+          item.multiplierToBase,
+          item.unitPrice,
+          item.totalPrice,
+        ]
+      );
+    }
+
+    const supplier = await db.getFirstAsync<{ name: string }>('SELECT name FROM suppliers WHERE id = ?', [data.supplierId]);
+    await this.logActivity(
+      db,
+      'po_create',
+      'purchase_order',
+      poId,
+      data.poNumber,
+      totalAmount,
+      'IDR',
+      `Created Purchase Order ${data.poNumber} to ${supplier?.name || 'Supplier'} with ${data.items.length} items (Total: Rp ${totalAmount.toLocaleString()})`
+    );
+
+    return poId;
+  },
+
+  async updatePurchaseOrderStatus(
+    db: SQLite.SQLiteDatabase,
+    id: number,
+    status: 'draft' | 'ordered' | 'received' | 'cancelled'
+  ): Promise<void> {
+    await db.runAsync(
+      `UPDATE purchase_orders SET status = ?, updated_at = datetime('now') WHERE id = ?`,
+      [status, id]
+    );
+  },
+
+  async receivePurchaseOrder(
+    db: SQLite.SQLiteDatabase,
+    poId: number,
+    receivedItems?: Array<{
+      itemId: number;
+      quantityReceived: number;
+      actualCost?: number;
+      expirationDate?: string | null;
+    }>
+  ): Promise<void> {
+    const po = await this.getPurchaseOrderById(db, poId);
+    if (!po) throw new Error('Purchase Order not found');
+
+    const receivedDate = new Date().toISOString();
+
+    for (const item of po.items || []) {
+      const receiptMeta = receivedItems?.find((r) => r.itemId === item.id);
+      const qtyReceived = receiptMeta ? receiptMeta.quantityReceived : item.quantity_ordered;
+      const actualCost = receiptMeta?.actualCost !== undefined ? receiptMeta.actualCost : item.total_price;
+      const expDate = receiptMeta?.expirationDate || null;
+
+      if (qtyReceived <= 0) continue;
+
+      const totalBaseQty = new Decimal(qtyReceived).mul(new Decimal(item.multiplier_to_base)).toNumber();
+      const costPerBaseUnit = new Decimal(actualCost).div(new Decimal(totalBaseQty)).toNumber();
+
+      // Create Inventory Batch for raw ingredient
+      await db.runAsync(
+        `INSERT INTO inventory_batches (
+          ingredient_id, supplier_id, initial_quantity_base, remaining_quantity_base, 
+          cost_per_base_unit, received_date, expiration_date
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          item.ingredient_id,
+          po.supplier_id,
+          totalBaseQty,
+          totalBaseQty,
+          costPerBaseUnit,
+          receivedDate,
+          expDate,
+        ]
+      );
+
+      // Update quantity_received in PO item
+      await db.runAsync(
+        `UPDATE purchase_order_items SET quantity_received = ? WHERE id = ?`,
+        [qtyReceived, item.id]
+      );
+
+      // Log activity
+      await this.logActivity(
+        db,
+        'po_receive',
+        'ingredient',
+        item.ingredient_id,
+        item.ingredient_name || 'Ingredient',
+        totalBaseQty,
+        item.base_unit_symbol || 'unit',
+        `Received ${qtyReceived} ${item.unit_name} (${totalBaseQty} ${item.base_unit_symbol || 'unit'}) from PO ${po.po_number} @ Rp ${costPerBaseUnit.toFixed(2)}/base unit`
+      );
+    }
+
+    // Mark PO as received
+    await db.runAsync(
+      `UPDATE purchase_orders SET status = 'received', received_date = ?, updated_at = datetime('now') WHERE id = ?`,
+      [receivedDate, poId]
+    );
+  },
+
+  async deletePurchaseOrder(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
+    await db.runAsync('DELETE FROM purchase_orders WHERE id = ?', [id]);
+  },
+
+  // ─── SEMI-PRODUCT OPERATIONS ───
+  async getAllSemiProducts(db: SQLite.SQLiteDatabase): Promise<SemiProduct[]> {
+    const list = await db.getAllAsync<SemiProduct>(`
+      SELECT 
+        sp.*,
+        u.name as base_unit_name,
+        u.symbol as base_unit_symbol
+      FROM semi_products sp
+      LEFT JOIN units u ON sp.base_unit_id = u.id
+      WHERE sp.is_active = 1
+      ORDER BY sp.name ASC
+    `);
+
+    const enriched = await Promise.all(
+      list.map(async (sp) => {
+        const recipes = await db.getAllAsync<SemiProductRecipe>(`
+          SELECT spr.*, i.name as ingredient_name, u.symbol as unit_symbol
+          FROM semi_product_recipes spr
+          JOIN ingredients i ON spr.ingredient_id = i.id
+          LEFT JOIN units u ON i.base_unit_id = u.id
+          WHERE spr.semi_product_id = ?
+        `, [sp.id]);
+
+        let estimatedTotalFormulaCost = new Decimal(0);
+        for (const r of recipes) {
+          const batch = await db.getFirstAsync<{ cost_per_base_unit: number }>(
+            `SELECT cost_per_base_unit FROM inventory_batches 
+             WHERE ingredient_id = ? AND remaining_quantity_base > 0 
+             ORDER BY received_date ASC LIMIT 1`,
+            [r.ingredient_id]
+          );
+          const costPerUnit = batch?.cost_per_base_unit || 0;
+          estimatedTotalFormulaCost = estimatedTotalFormulaCost.add(
+            new Decimal(r.quantity_needed_base).mul(new Decimal(costPerUnit))
+          );
+        }
+
+        const yieldQty = sp.yield_quantity > 0 ? sp.yield_quantity : 1;
+        const estimatedCostPerUnit = estimatedTotalFormulaCost.div(new Decimal(yieldQty)).toNumber();
+        const currentRealStock = await getSemiProductStock(db, sp.id);
+
+        return {
+          ...sp,
+          current_stock: currentRealStock,
+          formula_ingredients_count: recipes.length,
+          estimated_cost_per_unit: estimatedCostPerUnit,
+        };
+      })
+    );
+
+    return enriched;
+  },
+
+  async getSemiProductById(db: SQLite.SQLiteDatabase, id: number): Promise<SemiProduct | null> {
+    const sp = await db.getFirstAsync<SemiProduct>(`
+      SELECT 
+        sp.*,
+        u.name as base_unit_name,
+        u.symbol as base_unit_symbol
+      FROM semi_products sp
+      LEFT JOIN units u ON sp.base_unit_id = u.id
+      WHERE sp.id = ?
+    `, [id]);
+
+    if (!sp) return null;
+
+    const currentRealStock = await getSemiProductStock(db, id);
+    return {
+      ...sp,
+      current_stock: currentRealStock,
+    };
+  },
+
+  async createSemiProduct(
+    db: SQLite.SQLiteDatabase,
+    data: {
+      name: string;
+      code?: string | null;
+      baseUnitId: number;
+      yieldQuantity: number;
+      minimumStock?: number;
+    }
+  ): Promise<number> {
+    const result = await db.runAsync(
+      `INSERT INTO semi_products (name, code, base_unit_id, yield_quantity, minimum_stock, current_stock) 
+       VALUES (?, ?, ?, ?, ?, 0)`,
+      [
+        data.name,
+        data.code || null,
+        data.baseUnitId,
+        data.yieldQuantity > 0 ? data.yieldQuantity : 1,
+        data.minimumStock || 0,
+      ]
+    );
+    return result.lastInsertRowId;
+  },
+
+  async updateSemiProduct(
+    db: SQLite.SQLiteDatabase,
+    id: number,
+    updates: {
+      name?: string;
+      code?: string | null;
+      baseUnitId?: number;
+      yieldQuantity?: number;
+      minimumStock?: number;
+    }
+  ): Promise<void> {
+    const updateFields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.name !== undefined) {
+      updateFields.push('name = ?');
+      values.push(updates.name);
+    }
+    if (updates.code !== undefined) {
+      updateFields.push('code = ?');
+      values.push(updates.code);
+    }
+    if (updates.baseUnitId !== undefined) {
+      updateFields.push('base_unit_id = ?');
+      values.push(updates.baseUnitId);
+    }
+    if (updates.yieldQuantity !== undefined) {
+      updateFields.push('yield_quantity = ?');
+      values.push(updates.yieldQuantity);
+    }
+    if (updates.minimumStock !== undefined) {
+      updateFields.push('minimum_stock = ?');
+      values.push(updates.minimumStock);
+    }
+
+    if (updateFields.length > 0) {
+      updateFields.push(`updated_at = datetime('now')`);
+      values.push(id);
+      await db.runAsync(
+        `UPDATE semi_products SET ${updateFields.join(', ')} WHERE id = ?`,
+        values
+      );
+    }
+  },
+
+  async deleteSemiProduct(db: SQLite.SQLiteDatabase, id: number): Promise<void> {
+    await db.runAsync('DELETE FROM semi_products WHERE id = ?', [id]);
+  },
+
+  async getSemiProductRecipes(db: SQLite.SQLiteDatabase, semiProductId: number): Promise<SemiProductRecipe[]> {
+    const list = await db.getAllAsync<SemiProductRecipe>(`
+      SELECT 
+        spr.*,
+        i.name as ingredient_name,
+        u.symbol as unit_symbol
+      FROM semi_product_recipes spr
+      JOIN ingredients i ON spr.ingredient_id = i.id
+      LEFT JOIN units u ON i.base_unit_id = u.id
+      WHERE spr.semi_product_id = ?
+    `, [semiProductId]);
+
+    const enriched = await Promise.all(
+      list.map(async (r) => {
+        const batch = await db.getFirstAsync<{ cost_per_base_unit: number }>(
+          `SELECT cost_per_base_unit FROM inventory_batches 
+           WHERE ingredient_id = ? AND remaining_quantity_base > 0 
+           ORDER BY received_date ASC LIMIT 1`,
+          [r.ingredient_id]
+        );
+        const costPerUnit = batch?.cost_per_base_unit || 0;
+        const componentCost = costPerUnit * r.quantity_needed_base;
+        return {
+          ...r,
+          cost_per_unit: costPerUnit,
+          component_cost: componentCost,
+        };
+      })
+    );
+
+    return enriched;
+  },
+
+  async saveSemiProductRecipe(
+    db: SQLite.SQLiteDatabase,
+    semiProductId: number,
+    ingredients: Array<{ ingredientId: number; quantityNeededBase: number }>
+  ): Promise<void> {
+    await db.runAsync('DELETE FROM semi_product_recipes WHERE semi_product_id = ?', [semiProductId]);
+    for (const item of ingredients) {
+      await db.runAsync(
+        `INSERT INTO semi_product_recipes (semi_product_id, ingredient_id, quantity_needed_base) 
+         VALUES (?, ?, ?)`,
+        [semiProductId, item.ingredientId, item.quantityNeededBase]
+      );
+    }
+  },
+
+  async getSemiProductBatches(db: SQLite.SQLiteDatabase, semiProductId: number): Promise<SemiProductBatch[]> {
+    return await db.getAllAsync<SemiProductBatch>(`
+      SELECT 
+        spb.*,
+        sp.name as semi_product_name,
+        u.symbol as unit_symbol
+      FROM semi_product_batches spb
+      JOIN semi_products sp ON spb.semi_product_id = sp.id
+      LEFT JOIN units u ON sp.base_unit_id = u.id
+      WHERE spb.semi_product_id = ?
+      ORDER BY spb.produced_date DESC
+    `, [semiProductId]);
+  },
+
+  /**
+   * Execute batch production of semi-product:
+   * 1. Calculates proportional raw ingredient requirements based on target output.
+   * 2. Deducts raw ingredients FIFO from inventory_batches, calculating true total cost.
+   * 3. Creates record in semi_product_batches with exact cost_per_base_unit.
+   * 4. Updates semi_products.current_stock.
+   * 5. Logs activities.
+   */
+  async executeSemiProductBatch(
+    db: SQLite.SQLiteDatabase,
+    semiProductId: number,
+    targetProducedBaseQty: number,
+    notes?: string
+  ): Promise<{ batchId: number; totalCost: number; costPerBaseUnit: number }> {
+    const sp = await db.getFirstAsync<SemiProduct>(`
+      SELECT sp.*, u.symbol as base_unit_symbol 
+      FROM semi_products sp 
+      LEFT JOIN units u ON sp.base_unit_id = u.id 
+      WHERE sp.id = ?
+    `, [semiProductId]);
+    if (!sp) throw new Error('Semi-product not found');
+
+    const formula = await this.getSemiProductRecipes(db, semiProductId);
+    if (!formula || formula.length === 0) {
+      throw new Error('Semi-product recipe formula is empty. Please define components first.');
+    }
+
+    const standardYield = new Decimal(sp.yield_quantity > 0 ? sp.yield_quantity : 1);
+    const targetQty = new Decimal(targetProducedBaseQty);
+    const scalingFactor = targetQty.div(standardYield);
+
+    // Validate raw stock first
+    for (const comp of formula) {
+      const required = new Decimal(comp.quantity_needed_base).mul(scalingFactor).toNumber();
+      const currentStock = await getCurrentStock(db, comp.ingredient_id);
+      if (currentStock < required) {
+        throw new Error(
+          `Insufficient stock for "${comp.ingredient_name}". Needs ${required.toFixed(1)} ${comp.unit_symbol}, only ${currentStock} available.`
+        );
+      }
+    }
+
+    await db.execAsync('BEGIN TRANSACTION');
+
+    try {
+      let totalRawCost = new Decimal(0);
+
+      // Deduct raw ingredients FIFO and calculate true cost
+      for (const comp of formula) {
+        const requiredQty = new Decimal(comp.quantity_needed_base).mul(scalingFactor);
+        let remainingToDeduct = new Decimal(requiredQty);
+
+        const activeBatches = await db.getAllAsync<InventoryBatch>(
+          `SELECT * FROM inventory_batches 
+           WHERE ingredient_id = ? AND remaining_quantity_base > 0 
+           ORDER BY 
+             CASE 
+               WHEN expiration_date IS NOT NULL AND expiration_date < datetime('now') THEN 0
+               ELSE 1
+             END,
+             expiration_date ASC,
+             received_date ASC`,
+          [comp.ingredient_id]
+        );
+
+        for (const batch of activeBatches) {
+          if (remainingToDeduct.lte(0)) break;
+          const batchRemaining = new Decimal(batch.remaining_quantity_base);
+          const batchCostPerUnit = new Decimal(batch.cost_per_base_unit);
+
+          if (batchRemaining.gte(remainingToDeduct)) {
+            const used = remainingToDeduct;
+            totalRawCost = totalRawCost.add(used.mul(batchCostPerUnit));
+            const newRemaining = batchRemaining.minus(used);
+            await db.runAsync('UPDATE inventory_batches SET remaining_quantity_base = ? WHERE id = ?', [
+              newRemaining.toNumber(),
+              batch.id,
+            ]);
+            remainingToDeduct = new Decimal(0);
+          } else {
+            const used = batchRemaining;
+            totalRawCost = totalRawCost.add(used.mul(batchCostPerUnit));
+            remainingToDeduct = remainingToDeduct.minus(used);
+            await db.runAsync('UPDATE inventory_batches SET remaining_quantity_base = 0 WHERE id = ?', [batch.id]);
+          }
+        }
+
+        if (remainingToDeduct.gt(0)) {
+          throw new Error(`Insufficient stock for ingredient ID ${comp.ingredient_id}`);
+        }
+
+        // Log deduction of raw ingredient
+        await this.logActivity(
+          db,
+          'stock_deduct',
+          'ingredient',
+          comp.ingredient_id,
+          comp.ingredient_name || 'Ingredient',
+          requiredQty.toNumber(),
+          comp.unit_symbol || 'unit',
+          `Used ${requiredQty.toNumber()} ${comp.unit_symbol} for production of ${sp.name}`
+        );
+      }
+
+      const costPerBaseUnit = totalRawCost.div(targetQty).toNumber();
+      const batchNumber = `SPB-${Date.now().toString().slice(-6)}`;
+      const producedDate = new Date().toISOString();
+
+      const batchResult = await db.runAsync(
+        `INSERT INTO semi_product_batches (
+          semi_product_id, batch_number, initial_quantity_base, remaining_quantity_base,
+          cost_per_base_unit, total_cost, produced_date, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          semiProductId,
+          batchNumber,
+          targetProducedBaseQty,
+          targetProducedBaseQty,
+          costPerBaseUnit,
+          totalRawCost.toNumber(),
+          producedDate,
+          notes || null,
+        ]
+      );
+
+      const batchId = batchResult.lastInsertRowId;
+
+      // Update current_stock in semi_products
+      await db.runAsync(
+        `UPDATE semi_products SET current_stock = current_stock + ?, updated_at = datetime('now') WHERE id = ?`,
+        [targetProducedBaseQty, semiProductId]
+      );
+
+      // Log semi product batch production
+      await this.logActivity(
+        db,
+        'production',
+        'semi_product',
+        semiProductId,
+        sp.name,
+        targetProducedBaseQty,
+        sp.base_unit_symbol || 'unit',
+        `Produced batch ${batchNumber}: ${targetProducedBaseQty} ${sp.base_unit_symbol || 'unit'} of ${sp.name} @ Rp ${costPerBaseUnit.toFixed(2)}/unit (Total Cost: Rp ${totalRawCost.toNumber().toLocaleString()})`
+      );
+
+      await db.execAsync('COMMIT');
+
+      return {
+        batchId,
+        totalCost: totalRawCost.toNumber(),
+        costPerBaseUnit,
+      };
+    } catch (err) {
+      await db.execAsync('ROLLBACK');
+      throw err;
+    }
+  },
 };
 
 export const getCurrentStock = async (db: SQLite.SQLiteDatabase, ingredientId: number): Promise<number> => {
@@ -1879,6 +2646,16 @@ export const getCurrentStock = async (db: SQLite.SQLiteDatabase, ingredientId: n
      FROM inventory_batches 
      WHERE ingredient_id = ?`,
     [ingredientId]
+  );
+  return result?.total || 0;
+};
+
+export const getSemiProductStock = async (db: SQLite.SQLiteDatabase, semiProductId: number): Promise<number> => {
+  const result = await db.getFirstAsync<{ total: number }>(
+    `SELECT COALESCE(SUM(remaining_quantity_base), 0) as total 
+     FROM semi_product_batches 
+     WHERE semi_product_id = ?`,
+    [semiProductId]
   );
   return result?.total || 0;
 };
@@ -1951,6 +2728,81 @@ export const deductStockFIFO = async (
   );
 };
 
+export const deductSemiProductStockFIFO = async (
+  db: SQLite.SQLiteDatabase,
+  semiProductId: number,
+  totalRequiredBaseQty: number
+): Promise<void> => {
+  const activeBatches = await db.getAllAsync<SemiProductBatch>(
+    `SELECT * FROM semi_product_batches 
+     WHERE semi_product_id = ? AND remaining_quantity_base > 0 
+     ORDER BY 
+       CASE 
+         WHEN expiration_date IS NOT NULL AND expiration_date < datetime('now') THEN 0
+         ELSE 1
+       END,
+       expiration_date ASC,
+       produced_date ASC`,
+    [semiProductId]
+  );
+
+  let remainingToDeduct = new Decimal(totalRequiredBaseQty);
+
+  for (const batch of activeBatches) {
+    if (remainingToDeduct.lte(0)) break;
+
+    const batchQuantity = new Decimal(batch.remaining_quantity_base);
+
+    if (batchQuantity.gte(remainingToDeduct)) {
+      const newRemaining = batchQuantity.minus(remainingToDeduct);
+      await db.runAsync(
+        'UPDATE semi_product_batches SET remaining_quantity_base = ? WHERE id = ?',
+        [newRemaining.toNumber(), batch.id]
+      );
+      remainingToDeduct = new Decimal(0);
+    } else {
+      remainingToDeduct = remainingToDeduct.minus(batchQuantity);
+      await db.runAsync(
+        'UPDATE semi_product_batches SET remaining_quantity_base = 0 WHERE id = ?',
+        [batch.id]
+      );
+    }
+  }
+
+  if (remainingToDeduct.gt(0)) {
+    throw new Error(
+      `Insufficient stock for semi-product ID ${semiProductId}. Missing ${remainingToDeduct.toNumber()} base units.`
+    );
+  }
+
+  // Update total current_stock
+  const realStock = await getSemiProductStock(db, semiProductId);
+  await db.runAsync('UPDATE semi_products SET current_stock = ?, updated_at = datetime("now") WHERE id = ?', [
+    realStock,
+    semiProductId,
+  ]);
+
+  const sp = await db.getFirstAsync<{ name: string; base_unit_id: number }>(
+    'SELECT name, base_unit_id FROM semi_products WHERE id = ?',
+    [semiProductId]
+  );
+  const unit = await db.getFirstAsync<{ symbol: string }>(
+    'SELECT symbol FROM units WHERE id = ?',
+    [sp?.base_unit_id || 0]
+  );
+  
+  await dbOperations.logActivity(
+    db,
+    'stock_deduct',
+    'semi_product',
+    semiProductId,
+    sp?.name || 'Unknown Semi-Product',
+    totalRequiredBaseQty,
+    unit?.symbol || 'unit',
+    `Deducted ${totalRequiredBaseQty} ${unit?.symbol || 'unit'} semi-product from stock`
+  );
+};
+
 export interface RestockPayload {
   ingredientId: number;
   supplierId: number;
@@ -2004,17 +2856,20 @@ export const handleCheckoutOrder = async (
       }
 
       if (product && product.recipe_definition_id && product.stock_deduction_method === 'recipe') {
-        const recipes = await db.getAllAsync<{ ingredient_id: number; quantity_needed_base: number }>(
-          'SELECT ingredient_id, quantity_needed_base FROM recipe_ingredients WHERE recipe_id = ?',
-          [product.recipe_definition_id]
-        );
+        const recipeComponents = await dbOperations.getRecipeIngredients(db, product.recipe_definition_id);
 
-        for (const recipe of recipes) {
-          const quantityNeeded = new Decimal(recipe.quantity_needed_base);
+        for (const comp of recipeComponents) {
+          const quantityNeeded = new Decimal(comp.quantity_needed_base);
           const quantitySold = new Decimal(item.quantitySold);
           const totalDeductionNeeded = quantityNeeded.mul(quantitySold);
 
-          await deductStockFIFO(db, recipe.ingredient_id, totalDeductionNeeded.toNumber());
+          if (comp.item_type === 'semi_product' && comp.semi_product_id) {
+            // Cascade deduction for Semi-Product
+            await deductSemiProductStockFIFO(db, comp.semi_product_id, totalDeductionNeeded.toNumber());
+          } else if (comp.ingredient_id) {
+            // Deduction for Raw Ingredient
+            await deductStockFIFO(db, comp.ingredient_id, totalDeductionNeeded.toNumber());
+          }
         }
       }
 
@@ -2061,6 +2916,11 @@ export const resetToCleanDatabase = async (db: SQLite.SQLiteDatabase): Promise<v
     DELETE FROM customer_balance_transactions;
     DELETE FROM orders;
     DELETE FROM activity_logs;
+    DELETE FROM purchase_order_items;
+    DELETE FROM purchase_orders;
+    DELETE FROM semi_product_batches;
+    DELETE FROM semi_product_recipes;
+    DELETE FROM semi_products;
     DELETE FROM recipe_ingredients;
     DELETE FROM recipe_definitions;
     DELETE FROM products;

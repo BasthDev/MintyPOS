@@ -75,8 +75,46 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         StoreService.getActiveStore(),
       ]);
 
-      const org = orgData.status === 'fulfilled' ? orgData.value : null;
-      const store = storeData.status === 'fulfilled' ? storeData.value : null;
+      let org = orgData.status === 'fulfilled' ? orgData.value : null;
+      let store = storeData.status === 'fulfilled' ? storeData.value : null;
+
+      // Auto-create Organization in Cloud if missing for owner
+      if (!org && supabaseUser?.id) {
+        try {
+          const ownerName =
+            supabaseUser.user_metadata?.full_name ||
+            supabaseUser.email?.split('@')[0] ||
+            'Owner';
+          org = await OrganizationService.create({
+            name: `${ownerName}'s Business`,
+            ownerName,
+            email: supabaseUser.email,
+          });
+          console.log('✅ [AUTH] Auto-created default organization:', org.id);
+        } catch (orgErr) {
+          console.warn('⚠️ [AUTH] Could not auto-create organization:', orgErr);
+        }
+      }
+
+      // Auto-create Store in Cloud if missing
+      if (!store && org?.id) {
+        try {
+          const storesList = await StoreService.getAll();
+          if (storesList && storesList.length > 0) {
+            store = storesList[0];
+            await StoreService.setActiveStoreId(store.id);
+          } else {
+            store = await StoreService.create(org.id, {
+              name: 'Main Store',
+              currencyCode: 'IDR',
+              currencySymbol: 'Rp',
+            });
+            console.log('✅ [AUTH] Auto-created default store:', store.id);
+          }
+        } catch (storeErr) {
+          console.warn('⚠️ [AUTH] Could not auto-create store:', storeErr);
+        }
+      }
 
       const ownerUser: User = {
         id: supabaseUser.id,

@@ -2,7 +2,7 @@ import { Header } from '@/components/Header';
 import { DripSearchBar } from '@/components/SearchBar';
 import { Section } from '@/components/Section';
 import { useTheme } from '@/constants/colorTheme';
-import { dbOperations, getDatabase } from '@/lib/database';
+import { dbOperations, getDatabase, ActivityLog } from '@/lib/database';
 import { Activity, ArrowDown, ArrowUp, Clock, Package, ShoppingCart } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
@@ -14,19 +14,7 @@ import {
   View,
 } from 'react-native';
 
-type ActivityType = 'stock_add' | 'stock_deduct' | 'order' | 'restock';
-
-interface ActivityLog {
-  id: number;
-  type: ActivityType;
-  entity_type: 'ingredient' | 'product' | 'order';
-  entity_id: number;
-  entity_name: string;
-  quantity: number;
-  unit: string;
-  description: string;
-  created_at: string;
-}
+type ActivityType = 'stock_add' | 'stock_deduct' | 'order' | 'restock' | 'production' | 'po_create' | 'po_receive';
 
 export default function ActivityScreen() {
   const { theme } = useTheme();

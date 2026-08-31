@@ -89,23 +89,11 @@ export const CustomerFormSheet: React.FC<CustomerFormSheetProps> = ({
       title={mode === 'create' ? 'New Customer' : 'Edit Customer'}
       headerIcon={<User size={22} color={theme.primary} />}
       footer={
-        <View style={styles.footerRow}>
-          <View style={{ flex: 1 }}>
-            <DripButton
-              title="Cancel"
-              variant="secondary"
-              onPress={onClose}
-              disabled={loading}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <DripButton
-              title={mode === 'create' ? 'Create Customer' : 'Save Changes'}
-              onPress={handleSubmit}
-              loading={loading}
-            />
-          </View>
-        </View>
+        <DripButton
+          title={mode === 'create' ? 'Create Customer' : 'Save Changes'}
+          onPress={handleSubmit}
+          loading={loading}
+        />
       }
     >
       <View style={styles.container}>
@@ -161,10 +149,5 @@ export const CustomerFormSheet: React.FC<CustomerFormSheetProps> = ({
 const styles = StyleSheet.create({
   container: {
     gap: 12,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
   },
 });

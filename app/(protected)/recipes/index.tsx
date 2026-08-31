@@ -42,32 +42,64 @@ export default function RecipesScreen() {
       if (result.success && result.data) {
         const recipesWithDetails = await Promise.all(
           result.data.map(async (recipe: any) => {
-            const ingredients = await dbOperations.getRecipeIngredients(db, recipe.id);
-            const ingredientsWithCost = await Promise.all(
-              ingredients.map(async (ing: any) => {
-                const batch = await db.getFirstAsync<{ cost_per_base_unit: number }>(
-                  `SELECT cost_per_base_unit FROM inventory_batches 
-                   WHERE ingredient_id = ? AND remaining_quantity_base > 0 
-                   ORDER BY received_date ASC LIMIT 1`,
-                  [ing.ingredient_id]
-                );
-                const costPerUnit = batch?.cost_per_base_unit || 0;
-                const ingredientCost = costPerUnit * ing.quantity_needed_base;
+            const components = await dbOperations.getRecipeIngredients(db, recipe.id);
+            const componentsWithCost = await Promise.all(
+              components.map(async (comp: any) => {
+                let costPerUnit = 0;
+                if (comp.item_type === 'semi_product' && comp.semi_product_id) {
+                  const batch = await db.getFirstAsync<{ cost_per_base_unit: number }>(
+                    `SELECT cost_per_base_unit FROM semi_product_batches 
+                     WHERE semi_product_id = ? AND remaining_quantity_base > 0 
+                     ORDER BY produced_date DESC LIMIT 1`,
+                    [comp.semi_product_id]
+                  );
+                  if (batch && batch.cost_per_base_unit > 0) {
+                    costPerUnit = batch.cost_per_base_unit;
+                  } else {
+                    const formula = await dbOperations.getSemiProductRecipes(db, comp.semi_product_id);
+                    const sp = await db.getFirstAsync<{ yield_quantity: number }>(
+                      'SELECT yield_quantity FROM semi_products WHERE id = ?',
+                      [comp.semi_product_id]
+                    );
+                    let formulaTotal = 0;
+                    for (const item of formula) {
+                      const rawBatch = await db.getFirstAsync<{ cost_per_base_unit: number }>(
+                        `SELECT cost_per_base_unit FROM inventory_batches 
+                         WHERE ingredient_id = ? AND remaining_quantity_base > 0 
+                         ORDER BY received_date ASC LIMIT 1`,
+                        [item.ingredient_id]
+                      );
+                      formulaTotal += item.quantity_needed_base * (rawBatch?.cost_per_base_unit || 0);
+                    }
+                    const yieldQty = sp && sp.yield_quantity > 0 ? sp.yield_quantity : 1;
+                    costPerUnit = formulaTotal / yieldQty;
+                  }
+                } else if (comp.ingredient_id) {
+                  const batch = await db.getFirstAsync<{ cost_per_base_unit: number }>(
+                    `SELECT cost_per_base_unit FROM inventory_batches 
+                     WHERE ingredient_id = ? AND remaining_quantity_base > 0 
+                     ORDER BY received_date ASC LIMIT 1`,
+                    [comp.ingredient_id]
+                  );
+                  costPerUnit = batch?.cost_per_base_unit || 0;
+                }
+
+                const componentCost = costPerUnit * comp.quantity_needed_base;
                 return {
-                  ...ing,
+                  ...comp,
                   cost_per_unit: costPerUnit,
-                  ingredient_cost: ingredientCost,
+                  ingredient_cost: componentCost,
                 };
               })
             );
-            const totalCost = ingredientsWithCost.reduce(
-              (sum: number, ing: any) => sum + ing.ingredient_cost,
+            const totalCost = componentsWithCost.reduce(
+              (sum: number, comp: any) => sum + (comp.ingredient_cost || 0),
               0
             );
             return {
               ...recipe,
-              ingredient_count: ingredients.length,
-              ingredients: ingredientsWithCost,
+              ingredient_count: components.length,
+              ingredients: componentsWithCost,
               total_cost: totalCost,
             };
           })
@@ -98,6 +130,8 @@ export default function RecipesScreen() {
       description: recipe.description || '',
       ingredients: (recipe.ingredients || []).map((ing: any) => ({
         ingredientId: ing.ingredient_id,
+        semiProductId: ing.semi_product_id,
+        itemType: ing.item_type || (ing.semi_product_id ? 'semi_product' : 'ingredient'),
         quantityNeededBase: ing.quantity_needed_base,
       })),
     });
@@ -139,7 +173,12 @@ export default function RecipesScreen() {
   const handleFormSubmit = async (data: {
     name: string;
     description: string;
-    ingredients: Array<{ ingredientId: number; quantityNeededBase: number }>;
+    ingredients: Array<{
+      ingredientId?: number | null;
+      semiProductId?: number | null;
+      itemType: 'ingredient' | 'semi_product';
+      quantityNeededBase: number;
+    }>;
   }) => {
     try {
       const db = await getDatabase();
@@ -241,7 +280,7 @@ export default function RecipesScreen() {
                         { color: isSelected ? '#CBD5E1' : theme.textTertiary },
                       ]}
                     >
-                      {r.ingredient_count} ingredient{r.ingredient_count !== 1 ? 's' : ''} • Cost:{' '}
+                      {r.ingredient_count} component{r.ingredient_count !== 1 ? 's' : ''} • Estimated HPP:{' '}
                       {formatCurrency(r.total_cost || 0)}
                     </Text>
                   </View>
@@ -282,7 +321,7 @@ export default function RecipesScreen() {
               {selectedRecipe.name}
             </Text>
             <Text style={[styles.detailsCost, { color: theme.primary }]}>
-              Estimated Cost: {formatCurrency(selectedRecipe.total_cost || 0)}
+              Estimated COGS / HPP: {formatCurrency(selectedRecipe.total_cost || 0)}
             </Text>
           </View>
         </View>
@@ -313,21 +352,60 @@ export default function RecipesScreen() {
 
         <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Text style={[styles.infoCardTitle, { color: theme.text }]}>
-            Ingredients ({selectedRecipe.ingredients?.length || 0})
+            Recipe Formulation Components ({selectedRecipe.ingredients?.length || 0})
           </Text>
-          {selectedRecipe.ingredients?.map((ing: any, index: number) => (
-            <View key={index} style={[styles.ingredientRow, { borderBottomColor: theme.border }]}>
-              <View style={styles.ingredientInfoLeft}>
-                <Text style={[styles.ingredientName, { color: theme.text }]}>{ing.ingredient_name}</Text>
-                <Text style={[styles.ingredientQty, { color: theme.textSecondary }]}>
-                  {ing.quantity_needed_base} {ing.unit_symbol}
+          {selectedRecipe.ingredients?.map((ing: any, index: number) => {
+            const isSemi = ing.item_type === 'semi_product' || !!ing.semi_product_id;
+
+            return (
+              <View key={index} style={[styles.ingredientRow, { borderBottomColor: theme.border }]}>
+                <View style={styles.ingredientInfoLeft}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={[styles.ingredientName, { color: theme.text }]}>{ing.ingredient_name}</Text>
+                    <View
+                      style={{
+                        backgroundColor: isSemi ? '#FEF3C7' : '#E0F2FE',
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 4,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: '700',
+                          color: isSemi ? '#D97706' : '#0284C7',
+                        }}
+                      >
+                        {isSemi ? 'SEMI-PRODUCT' : 'RAW'}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.ingredientQty, { color: theme.textSecondary }]}>
+                    {ing.quantity_needed_base} {ing.unit_symbol} @ Rp {(ing.cost_per_unit || 0).toFixed(2)}/{ing.unit_symbol}
+                  </Text>
+                </View>
+                <Text style={[styles.ingredientCost, { color: theme.primary }]}>
+                  {formatCurrency(ing.ingredient_cost || 0)}
                 </Text>
               </View>
-              <Text style={[styles.ingredientCost, { color: theme.primary }]}>
-                {formatCurrency(ing.ingredient_cost || 0)}
-              </Text>
-            </View>
-          ))}
+            );
+          })}
+
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              paddingTop: 12,
+              marginTop: 6,
+            }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>Total Recipe Cost (HPP):</Text>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: theme.primary }}>
+              {formatCurrency(selectedRecipe.total_cost || 0)}
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </View>

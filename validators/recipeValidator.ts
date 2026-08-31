@@ -63,11 +63,15 @@ export class RecipeValidator {
   /**
    * Validate recipe ingredient input
    */
-  static validateIngredient(ingredientId: number, quantityNeededBase: number): ValidationResult {
+  static validateIngredient(
+    itemId: number,
+    quantityNeededBase: number,
+    itemType: 'ingredient' | 'semi_product' = 'ingredient'
+  ): ValidationResult {
     const errors: string[] = [];
 
-    if (!ingredientId || typeof ingredientId !== 'number' || ingredientId <= 0) {
-      errors.push('Invalid ingredient ID');
+    if (!itemId || typeof itemId !== 'number' || itemId <= 0) {
+      errors.push(`Invalid ${itemType === 'semi_product' ? 'semi-product' : 'ingredient'} ID`);
     }
 
     if (quantityNeededBase === undefined || quantityNeededBase === null) {
@@ -103,7 +107,12 @@ export class RecipeValidator {
    */
   static validateCompleteRecipe(
     definition: RecipeDefinitionCreateInput,
-    ingredients: Array<{ ingredientId: number; quantityNeededBase: number }>
+    ingredients: Array<{
+      ingredientId?: number | null;
+      semiProductId?: number | null;
+      itemType?: 'ingredient' | 'semi_product';
+      quantityNeededBase: number;
+    }>
   ): ValidationResult {
     const errors: string[] = [];
 
@@ -115,12 +124,14 @@ export class RecipeValidator {
 
     // Validate ingredients
     if (!ingredients || ingredients.length === 0) {
-      errors.push('Recipe must have at least one ingredient');
+      errors.push('Recipe must have at least one ingredient or semi-product component');
     } else {
       ingredients.forEach((ing, index) => {
-        const ingValidation = this.validateIngredient(ing.ingredientId, ing.quantityNeededBase);
+        const itemType = ing.itemType || (ing.semiProductId ? 'semi_product' : 'ingredient');
+        const itemId = itemType === 'semi_product' ? (ing.semiProductId || 0) : (ing.ingredientId || 0);
+        const ingValidation = this.validateIngredient(itemId, ing.quantityNeededBase, itemType);
         if (!ingValidation.isValid) {
-          errors.push(`Ingredient ${index + 1}: ${ingValidation.errors.join(', ')}`);
+          errors.push(`Item ${index + 1}: ${ingValidation.errors.join(', ')}`);
         }
       });
     }

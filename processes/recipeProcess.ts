@@ -40,12 +40,17 @@ export class RecipeProcess {
   }
 
   /**
-   * Create complete recipe with ingredients
+   * Create complete recipe with hybrid ingredients
    */
   static async createCompleteRecipe(
     db: SQLite.SQLiteDatabase,
     definition: RecipeDefinitionCreateInput,
-    ingredients: Array<{ ingredientId: number; quantityNeededBase: number }>
+    ingredients: Array<{
+      ingredientId?: number | null;
+      semiProductId?: number | null;
+      itemType?: 'ingredient' | 'semi_product';
+      quantityNeededBase: number;
+    }>
   ): Promise<ProcessResult<any>> {
     const validation = RecipeValidator.validateCompleteRecipe(definition, ingredients);
     if (!validation.isValid) {
@@ -65,11 +70,13 @@ export class RecipeProcess {
         };
       }
       
-      // Add ingredients with recipeId
+      // Add hybrid ingredients with recipeId
       for (const ingredient of ingredients) {
         await RecipeService.addIngredient(db, {
           recipeId: recipe.id,
           ingredientId: ingredient.ingredientId,
+          semiProductId: ingredient.semiProductId,
+          itemType: ingredient.itemType,
           quantityNeededBase: ingredient.quantityNeededBase,
         });
       }
@@ -93,7 +100,12 @@ export class RecipeProcess {
     db: SQLite.SQLiteDatabase,
     id: number,
     definition: RecipeDefinitionUpdateInput,
-    ingredients: Array<{ ingredientId: number; quantityNeededBase: number }>
+    ingredients: Array<{
+      ingredientId?: number | null;
+      semiProductId?: number | null;
+      itemType?: 'ingredient' | 'semi_product';
+      quantityNeededBase: number;
+    }>
   ): Promise<ProcessResult<any>> {
     const idValidation = RecipeValidator.validateId(id);
     if (!idValidation.isValid) {

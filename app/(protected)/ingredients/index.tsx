@@ -220,7 +220,7 @@ export default function IngredientsScreen() {
               {selectedIngredient.name}
             </Text>
             <Text style={[styles.detailsSubtitle, { color: theme.textSecondary }]}>
-              Base Unit: {selectedIngredient.unit_name || selectedIngredient.unit_symbol}
+              Unit: {selectedIngredient.unit_symbol || selectedIngredient.unit_name}
             </Text>
           </View>
         </View>
@@ -251,7 +251,7 @@ export default function IngredientsScreen() {
           </View>
 
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Base Unit:</Text>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Unit:</Text>
             <Text style={[styles.infoValue, { color: theme.text }]}>
               {selectedIngredient.unit_name} ({selectedIngredient.unit_symbol})
             </Text>

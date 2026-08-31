@@ -194,7 +194,7 @@ export const InventoryFormSheet: React.FC<InventoryFormSheetProps> = ({
     if (!selectedIngredient) return [];
 
     const baseUnitOption = {
-      label: `Base Unit (${selectedIngredient.unit_symbol})`,
+      label: `${selectedIngredient.unit_symbol} (${selectedIngredient.unit_name || 'base'})`,
       value: 'base',
       multiplier: '1',
     };
@@ -235,7 +235,7 @@ export const InventoryFormSheet: React.FC<InventoryFormSheetProps> = ({
     if (isNaN(quantity) || isNaN(multiplier)) return '';
     
     const baseQuantity = quantity * multiplier;
-    return `(in base unit: ${baseQuantity}${selectedIngredient.unit_symbol})`;
+    return `(= ${baseQuantity} ${selectedIngredient.unit_symbol})`;
   };
 
   const footer = (

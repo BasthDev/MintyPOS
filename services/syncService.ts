@@ -8,7 +8,7 @@ export interface SyncResult {
   pushedCount: number;
   syncedAt: string;
   errors: string[];
-  entityBreakdown: { [key: string]: { pushed: number; pulled: number } };
+  entityBreakdown: { [key: string]: { pushed: number; pulled: number; label: string } };
 }
 
 export interface SyncProgress {
@@ -55,7 +55,7 @@ export class SyncService {
   }
 
   /**
-   * Execute dedicated 1-to-1 table synchronization for all 20 entities between local SQLite and Supabase
+   * Execute dedicated 1-to-1 table synchronization for all 25 entities between local SQLite and Supabase
    */
   static async syncStore(
     storeId: string,
@@ -75,12 +75,11 @@ export class SyncService {
 
     // Initialize breakdown and set all entities to pending status
     SYNC_ENTITIES.forEach((e) => {
-      result.entityBreakdown[e.type] = { pushed: 0, pulled: 0 };
-      // Initialize all entities as pending
+      result.entityBreakdown[e.type] = { pushed: 0, pulled: 0, label: e.label };
       if (onProgress) {
         onProgress({
           entity: e.type,
-          entityLabel: e.type,
+          entityLabel: e.label,
           pushed: 0,
           pulled: 0,
           total: 0,
@@ -91,15 +90,14 @@ export class SyncService {
 
     try {
       // =========================================================================
-      // 1. PUSH PHASE: Push delta records directly to dedicated Supabase tables
+      // 1. PUSH PHASE: Push local changes to Supabase cloud tables
       // =========================================================================
       for (const entity of SYNC_ENTITIES) {
         try {
-          // Update status to pushing
           if (onProgress) {
             onProgress({
               entity: entity.type,
-              entityLabel: entity.type,
+              entityLabel: entity.label,
               pushed: 0,
               pulled: 0,
               total: 0,
@@ -109,11 +107,10 @@ export class SyncService {
 
           const validCols = await this.getTableColumns(db, entity.table);
           if (validCols.size === 0) {
-            // Skip table with no columns, mark as completed
             if (onProgress) {
               onProgress({
                 entity: entity.type,
-                entityLabel: entity.type,
+                entityLabel: entity.label,
                 pushed: 0,
                 pulled: 0,
                 total: 0,
@@ -137,7 +134,7 @@ export class SyncService {
           const localRows: any = await db.getAllAsync(query, params);
 
           if (localRows && localRows.length > 0) {
-            // Attach store_id and ensure timestamp on all rows
+            // Attach store_id and guarantee timestamps
             const pushRows = localRows.map((row: any) => ({
               ...row,
               store_id: storeId,
@@ -145,7 +142,7 @@ export class SyncService {
               updated_at: row.updated_at || row.created_at || now,
             }));
 
-            // Upsert in batches of 50 to dedicated table
+            // Upsert in batches of 50 to Supabase
             for (let i = 0; i < pushRows.length; i += 50) {
               const batch = pushRows.slice(i, i + 50);
               const { error: pushErr } = await supabase.from(entity.table).upsert(batch, {
@@ -153,11 +150,11 @@ export class SyncService {
               });
 
               if (pushErr) {
-                result.errors.push(`Failed to push table ${entity.table}: ${pushErr.message}`);
+                result.errors.push(`[PUSH] ${entity.label}: ${pushErr.message}`);
                 if (onProgress) {
                   onProgress({
                     entity: entity.type,
-                    entityLabel: entity.type,
+                    entityLabel: entity.label,
                     pushed: result.entityBreakdown[entity.type].pushed,
                     pulled: 0,
                     total: pushRows.length,
@@ -165,17 +162,15 @@ export class SyncService {
                     error: pushErr.message,
                   });
                 }
-                // Skip to next entity on error
                 break;
               } else {
                 result.pushedCount += batch.length;
                 result.entityBreakdown[entity.type].pushed += batch.length;
-                
-                // Report progress during push (more frequent updates)
+
                 if (onProgress) {
                   onProgress({
                     entity: entity.type,
-                    entityLabel: entity.type,
+                    entityLabel: entity.label,
                     pushed: result.entityBreakdown[entity.type].pushed,
                     pulled: 0,
                     total: pushRows.length,
@@ -186,11 +181,10 @@ export class SyncService {
             }
           }
 
-          // Mark push phase as completed for this entity
           if (onProgress) {
             onProgress({
               entity: entity.type,
-              entityLabel: entity.type,
+              entityLabel: entity.label,
               pushed: result.entityBreakdown[entity.type].pushed,
               pulled: 0,
               total: result.entityBreakdown[entity.type].pushed,
@@ -198,11 +192,11 @@ export class SyncService {
             });
           }
         } catch (entityPushErr: any) {
-          result.errors.push(`Push error on ${entity.table}: ${entityPushErr?.message}`);
+          result.errors.push(`[PUSH] ${entity.label}: ${entityPushErr?.message}`);
           if (onProgress) {
             onProgress({
               entity: entity.type,
-              entityLabel: entity.type,
+              entityLabel: entity.label,
               pushed: result.entityBreakdown[entity.type].pushed,
               pulled: 0,
               total: 0,
@@ -214,7 +208,7 @@ export class SyncService {
       }
 
       // =========================================================================
-      // 2. PULL PHASE: Pull from dedicated Supabase tables in foreign-key order
+      // 2. PULL PHASE: Pull from Supabase cloud tables in foreign-key order
       // =========================================================================
       await db.execAsync('PRAGMA foreign_keys = OFF;');
       await db.execAsync('BEGIN TRANSACTION;');
@@ -222,11 +216,10 @@ export class SyncService {
       try {
         for (const entity of SYNC_ENTITIES) {
           try {
-            // Update status to pulling (reset from completed if needed)
             if (onProgress) {
               onProgress({
                 entity: entity.type,
-                entityLabel: entity.type,
+                entityLabel: entity.label,
                 pushed: result.entityBreakdown[entity.type].pushed,
                 pulled: 0,
                 total: 0,
@@ -242,11 +235,11 @@ export class SyncService {
             const { data: cloudRows, error: pullErr } = await pullQuery;
 
             if (pullErr) {
-              result.errors.push(`Failed to pull table ${entity.table}: ${pullErr.message}`);
+              result.errors.push(`[PULL] ${entity.label}: ${pullErr.message}`);
               if (onProgress) {
                 onProgress({
                   entity: entity.type,
-                  entityLabel: entity.type,
+                  entityLabel: entity.label,
                   pushed: result.entityBreakdown[entity.type].pushed,
                   pulled: 0,
                   total: 0,
@@ -259,7 +252,7 @@ export class SyncService {
 
               for (let i = 0; i < cloudRows.length; i++) {
                 const cloudRow = cloudRows[i];
-                // Filter out non-local columns like store_id if not in local schema
+                // Filter out non-local columns like store_id
                 const rowData: Record<string, any> = {};
                 for (const key of Object.keys(cloudRow)) {
                   if (validCols.has(key)) {
@@ -273,11 +266,10 @@ export class SyncService {
                   result.pulledCount++;
                   result.entityBreakdown[entity.type].pulled++;
 
-                  // Report progress during pull (more frequent updates)
                   if (onProgress) {
                     onProgress({
                       entity: entity.type,
-                      entityLabel: entity.type,
+                      entityLabel: entity.label,
                       pushed: result.entityBreakdown[entity.type].pushed,
                       pulled: result.entityBreakdown[entity.type].pulled,
                       total: cloudRows.length,
@@ -287,11 +279,10 @@ export class SyncService {
                 }
               }
 
-              // Mark pull phase as completed for this entity
               if (onProgress) {
                 onProgress({
                   entity: entity.type,
-                  entityLabel: entity.type,
+                  entityLabel: entity.label,
                   pushed: result.entityBreakdown[entity.type].pushed,
                   pulled: result.entityBreakdown[entity.type].pulled,
                   total: cloudRows.length,
@@ -299,11 +290,10 @@ export class SyncService {
                 });
               }
             } else {
-              // No new data to pull, mark as completed
               if (onProgress) {
                 onProgress({
                   entity: entity.type,
-                  entityLabel: entity.type,
+                  entityLabel: entity.label,
                   pushed: result.entityBreakdown[entity.type].pushed,
                   pulled: 0,
                   total: 0,
@@ -312,11 +302,11 @@ export class SyncService {
               }
             }
           } catch (entityPullErr: any) {
-            result.errors.push(`Pull error on ${entity.table}: ${entityPullErr?.message}`);
+            result.errors.push(`[PULL] ${entity.label}: ${entityPullErr?.message}`);
             if (onProgress) {
               onProgress({
                 entity: entity.type,
-                entityLabel: entity.type,
+                entityLabel: entity.label,
                 pushed: result.entityBreakdown[entity.type].pushed,
                 pulled: 0,
                 total: 0,

@@ -88,7 +88,7 @@ export const IngredientFormSheet: React.FC<IngredientFormSheetProps> = ({
     }
 
     if (!formData.baseUnitId) {
-      newErrors.baseUnitId = 'Base unit is required';
+      newErrors.baseUnitId = 'Unit is required';
     }
 
     if (formData.minimumStock === '' || formData.minimumStock === undefined) {
@@ -141,7 +141,7 @@ export const IngredientFormSheet: React.FC<IngredientFormSheetProps> = ({
         />
 
         <DripDropdown
-          label="Base Unit"
+          label="Unit"
           options={unitOptions}
           value={formData.baseUnitId}
           onSelect={(value) => setFormData(prev => ({ ...prev, baseUnitId: value }))}

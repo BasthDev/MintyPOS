@@ -108,11 +108,22 @@ export const StaffFormSheet: React.FC<StaffFormSheetProps> = ({
     { label: 'Staff (General Assistant)', value: 'Staff' },
   ];
 
+  const footer = (
+    <DripButton
+      title={loading ? 'Saving...' : isEditing ? 'Update Staff' : 'Create Staff'}
+      variant="primary"
+      onPress={handleSubmit}
+      loading={loading}
+    />
+  );
+
   return (
     <DripSheet
       visible={visible}
       onClose={onClose}
       title={isEditing ? 'Edit Staff Member' : 'Add New Staff Member'}
+      headerIcon={<User size={20} color={theme.primary} />}
+      footer={footer}
     >
       <View style={styles.container}>
         <DripInput
@@ -168,23 +179,6 @@ export const StaffFormSheet: React.FC<StaffFormSheetProps> = ({
           keyboardType="phone-pad"
           leftIcon={<Phone size={18} color={theme.textTertiary} />}
         />
-
-        <View style={styles.buttonRow}>
-          <DripButton
-            title="Cancel"
-            variant="secondary"
-            onPress={onClose}
-            style={{ flex: 1 }}
-            disabled={loading}
-          />
-          <DripButton
-            title={loading ? 'Saving...' : isEditing ? 'Update Staff' : 'Create Staff'}
-            variant="primary"
-            onPress={handleSubmit}
-            style={{ flex: 1 }}
-            loading={loading}
-          />
-        </View>
       </View>
     </DripSheet>
   );
@@ -192,13 +186,6 @@ export const StaffFormSheet: React.FC<StaffFormSheetProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
     gap: 12,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-    paddingBottom: 24,
   },
 });

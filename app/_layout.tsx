@@ -10,6 +10,8 @@ import { closeStoreDatabase, initDatabase } from "@/lib/database";
 import { checkLockStatus } from "@/lib/lock";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as NavigationBar from "expo-navigation-bar";
+import { Platform } from "react-native";
 import { useEffect, useRef, useState } from "react";
 
 /**
@@ -118,6 +120,17 @@ function GlobalSyncModal() {
 function ThemedAppContent() {
   const { colorMode } = useTheme();
   const [isValid, setIsValid] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      try {
+        NavigationBar.setVisibilityAsync('hidden').catch(() => {});
+        NavigationBar.setBehaviorAsync('overlay-swipe').catch(() => {});
+      } catch (e) {
+        console.warn('Failed to configure Android NavigationBar:', e);
+      }
+    }
+  }, []);
 
   return (
     <>

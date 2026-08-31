@@ -1,15 +1,23 @@
 import { Decimal } from 'decimal.js';
 import * as SQLite from 'expo-sqlite';
 import {
+  dbOperations,
+  deductSemiProductStockFIFO,
   deductStockFIFO,
   getCurrentStock,
+  getSemiProductStock,
   handleCheckoutOrder,
   processRestockToSmallestUnit
 } from './database';
 
 // Re-export core business logic functions
 export {
-  deductStockFIFO, getCurrentStock, handleCheckoutOrder, processRestockToSmallestUnit
+  deductSemiProductStockFIFO,
+  deductStockFIFO,
+  getCurrentStock,
+  getSemiProductStock,
+  handleCheckoutOrder,
+  processRestockToSmallestUnit
 };
 
 // Types
@@ -30,47 +38,94 @@ export interface CartItem {
 // Additional business logic utilities
 
 /**
- * Calculate total cost of a recipe based on inventory batches (FEFO pricing)
- * This is used to display recipe cost in the recipe list
+ * Calculate total cost of a recipe based on inventory batches & semi-product batches (FEFO pricing)
+ * This is used to display recipe cost in the recipe list and calculate product COGS.
  */
 export const calculateRecipeCost = async (
   db: SQLite.SQLiteDatabase,
   recipeId: number
 ): Promise<number> => {
-  const recipes = await db.getAllAsync<{ ingredient_id: number; quantity_needed_base: number }>(
-    'SELECT ingredient_id, quantity_needed_base FROM recipe_ingredients WHERE recipe_id = ?',
-    [recipeId]
-  );
+  const components = await dbOperations.getRecipeIngredients(db, recipeId);
 
   let totalCost = new Decimal(0);
 
-  for (const recipe of recipes) {
-    // Get cost per base unit using FEFO logic
-    const batch = await db.getFirstAsync<{ cost_per_base_unit: number }>(
-      `SELECT cost_per_base_unit FROM inventory_batches 
-       WHERE ingredient_id = ? AND remaining_quantity_base > 0 
-       ORDER BY 
-         CASE 
-           WHEN expiration_date IS NOT NULL THEN 
-             CASE 
-               WHEN datetime(expiration_date) < datetime('now') THEN 0 
-               ELSE 1 
-             END
-           ELSE 2 
-         END,
-         CASE 
-           WHEN expiration_date IS NOT NULL THEN expiration_date 
-           ELSE received_date 
-         END ASC
-       LIMIT 1`,
-      [recipe.ingredient_id]
-    );
+  for (const comp of components) {
+    let costPerUnit = new Decimal(0);
 
-    if (batch) {
-      const quantityNeeded = new Decimal(recipe.quantity_needed_base);
-      const costPerUnit = new Decimal(batch.cost_per_base_unit);
-      totalCost = totalCost.add(quantityNeeded.mul(costPerUnit));
+    if (comp.item_type === 'semi_product' && comp.semi_product_id) {
+      // 1. Try to get unit cost from active semi_product_batches
+      const batch = await db.getFirstAsync<{ cost_per_base_unit: number }>(
+        `SELECT cost_per_base_unit FROM semi_product_batches 
+         WHERE semi_product_id = ? AND remaining_quantity_base > 0 
+         ORDER BY 
+           CASE 
+             WHEN expiration_date IS NOT NULL THEN 
+               CASE 
+                 WHEN datetime(expiration_date) < datetime('now') THEN 0 
+                 ELSE 1 
+               END
+             ELSE 2 
+           END,
+           CASE 
+             WHEN expiration_date IS NOT NULL THEN expiration_date 
+             ELSE produced_date 
+           END ASC
+         LIMIT 1`,
+        [comp.semi_product_id]
+      );
+
+      if (batch && batch.cost_per_base_unit > 0) {
+        costPerUnit = new Decimal(batch.cost_per_base_unit);
+      } else {
+        // Fallback: estimate from semi-product formula and raw batches
+        const formula = await dbOperations.getSemiProductRecipes(db, comp.semi_product_id);
+        const sp = await db.getFirstAsync<{ yield_quantity: number }>(
+          'SELECT yield_quantity FROM semi_products WHERE id = ?',
+          [comp.semi_product_id]
+        );
+        let formulaTotal = new Decimal(0);
+        for (const item of formula) {
+          const rawBatch = await db.getFirstAsync<{ cost_per_base_unit: number }>(
+            `SELECT cost_per_base_unit FROM inventory_batches 
+             WHERE ingredient_id = ? AND remaining_quantity_base > 0 
+             ORDER BY received_date ASC LIMIT 1`,
+            [item.ingredient_id]
+          );
+          const rawUnitCost = new Decimal(rawBatch?.cost_per_base_unit || 0);
+          formulaTotal = formulaTotal.add(new Decimal(item.quantity_needed_base).mul(rawUnitCost));
+        }
+        const yieldQty = sp && sp.yield_quantity > 0 ? new Decimal(sp.yield_quantity) : new Decimal(1);
+        costPerUnit = formulaTotal.div(yieldQty);
+      }
+    } else if (comp.ingredient_id) {
+      // 2. Get cost per base unit of raw ingredient using FEFO logic
+      const batch = await db.getFirstAsync<{ cost_per_base_unit: number }>(
+        `SELECT cost_per_base_unit FROM inventory_batches 
+         WHERE ingredient_id = ? AND remaining_quantity_base > 0 
+         ORDER BY 
+           CASE 
+             WHEN expiration_date IS NOT NULL THEN 
+               CASE 
+                 WHEN datetime(expiration_date) < datetime('now') THEN 0 
+                 ELSE 1 
+               END
+             ELSE 2 
+           END,
+           CASE 
+             WHEN expiration_date IS NOT NULL THEN expiration_date 
+             ELSE received_date 
+           END ASC
+         LIMIT 1`,
+        [comp.ingredient_id]
+      );
+
+      if (batch) {
+        costPerUnit = new Decimal(batch.cost_per_base_unit);
+      }
     }
+
+    const quantityNeeded = new Decimal(comp.quantity_needed_base);
+    totalCost = totalCost.add(quantityNeeded.mul(costPerUnit));
   }
 
   return totalCost.toNumber();
@@ -106,7 +161,7 @@ export const calculateProfitMargin = async (
 ): Promise<{ margin: number; percentage: number }> => {
   const cogs = await calculateProductCOGS(db, productId);
   const margin = new Decimal(sellingPrice).minus(new Decimal(cogs));
-  const percentage = margin.div(new Decimal(sellingPrice)).mul(100);
+  const percentage = sellingPrice > 0 ? margin.div(new Decimal(sellingPrice)).mul(100) : new Decimal(0);
 
   return {
     margin: margin.toNumber(),
@@ -168,7 +223,7 @@ export const getIngredientInventoryValue = async (
 };
 
 /**
- * Get total inventory value for all ingredients
+ * Get total inventory value for all ingredients & semi-products
  */
 export const getTotalInventoryValue = async (
   db: SQLite.SQLiteDatabase
@@ -179,6 +234,16 @@ export const getTotalInventoryValue = async (
   for (const ingredient of ingredients) {
     const value = await getIngredientInventoryValue(db, ingredient.id);
     totalValue = totalValue.add(new Decimal(value));
+  }
+
+  // Also include semi-product batches value
+  const spBatches = await db.getAllAsync<{ remaining_quantity_base: number; cost_per_base_unit: number }>(
+    'SELECT remaining_quantity_base, cost_per_base_unit FROM semi_product_batches WHERE remaining_quantity_base > 0'
+  );
+  for (const spb of spBatches) {
+    const qty = new Decimal(spb.remaining_quantity_base);
+    const cost = new Decimal(spb.cost_per_base_unit);
+    totalValue = totalValue.add(qty.mul(cost));
   }
 
   return totalValue.toNumber();
@@ -209,7 +274,7 @@ export const convertFromBaseUnit = (
 };
 
 /**
- * Validate if sufficient stock exists for recipe
+ * Validate if sufficient stock exists for recipe (both raw ingredients & semi-products)
  */
 export const validateRecipeStock = async (
   db: SQLite.SQLiteDatabase,
@@ -225,30 +290,33 @@ export const validateRecipeStock = async (
     return { isValid: true, missingIngredients: [] };
   }
 
-  const recipes = await db.getAllAsync<{ ingredient_id: number; quantity_needed_base: number }>(
-    'SELECT ingredient_id, quantity_needed_base FROM recipe_ingredients WHERE recipe_id = ?',
-    [product.recipe_definition_id]
-  );
-
+  const components = await dbOperations.getRecipeIngredients(db, product.recipe_definition_id);
   const missingIngredients = [];
   const quantityNeeded = new Decimal(quantity);
 
-  for (const recipe of recipes) {
-    const currentStock = await getCurrentStock(db, recipe.ingredient_id);
-    const requiredStock = new Decimal(recipe.quantity_needed_base).mul(quantityNeeded);
+  for (const comp of components) {
+    const requiredStock = new Decimal(comp.quantity_needed_base).mul(quantityNeeded);
 
-    if (new Decimal(currentStock).lt(requiredStock)) {
-      const ingredient = await db.getFirstAsync<{ name: string }>(
-        'SELECT name FROM ingredients WHERE id = ?',
-        [recipe.ingredient_id]
-      );
-
-      missingIngredients.push({
-        ingredientId: recipe.ingredient_id,
-        ingredientName: ingredient?.name || 'Unknown',
-        needed: requiredStock.toNumber(),
-        available: currentStock,
-      });
+    if (comp.item_type === 'semi_product' && comp.semi_product_id) {
+      const currentStock = await getSemiProductStock(db, comp.semi_product_id);
+      if (new Decimal(currentStock).lt(requiredStock)) {
+        missingIngredients.push({
+          ingredientId: comp.semi_product_id,
+          ingredientName: comp.ingredient_name || 'Semi-Product',
+          needed: requiredStock.toNumber(),
+          available: currentStock,
+        });
+      }
+    } else if (comp.ingredient_id) {
+      const currentStock = await getCurrentStock(db, comp.ingredient_id);
+      if (new Decimal(currentStock).lt(requiredStock)) {
+        missingIngredients.push({
+          ingredientId: comp.ingredient_id,
+          ingredientName: comp.ingredient_name || 'Ingredient',
+          needed: requiredStock.toNumber(),
+          available: currentStock,
+        });
+      }
     }
   }
 
@@ -270,6 +338,7 @@ export interface StockValidationError {
 /**
  * Validate sale stock for an entire cart before checkout.
  * Strictly respects stock ON vs OFF (stock_deduction_method: 'product' | 'recipe' | 'none').
+ * Supports multi-level cascade BOM (raw ingredients & semi-products).
  */
 export const validateSaleStock = async (
   db: SQLite.SQLiteDatabase,
@@ -277,6 +346,10 @@ export const validateSaleStock = async (
 ): Promise<StockValidationError[]> => {
   const errors: StockValidationError[] = [];
   const ingredientDemands = new Map<
+    number,
+    { required: Decimal; ingredientName: string; unit: string; productName: string }
+  >();
+  const semiProductDemands = new Map<
     number,
     { required: Decimal; ingredientName: string; unit: string; productName: string }
   >();
@@ -312,40 +385,43 @@ export const validateSaleStock = async (
       }
     }
 
-    // If stock deduction is 'recipe', check recipe ingredients
+    // If stock deduction is 'recipe', check recipe components (raw ingredients & semi-products)
     if (product.stock_deduction_method === 'recipe' && product.recipe_definition_id) {
-      const recipeIngredients = await db.getAllAsync<{
-        ingredient_id: number;
-        quantity_needed_base: number;
-        ingredient_name: string;
-        unit_symbol: string;
-      }>(
-        `SELECT ri.ingredient_id, ri.quantity_needed_base, i.name as ingredient_name, u.symbol as unit_symbol
-         FROM recipe_ingredients ri
-         JOIN ingredients i ON ri.ingredient_id = i.id
-         JOIN units u ON i.base_unit_id = u.id
-         WHERE ri.recipe_id = ?`,
-        [product.recipe_definition_id]
-      );
+      const recipeComponents = await dbOperations.getRecipeIngredients(db, product.recipe_definition_id);
 
-      for (const ring of recipeIngredients) {
-        const itemDemand = new Decimal(ring.quantity_needed_base).mul(new Decimal(item.quantitySold));
-        const existing = ingredientDemands.get(ring.ingredient_id);
-        if (existing) {
-          existing.required = existing.required.add(itemDemand);
-        } else {
-          ingredientDemands.set(ring.ingredient_id, {
-            required: itemDemand,
-            ingredientName: ring.ingredient_name,
-            unit: ring.unit_symbol,
-            productName: product.name,
-          });
+      for (const comp of recipeComponents) {
+        const itemDemand = new Decimal(comp.quantity_needed_base).mul(new Decimal(item.quantitySold));
+
+        if (comp.item_type === 'semi_product' && comp.semi_product_id) {
+          const existing = semiProductDemands.get(comp.semi_product_id);
+          if (existing) {
+            existing.required = existing.required.add(itemDemand);
+          } else {
+            semiProductDemands.set(comp.semi_product_id, {
+              required: itemDemand,
+              ingredientName: comp.ingredient_name || 'Semi-Product',
+              unit: comp.unit_symbol || 'unit',
+              productName: product.name,
+            });
+          }
+        } else if (comp.ingredient_id) {
+          const existing = ingredientDemands.get(comp.ingredient_id);
+          if (existing) {
+            existing.required = existing.required.add(itemDemand);
+          } else {
+            ingredientDemands.set(comp.ingredient_id, {
+              required: itemDemand,
+              ingredientName: comp.ingredient_name || 'Ingredient',
+              unit: comp.unit_symbol || 'unit',
+              productName: product.name,
+            });
+          }
         }
       }
     }
   }
 
-  // Verify all aggregated ingredient demands against available batch stocks
+  // Verify all aggregated raw ingredient demands against available batch stocks
   for (const [ingredientId, demand] of ingredientDemands.entries()) {
     const currentStock = await getCurrentStock(db, ingredientId);
     if (new Decimal(currentStock).lt(demand.required)) {
@@ -353,6 +429,21 @@ export const validateSaleStock = async (
         productId: 0,
         productName: demand.productName,
         ingredientName: demand.ingredientName,
+        unit: demand.unit,
+        required: demand.required.toNumber(),
+        available: currentStock,
+      });
+    }
+  }
+
+  // Verify all aggregated semi-product demands against available semi-product batch stocks
+  for (const [semiProductId, demand] of semiProductDemands.entries()) {
+    const currentStock = await getSemiProductStock(db, semiProductId);
+    if (new Decimal(currentStock).lt(demand.required)) {
+      errors.push({
+        productId: 0,
+        productName: demand.productName,
+        ingredientName: `[Semi-Product] ${demand.ingredientName}`,
         unit: demand.unit,
         required: demand.required.toNumber(),
         available: currentStock,
