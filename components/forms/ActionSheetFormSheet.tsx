@@ -1,4 +1,5 @@
 import { useTheme } from '@/constants/colorTheme';
+import { formatCurrency } from '@/lib/utils';
 import { Award, Settings2 } from 'lucide-react-native';
 import React from 'react';
 import { Text, View } from 'react-native';
@@ -10,6 +11,10 @@ import { DripSheet } from '../Sheet';
 export interface DropdownOption {
   label: string;
   value: string;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number;
+  discountType?: 'percentage' | 'flat';
+  discountValue?: number;
 }
 
 interface ActionSheetFormSheetProps {
@@ -124,6 +129,42 @@ export const ActionSheetFormSheet: React.FC<ActionSheetFormSheetProps> = ({
             value={selectedDiscount}
             onSelect={onDiscountSelect}
           />
+          {selectedDiscount && (() => {
+            const selectedDiscountData = discountOptions.find(opt => opt.value === selectedDiscount);
+            if (selectedDiscountData) {
+              return (
+                <View style={{ backgroundColor: theme.input, borderRadius: 12, paddingVertical: 12, marginTop: 8 }}>
+                  {selectedDiscountData.minOrderAmount !== undefined && selectedDiscountData.minOrderAmount > 0 && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ fontSize: 13, color: theme.textSecondary }}>Min Order Amount</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>
+                        {formatCurrency(selectedDiscountData.minOrderAmount)}
+                      </Text>
+                    </View>
+                  )}
+                  {selectedDiscountData.maxDiscountAmount !== undefined && selectedDiscountData.maxDiscountAmount > 0 && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                      <Text style={{ fontSize: 13, color: theme.textSecondary }}>Max Discount</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>
+                        {formatCurrency(selectedDiscountData.maxDiscountAmount)}
+                      </Text>
+                    </View>
+                  )}
+                  {selectedDiscountData.discountType && selectedDiscountData.discountValue !== undefined && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                      <Text style={{ fontSize: 13, color: theme.textSecondary }}>Discount Value</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: theme.primary }}>
+                        {selectedDiscountData.discountType === 'percentage' 
+                          ? `${selectedDiscountData.discountValue}%` 
+                          : formatCurrency(selectedDiscountData.discountValue)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              );
+            }
+            return null;
+          })()}
         </View>
       </View>
     </DripSheet>

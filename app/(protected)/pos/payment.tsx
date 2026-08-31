@@ -1407,6 +1407,10 @@ export default function POSPaymentScreen() {
     ...discounts.map((d) => ({
       label: `${d.name} (${d.type === 'percentage' ? `${d.value}%` : fmt(d.value)})`,
       value: String(d.id),
+      minOrderAmount: d.min_order_amount,
+      maxDiscountAmount: d.max_discount_amount || undefined,
+      discountType: d.type,
+      discountValue: d.value,
     })),
   ];
 

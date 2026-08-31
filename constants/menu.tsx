@@ -53,13 +53,13 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
   },
   // --- GROUP 1: CATALOG MANAGEMENT ---
   {
-    title: 'Catalog',
+    title: 'Products',
     path: '/products',
     icon: Store,
     roles: ['Admin', 'Manager'],
     children: [
       {
-        title: 'Products',
+        title: 'Products List',
         path: '/products',
         icon: Package,
         roles: ['Admin', 'Manager'],
@@ -72,6 +72,13 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
       },
     ],
   },
+  
+      {
+        title: 'Product Recipes',
+        path: '/recipes',
+        icon: ChefHat,
+        roles: ['Admin', 'Manager'],
+      },
   // --- GROUP 2: INVENTORY & PRODUCTION ---
   {
     title: 'Inventory & Stock',
@@ -79,6 +86,13 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
     icon: Boxes,
     roles: ['Admin', 'Manager'],
     children: [
+      
+      {
+        title: 'Suppliers',
+        path: '/suppliers',
+        icon: Truck,
+        roles: ['Admin', 'Manager'],
+      },
       {
         title: 'Inventory',
         path: '/inventory',
@@ -89,18 +103,6 @@ export const DRAWER_MENU_ITEMS: MenuItem[] = [
         title: 'Ingredients',
         path: '/ingredients',
         icon: Scale,
-        roles: ['Admin', 'Manager'],
-      },
-      {
-        title: 'Recipes',
-        path: '/recipes',
-        icon: ChefHat,
-        roles: ['Admin', 'Manager'],
-      },
-      {
-        title: 'Suppliers',
-        path: '/suppliers',
-        icon: Truck,
         roles: ['Admin', 'Manager'],
       },
     ],
